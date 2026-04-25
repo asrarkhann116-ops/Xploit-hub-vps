@@ -33,8 +33,16 @@ const MAX_SESSIONS = 2;
 client.on('ready', async () => {
     try {
         console.log(`Lethal Bot logged in as ${client.user.tag}!`);
-        await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('Slash commands registered successfully.');
+        
+        // 🗑️ Delete Global Commands (Cleaning duplicates)
+        await rest.put(Routes.applicationCommands(client.user.id), { body: [] });
+        
+        // 🚀 Register Guild Commands (Instant)
+        await rest.put(
+            Routes.applicationGuildCommands(client.user.id, XPLOIT_HUB_ID),
+            { body: commands }
+        );
+        console.log('Duplicate cleaned! Slash commands active on Xploit HUB.');
     } catch (error) {
         console.error(error);
     }
@@ -44,6 +52,11 @@ client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === 'vps') {
+        const VPS_CHANNEL_ID = '1497364285645652098';
+        if (interaction.channelId !== VPS_CHANNEL_ID) {
+            return interaction.reply({ content: `❌ This command only works in <#${VPS_CHANNEL_ID}>.`, ephemeral: true });
+        }
+
         // Server Lock
         if (interaction.guildId !== XPLOIT_HUB_ID) {
             return interaction.reply({ content: "❌ This command is exclusive to **Xploit HUB**.", ephemeral: true });

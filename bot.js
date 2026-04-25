@@ -138,18 +138,34 @@ async function updateLiveMessage() {
             .setFooter({ text: 'Auto-updates every 30 seconds' })
             .setTimestamp();
 
+        let targetMsg = null;
+
+        // Try to get message from DB
         if (db.liveMessageId) {
             try {
-                const msg = await channel.messages.fetch(db.liveMessageId);
-                await msg.edit({ embeds: [embed] });
-                return;
+                targetMsg = await channel.messages.fetch(db.liveMessageId);
             } catch (err) {
-                // Message not found, send a new one
-                db.liveMessageId = null;
+                db.liveMessageId = null; // Reset if not found
             }
         }
 
-        if (!db.liveMessageId) {
+        // If not found in DB, search the channel history
+        if (!targetMsg) {
+            try {
+                const messages = await channel.messages.fetch({ limit: 10 });
+                targetMsg = messages.find(m => m.author.id === client.user.id);
+                
+                if (targetMsg) {
+                    db.liveMessageId = targetMsg.id; // Save to DB for next time
+                    saveDB();
+                }
+            } catch (e) {}
+        }
+
+        // Edit if found, otherwise send new
+        if (targetMsg) {
+            await targetMsg.edit({ embeds: [embed] });
+        } else {
             const newMsg = await channel.send({ embeds: [embed] });
             db.liveMessageId = newMsg.id;
             saveDB();

@@ -1,0 +1,55 @@
+name: Xploit-HUB-VPS
+on:
+  workflow_dispatch:
+    inputs:
+      user_id:
+        description: 'Discord User ID'
+        required: true
+      user_name:
+        description: 'Discord User Name'
+        required: true
+      duration:
+        description: 'Session Duration (Minutes)'
+        required: true
+        default: '60'
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    # 🔥 Hard Kill Timer: Input se duration uthayega
+    timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
+    steps:
+      - name: System Prep
+        run: |
+          sudo apt-get update > /dev/null
+          sudo apt-get install -y xfce4 xfce4-goodies tightvncserver websockify curl jq > /dev/null
+          
+      - name: UI & Tunnel Setup
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          USER_ID: ${{ github.event.inputs.user_id }}
+          DURATION: ${{ github.event.inputs.duration }}
+        run: |
+          # 1. Start VNC
+          mkdir -p ~/.vnc && echo "phantom" | vncpasswd -f > ~/.vnc/passwd && chmod 600 ~/.vnc/passwd
+          vncserver :1 -geometry 1280x720 -depth 16
+          
+          # 2. Start NoVNC
+          git clone https://github.com/novnc/noVNC.git --depth 1 > /dev/null
+          ./noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080 &
+          
+          # 3. Start Cloudflare Tunnel
+          curl -L -o cf https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && chmod +x cf
+          nohup ./cf tunnel --url http://localhost:8080 > cf.log 2>&1 &
+          
+          sleep 20
+          CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cf.log | head -n 1)
+          
+          # 4. Notify Discord DM
+          CHANNEL_ID=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"recipient_id\": \"$USER_ID\"}" https://discord.com/api/v10/users/@me/channels | jq -r '.id')
+          
+          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"content\": \"🛰️ **Xploit HUB Pro VPS Active!**\n\n👤 **Operator:** <@$USER_ID>\n🔗 **Link:** $CF_URL/vnc.html\n🔑 **Pass:** \`phantom\`\n\n⏱️ **Limit:** This session will auto-destruct in $DURATION minutes.\"}" https://discord.com/api/v10/channels/$CHANNEL_ID/messages
+
+          # 5. Keep alive until job timeout
+          echo "Machine will stay alive for $DURATION minutes."
+          while true; do sleep 3600; done

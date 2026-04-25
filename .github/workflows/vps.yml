@@ -12,6 +12,10 @@ on:
         description: 'Duration'
         required: true
         default: '60'
+      wallpaper_url:
+        description: 'Wallpaper URL'
+        required: true
+        default: 'https://i.pinimg.com/736x/42/3a/2f/423a2f1a8f888cb9068dc68daed56967.jpg'
 
 jobs:
   launch:
@@ -29,61 +33,51 @@ jobs:
           USER_ID: ${{ github.event.inputs.user_id }}
           USER_NAME: ${{ github.event.inputs.user_name }}
           DURATION: ${{ github.event.inputs.duration }}
+          WALLPAPER: ${{ github.event.inputs.wallpaper_url }}
         run: |
           # 1. Start VNC
           mkdir -p ~/.vnc && echo "phantom" | vncpasswd -f > ~/.vnc/passwd && chmod 600 ~/.vnc/passwd
           vncserver :1 -geometry 1280x720 -depth 16
           
-          # 2. Pinterest Wallpaper
-          curl -L -o /tmp/wall.jpg "https://i.pinimg.com/736x/42/3a/2f/423a2f1a8f888cb9068dc68daed56967.jpg"
+          # 2. Chosen Wallpaper
+          curl -L -o /tmp/wall.jpg "$WALLPAPER"
           DISPLAY=:1 xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -n -t string -s "/tmp/wall.jpg"
           
-          # 3. Ownership Proofs (The "Vishwas" Factor)
+          # 3. Ownership Proofs
           mkdir -p ~/Desktop/"⚠️_XPLOIT_HUB_PRIVATE_SERVER_⚠️"
-          
           figlet -f slant "Xploit HUB" > ~/Desktop/IDENTITY.txt
-          echo "--------------------------------------------------" >> ~/Desktop/IDENTITY.txt
-          echo "OFFICIAL VPS INFRASTRUCTURE" >> ~/Desktop/IDENTITY.txt
           echo "AUTHORIZED OPERATOR: $USER_NAME" >> ~/Desktop/IDENTITY.txt
-          echo "STATUS: ENCRYPTED & SECURED" >> ~/Desktop/IDENTITY.txt
-          echo "--------------------------------------------------" >> ~/Desktop/IDENTITY.txt
           
           # 4. Terminal Identity
           echo 'clear' >> ~/.bashrc
           echo 'figlet -f slant "Xploit HUB"' >> ~/.bashrc
-          echo 'echo -e "\e[1;31mLogged in as: $USER_NAME@XploitHUB-VPS\e[0m"' >> ~/.bashrc
           echo 'export PS1="\[\e[1;31m\]XploitHUB@System:\[\e[0m\]\w\$ "' >> ~/.bashrc
           
           # 5. Create "MEGA SAVE" Script
           cat << 'EOF' > ~/Desktop/MEGA_SAVE.sh
           #!/bin/bash
-          zenity --info --text="🚀 Xploit HUB: Backing up your data... Please wait." --title="System Backup"
+          zenity --info --text="🚀 Xploit HUB: Backing up your data..." --title="System Backup"
           zip -r /tmp/backup.zip /home/runner/Desktop /home/runner/Documents > /dev/null
           LINK=$(curl -s --upload-file /tmp/backup.zip https://bashupload.com/backup.zip)
-          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"recipient_id\": \"$USER_ID\"}" https://discord.com/api/v10/users/@me/channels | jq -r '.id' > /tmp/cid
-          CHANNEL_ID=$(cat /tmp/cid)
-          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"content\": \"✅ **Backup Complete!**\n📦 **Download:** $LINK\n⚠️ *Link expires in 24 hours.*\"}" https://discord.com/api/v10/channels/$CHANNEL_ID/messages
-          zenity --info --text="✅ Backup sent to your Discord DM!" --title="Success"
+          CHANNEL_ID=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"recipient_id\": \"$USER_ID\"}" https://discord.com/api/v10/users/@me/channels | jq -r '.id')
+          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"content\": \"✅ **Backup Ready!**\n📦 **Download:** $LINK\"}" https://discord.com/api/v10/channels/$CHANNEL_ID/messages
+          zenity --info --text="✅ Backup sent to Discord!" --title="Success"
           EOF
           chmod +x ~/Desktop/MEGA_SAVE.sh
 
-          # 6. Boot Welcome Popup (Immediate Proof)
-          echo "DISPLAY=:1 zenity --info --text='🛰️ XPLOIT HUB OFFICIAL VPS\n\nVerified Operator: $USER_NAME\nServer ID: HUB-$(date +%s)\n\nThis machine is property of Xploit HUB.' --title='Identity Verified' &" >> ~/.bashrc
-
-          # 7. Start NoVNC
+          # 6. Start NoVNC
           git clone https://github.com/novnc/noVNC.git --depth 1 > /dev/null
           ./noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080 &
           
-          # 8. Start Cloudflare Tunnel
+          # 7. Start Cloudflare Tunnel
           curl -L -o cf https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && chmod +x cf
           nohup ./cf tunnel --url http://localhost:8080 > cf.log 2>&1 &
           
           sleep 20
           CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cf.log | head -n 1)
           
-          # 9. Notify Discord DM
+          # 8. Notify Discord DM
           CHANNEL_ID=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"recipient_id\": \"$USER_ID\"}" https://discord.com/api/v10/users/@me/channels | jq -r '.id')
-          
-          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"content\": \"🛰️ **Xploit HUB Pro - SESSION ACTIVE**\n\n👤 **Operator:** <@$USER_ID>\n🔗 **Access:** $CF_URL/vnc.html\n🔑 **Password:** \`phantom\`\n\n⏱️ **Auto-Destruct:** $DURATION Minutes.\"}" https://discord.com/api/v10/channels/$CHANNEL_ID/messages
+          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"content\": \"🛰️ **Xploit HUB Pro - SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n🔗 **Access:** $CF_URL/vnc.html\n🔑 **Password:** \`phantom\`\"}" https://discord.com/api/v10/channels/$CHANNEL_ID/messages
 
           while true; do sleep 3600; done

@@ -1,0 +1,93 @@
+name: Xploit-HUB-RDP
+on:
+  workflow_dispatch:
+    inputs:
+      user_id:
+        description: 'Discord User ID'
+        required: true
+      user_name:
+        description: 'Discord User Name'
+        required: true
+      duration:
+        description: 'Duration'
+        required: true
+        default: '60'
+      wallpaper_url:
+        description: 'Wallpaper URL'
+        required: true
+        default: 'https://i.pinimg.com/736x/42/3a/2f/423a2f1a8f888cb9068dc68daed56967.jpg'
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
+    steps:
+      - name: System Prep & RDP
+        run: |
+          sudo apt-get update > /dev/null
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y xfce4 xfce4-goodies xrdp jq figlet zenity zip curl > /dev/null
+          
+          # Set XFCE as default for RDP
+          echo "xfce4-session" > ~/.xsession
+          sudo cp ~/.xsession /etc/skel/
+          sudo systemctl restart xrdp
+          
+          # Set Password for the "runner" user (GitHub Actions Default User)
+          echo "runner:phantom" | sudo chpasswd
+          
+      - name: Elite Branding & Bore Tunnel Setup
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          USER_ID: ${{ github.event.inputs.user_id }}
+          USER_NAME: ${{ github.event.inputs.user_name }}
+          WALLPAPER: ${{ github.event.inputs.wallpaper_url }}
+        run: |
+          # 1. Ownership Proofs on Desktop
+          mkdir -p ~/Desktop/"⚠️_XPLOIT_HUB_PRIVATE_SERVER_⚠️"
+          figlet -f slant "Xploit HUB" > ~/Desktop/IDENTITY.txt
+          echo "AUTHORIZED OPERATOR: $USER_NAME" >> ~/Desktop/IDENTITY.txt
+          
+          # 2. Terminal Identity
+          echo 'clear' >> ~/.bashrc
+          echo 'figlet -f slant "Xploit HUB"' >> ~/.bashrc
+          echo 'export PS1="\[\e[1;31m\]XploitHUB@System:\[\e[0m\]\w\$ "' >> ~/.bashrc
+
+          # 3. Auto-start Branding and Wallpaper for RDP
+          mkdir -p ~/.config/autostart
+          curl -L -o /tmp/wall.jpg "$WALLPAPER"
+          
+          cat << 'EOF' > ~/.config/autostart/branding.desktop
+          [Desktop Entry]
+          Type=Application
+          Name=Branding
+          Exec=sh -c 'sleep 3 && xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -n -t string -s "/tmp/wall.jpg" && zenity --info --text="🚀 XPLOIT HUB RDP\n\nVerified Operator: '$USER_NAME'\n\nThis is a lag-free connection." --title="Identity Verified"'
+          EOF
+
+          # 4. Create "MEGA SAVE" Script
+          cat << 'EOF' > ~/Desktop/MEGA_SAVE.sh
+          #!/bin/bash
+          zenity --info --text="🚀 Xploit HUB: Compressing data..." --title="System Backup"
+          zip -r /tmp/xploit_backup.zip /home/runner/Desktop /home/runner/Documents > /dev/null
+          LINK=$(curl -s --upload-file /tmp/xploit_backup.zip https://bashupload.com/xploit_backup.zip)
+          if [ -z "$LINK" ]; then LINK=$(curl -s --upload-file /tmp/xploit_backup.zip https://transfer.sh/xploit_backup.zip); fi
+          CID=$(curl -s -H "Authorization: Bot '$DISCORD_TOKEN'" -H "Content-Type: application/json" -X POST -d "{\"recipient_id\": \"'$USER_ID'\"}" https://discord.com/api/v10/users/@me/channels | jq -r '.id')
+          curl -s -H "Authorization: Bot '$DISCORD_TOKEN'" -H "Content-Type: application/json" -X POST -d "{\"content\": \"✅ **Backup Success!**\n📦 **Download:** $LINK\"}" https://discord.com/api/v10/channels/$CID/messages
+          zenity --info --text="✅ Backup link sent to your DM!" --title="Success"
+          EOF
+          chmod +x ~/Desktop/MEGA_SAVE.sh
+
+          # 5. Start BORE Tunnel on RDP Port 3389
+          curl -L -o bore.tar.gz https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf bore.tar.gz
+          chmod +x bore
+          nohup ./bore local 3389 --to bore.pub > bore.log 2>&1 &
+          
+          sleep 10
+          # Parse the port assigned by bore.pub
+          PORT=$(grep -oP 'remote_port=\K\d+' bore.log | head -n 1)
+          
+          # 6. Notify Discord DM
+          CHANNEL_ID=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"recipient_id\": \"$USER_ID\"}" https://discord.com/api/v10/users/@me/channels | jq -r '.id')
+          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"content\": \"🚀 **Xploit HUB Pro RDP - LAG-FREE SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n\n⚡ **Open 'Remote Desktop Connection' on Windows and enter:**\n💻 **Computer:** \`bore.pub:$PORT\`\n👤 **Username:** \`runner\`\n🔑 **Password:** \`phantom\`\n\n*Note: Accept any certificate warnings when connecting.*\"}" https://discord.com/api/v10/channels/$CHANNEL_ID/messages
+
+          while true; do sleep 3600; done

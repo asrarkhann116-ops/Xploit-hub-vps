@@ -82,9 +82,18 @@ jobs:
           chmod +x bore
           nohup ./bore local 3389 --to bore.pub > bore.log 2>&1 &
           
-          sleep 10
-          # Parse the port assigned by bore.pub
-          PORT=$(grep -oP 'remote_port=\K\d+' bore.log | head -n 1)
+          sleep 15
+          # Parse the port assigned by bore.pub (robust method)
+          PORT=$(grep -o 'remote_port=[0-9]*' bore.log | cut -d'=' -f2 | head -n 1)
+          
+          if [ -z "$PORT" ]; then
+             PORT=$(grep -o 'bore\.pub:[0-9]*' bore.log | cut -d':' -f2 | head -n 1)
+          fi
+          
+          if [ -z "$PORT" ]; then
+             PORT="ERROR_CHECK_LOGS"
+             cat bore.log
+          fi
           
           # 6. Notify Discord DM
           CHANNEL_ID=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"recipient_id\": \"$USER_ID\"}" https://discord.com/api/v10/users/@me/channels | jq -r '.id')

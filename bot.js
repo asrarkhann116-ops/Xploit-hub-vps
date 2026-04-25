@@ -201,7 +201,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.commandName === 'vps' || interaction.commandName === 'remote-desktop-vps') {
         
         if (interaction.channelId !== VPS_CHANNEL_ID) {
-            return interaction.reply({ content: `❌ This command only works in <#${VPS_CHANNEL_ID}>.`, ephemeral: true });
+            return interaction.reply({ content: `⚠️ **ACCESS DENIED:** You can only deploy VPS machines inside the <#${VPS_CHANNEL_ID}> channel. Go there to run this command.`, ephemeral: true });
         }
 
         if (interaction.guildId !== XPLOIT_HUB_ID) {

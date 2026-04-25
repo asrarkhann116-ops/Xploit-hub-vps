@@ -53,15 +53,29 @@ jobs:
           echo 'figlet -f slant "Xploit HUB"' >> ~/.bashrc
           echo 'export PS1="\[\e[1;31m\]XploitHUB@System:\[\e[0m\]\w\$ "' >> ~/.bashrc
           
-          # 5. Create "MEGA SAVE" Script
+          # 5. Create "MEGA SAVE" Script (Improved)
           cat << 'EOF' > ~/Desktop/MEGA_SAVE.sh
           #!/bin/bash
-          zenity --info --text="🚀 Xploit HUB: Backing up your data..." --title="System Backup"
-          zip -r /tmp/backup.zip /home/runner/Desktop /home/runner/Documents > /dev/null
-          LINK=$(curl -s --upload-file /tmp/backup.zip https://bashupload.com/backup.zip)
-          CHANNEL_ID=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"recipient_id\": \"$USER_ID\"}" https://discord.com/api/v10/users/@me/channels | jq -r '.id')
-          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"content\": \"✅ **Backup Ready!**\n📦 **Download:** $LINK\"}" https://discord.com/api/v10/channels/$CHANNEL_ID/messages
-          zenity --info --text="✅ Backup sent to Discord!" --title="Success"
+          zenity --info --text="🚀 Xploit HUB: Compressing data..." --title="System Backup"
+          zip -r /tmp/xploit_backup.zip /home/runner/Desktop /home/runner/Documents > /dev/null
+          
+          # Try Host 1
+          LINK=$(curl -s --upload-file /tmp/xploit_backup.zip https://bashupload.com/xploit_backup.zip)
+          
+          # Fallback to Host 2 if empty
+          if [ -z "$LINK" ]; then
+            LINK=$(curl -s --upload-file /tmp/xploit_backup.zip https://transfer.sh/xploit_backup.zip)
+          fi
+          
+          # Notify Discord
+          CID=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"recipient_id\": \"$USER_ID\"}" https://discord.com/api/v10/users/@me/channels | jq -r '.id')
+          if [ "$CID" != "null" ]; then
+            curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" -X POST -d "{\"content\": \"✅ **Xploit HUB Backup Success!**\n👤 **Operator:** <@$USER_ID>\n📦 **Download:** $LINK\n\n*Note: Use this link to download your files before they expire.*\"}" https://discord.com/api/v10/channels/$CID/messages
+            zenity --info --text="✅ Backup link sent to your DM!" --title="Success"
+          else
+            zenity --error --text="❌ Failed to send DM. Check bot permissions." --title="Error"
+          fi
+          rm /tmp/xploit_backup.zip
           EOF
           chmod +x ~/Desktop/MEGA_SAVE.sh
 

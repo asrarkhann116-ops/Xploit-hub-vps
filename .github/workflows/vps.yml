@@ -22,10 +22,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
-      - name: System Prep
+      - name: System Prep & Arsenal Installation
         run: |
           sudo apt-get update > /dev/null
-          sudo apt-get install -y xfce4 xfce4-goodies tightvncserver websockify curl jq figlet zenity > /dev/null
+          sudo apt-get install -y xfce4 xfce4-goodies tightvncserver websockify curl jq figlet zenity nmap sqlmap dirb net-tools > /dev/null
+          # Install Nuclei (Go-based)
+          wget https://github.com/projectdiscovery/nuclei/releases/download/v3.2.3/nuclei_3.2.3_linux_amd64.zip -O nuclei.zip
+          unzip nuclei.zip && sudo mv nuclei /usr/local/bin/ && rm nuclei.zip
           
       - name: Elite Branding & UI Setup
         env:
@@ -43,15 +46,29 @@ jobs:
           curl -L -o /tmp/wall.jpg "$WALLPAPER"
           DISPLAY=:1 xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -n -t string -s "/tmp/wall.jpg"
           
-          # 3. Ownership Proofs
+          # 3. Ownership Proofs & Arsenal List
           mkdir -p ~/Desktop/"⚠️_XPLOIT_HUB_PRIVATE_SERVER_⚠️"
-          figlet -f slant "Xploit HUB" > ~/Desktop/IDENTITY.txt
-          echo "AUTHORIZED OPERATOR: $USER_NAME" >> ~/Desktop/IDENTITY.txt
+          echo "==========================================" > ~/Desktop/IDENTITY.txt
+          echo "   🚀 XPLOIT HUB ELITE VPS (7GB RAM)    " >> ~/Desktop/IDENTITY.txt
+          echo "==========================================" >> ~/Desktop/IDENTITY.txt
+          echo "OPERATOR: $USER_NAME" >> ~/Desktop/IDENTITY.txt
+          echo "STATUS: ARSENAL V1.0 ACTIVATED" >> ~/Desktop/IDENTITY.txt
+          echo "------------------------------------------" >> ~/Desktop/IDENTITY.txt
+          echo "PRE-INSTALLED TOOLS:" >> ~/Desktop/IDENTITY.txt
+          echo " - Nmap (Scanning)" >> ~/Desktop/IDENTITY.txt
+          echo " - SQLMap (DB Attack)" >> ~/Desktop/IDENTITY.txt
+          echo " - Nuclei (Vuln Scan)" >> ~/Desktop/IDENTITY.txt
+          echo " - Dirb (Bruteforce)" >> ~/Desktop/IDENTITY.txt
+          echo "==========================================" >> ~/Desktop/IDENTITY.txt
           
           # 4. Terminal Identity
           echo 'clear' >> ~/.bashrc
-          echo 'figlet -f slant "Xploit HUB"' >> ~/.bashrc
-          echo 'export PS1="\[\e[1;31m\]XploitHUB@System:\[\e[0m\]\w\$ "' >> ~/.bashrc
+          echo 'figlet -f slant "Xploit HUB" | npx lolcatjs' >> ~/.bashrc 2>/dev/null || echo 'figlet -f slant "Xploit HUB"' >> ~/.bashrc
+          echo 'echo "=========================================="' >> ~/.bashrc
+          echo 'echo "  WELCOME OPERATOR: $USER_NAME"' >> ~/.bashrc
+          echo 'echo "  STATUS: THE ARSENAL LOADED"' >> ~/.bashrc
+          echo 'echo "=========================================="' >> ~/.bashrc
+          echo 'export PS1="\[\e[1;31m\]XploitHUB@Arsenal:\[\e[0m\]\w\$ "' >> ~/.bashrc
           
           # 5. Create "MEGA SAVE" Script (Improved)
           cat << 'EOF' > ~/Desktop/MEGA_SAVE.sh

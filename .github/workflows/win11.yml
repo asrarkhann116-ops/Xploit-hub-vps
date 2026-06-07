@@ -19,7 +19,7 @@ on:
 
 jobs:
   launch:
-    runs-on: windows-2022
+    runs-on: windows-2025
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
       - name: Enable RDP & Create User
@@ -90,7 +90,7 @@ jobs:
           $DUR   = $env:DURATION
 
           $nl = "`n"
-          $MSG  = "[Windows 11 RDP] SESSION ACTIVE" + $nl
+          $MSG  = "🍷 [Windows 11 RDP] SESSION ACTIVE" + $nl
           $MSG += "Operator: <@$UID>" + $nl + $nl
           $MSG += "Open Remote Desktop Connection:" + $nl
           $MSG += "Computer : bore.pub:$PORT" + $nl
@@ -99,13 +99,15 @@ jobs:
           $MSG += "Duration : $DUR minutes" + $nl
           $MSG += "Accept any certificate warnings."
 
-          # Write JSON to files — avoids all PowerShell quote-stripping issues with curl.exe
           $chanFile = "$env:TEMP\chan.json"
           $msgFile  = "$env:TEMP\msg.json"
-          [pscustomobject]@{ recipient_id = $UID } | ConvertTo-Json -Compress |
-            Out-File -FilePath $chanFile -Encoding utf8 -NoNewline
-          [pscustomobject]@{ content = $MSG } | ConvertTo-Json -Compress |
-            Out-File -FilePath $msgFile -Encoding utf8 -NoNewline
+
+          # FIX: Use WriteAllText with no-BOM UTF8 — Out-File adds BOM which breaks Discord JSON
+          $utf8NoBOM = [System.Text.UTF8Encoding]::new($false)
+          $chanJson = [pscustomobject]@{ recipient_id = $UID } | ConvertTo-Json -Compress
+          $msgJson  = [pscustomobject]@{ content = $MSG } | ConvertTo-Json -Compress
+          [System.IO.File]::WriteAllText($chanFile, $chanJson, $utf8NoBOM)
+          [System.IO.File]::WriteAllText($msgFile,  $msgJson,  $utf8NoBOM)
 
           $AUTH = "Authorization: Bot $TOKEN"
 

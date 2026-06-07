@@ -27,15 +27,27 @@ jobs:
           docker pull fedora:40
           docker run -d --name fedora -p 3389:3389 fedora:40 sleep infinity
 
+          # Install xRDP + XFCE4 + polkit-xfce to suppress the PolicyKit Agent popup
           docker exec fedora bash -c "dnf install -y \
-            xrdp @xfce-desktop-environment dbus-x11 \
+            xrdp xfce4-session xfce4-panel xfwm4 xfdesktop thunar xterm \
+            dbus-x11 tigervnc-server polkit xfce-polkit \
             curl jq zip nmap git python3 net-tools htop 2>/dev/null || true"
 
+          # Create user
           docker exec fedora bash -c "useradd -m -s /bin/bash xploit && echo 'xploit:phantom' | chpasswd && usermod -aG wheel xploit"
-          docker exec fedora bash -c "echo 'startxfce4' > /home/xploit/.xsession && chmod +x /home/xploit/.xsession && chown xploit:xploit /home/xploit/.xsession"
+
+          # KEY FIX: dbus-launch --exit-with-session prevents PolicyKit/xfconfd errors
+          docker exec fedora bash -c "printf '#!/bin/sh\nexec dbus-launch --exit-with-session startxfce4\n' > /etc/xrdp/startwm.sh && chmod +x /etc/xrdp/startwm.sh"
           docker exec fedora bash -c "sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini 2>/dev/null || true"
-          docker exec -d fedora bash -c "/usr/sbin/xrdp-sesman && sleep 1 && /usr/sbin/xrdp"
-          sleep 5
+
+          # Create runtime dirs xrdp needs
+          docker exec fedora bash -c "mkdir -p /var/run/xrdp /run/xrdp && chmod 755 /var/run/xrdp /run/xrdp"
+
+          # Start sesman first, then xrdp (order matters)
+          docker exec -d fedora bash -c "xrdp-sesman --nodaemon > /tmp/sesman.log 2>&1"
+          sleep 4
+          docker exec -d fedora bash -c "xrdp --nodaemon > /tmp/xrdp.log 2>&1"
+          sleep 3
 
       - name: Bore Tunnel + Send DM
         env:

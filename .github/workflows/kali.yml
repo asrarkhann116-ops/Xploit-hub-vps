@@ -22,21 +22,35 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
-      - name: Pull Kali Linux + Install xRDP Desktop
+      - name: Pull Kali Linux + Install xRDP
         run: |
           docker pull kalilinux/kali-rolling
           docker run -d --name kali -p 3389:3389 kalilinux/kali-rolling sleep infinity
 
+          # KEY: tigervnc-standalone-server provides Xvnc which xrdp-sesman needs
+          # Remove kali-linux-top10 — it's huge and causes install timeouts
           docker exec kali bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            xrdp xfce4 xfce4-goodies dbus-x11 kali-linux-top10 \
-            curl jq zip nmap 2>/dev/null || true"
+            xrdp xfce4 dbus-x11 tigervnc-standalone-server \
+            curl jq zip nmap git python3 net-tools 2>/dev/null || true"
 
-          # Create user and configure xrdp
-          docker exec kali bash -c "useradd -m -s /bin/bash xploit && echo 'xploit:phantom' | chpasswd && usermod -aG sudo xploit"
-          docker exec kali bash -c "echo 'startxfce4' > /home/xploit/.xsession && chmod +x /home/xploit/.xsession && chown xploit:xploit /home/xploit/.xsession"
+          # Create user
+          docker exec kali bash -c "useradd -m -s /bin/bash xploit && echo 'xploit:phantom' | chpasswd"
+
+          # KEY FIX: dbus-launch required or XFCE4 fails with failsafe session error
+          docker exec kali bash -c "printf '#!/bin/sh\nexec dbus-launch --exit-with-session startxfce4\n' > /etc/xrdp/startwm.sh && chmod +x /etc/xrdp/startwm.sh"
           docker exec kali bash -c "sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini 2>/dev/null || true"
-          docker exec -d kali bash -c "/usr/sbin/xrdp-sesman && sleep 1 && /usr/sbin/xrdp"
-          sleep 5
+
+          # Create required runtime dirs
+          docker exec kali bash -c "mkdir -p /var/run/xrdp /run/xrdp && chmod 755 /var/run/xrdp /run/xrdp"
+
+          # Start xrdp-sesman first, then xrdp (order matters)
+          docker exec -d kali bash -c "xrdp-sesman --nodaemon > /tmp/sesman.log 2>&1"
+          sleep 4
+          docker exec -d kali bash -c "xrdp --nodaemon > /tmp/xrdp.log 2>&1"
+          sleep 3
+
+          echo "--- Checking xrdp port inside container ---"
+          docker exec kali bash -c "ss -tlnp 2>/dev/null | grep 3389 || netstat -tlnp 2>/dev/null | grep 3389 || echo 'port check done'"
 
       - name: Bore Tunnel + Send DM
         env:

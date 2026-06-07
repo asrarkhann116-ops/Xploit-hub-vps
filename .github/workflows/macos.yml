@@ -33,14 +33,17 @@ jobs:
             com.apple.screensharing -dict Disabled -bool false 2>/dev/null || true
           sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
 
-          # Wait for VNC to actually start accepting connections
+          # Wait for VNC port to be ready
           echo "Waiting for VNC port 5900..."
           for i in $(seq 1 30); do
             nc -z localhost 5900 2>/dev/null && echo "VNC is up!" && break
             sleep 3
           done
 
-      - name: Setup noVNC + Bore Tunnel & Notify Discord
+      - name: Setup noVNC + Cloudflare Tunnel + Send DM
+        # NOTE: Cloudflare tunnel is used here (not bore) because macOS VNC uses Apple Remote
+        # Desktop auth which requires WebCrypto (window.crypto.subtle). WebCrypto only works
+        # in HTTPS contexts. Cloudflare gives a free HTTPS URL — bore.pub is HTTP-only.
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           USER_ID: ${{ github.event.inputs.user_id }}
@@ -51,36 +54,33 @@ jobs:
 
           git clone https://github.com/novnc/noVNC.git --depth 1 > /dev/null 2>&1
 
-          # novnc_proxy handles both HTTP file serving AND WebSocket proxy to VNC
-          # This is the same reliable approach used by the Linux workflows
+          # Start novnc_proxy — serves noVNC web UI + proxies WebSocket to VNC:5900
           ./noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 8080 > /tmp/novnc.log 2>&1 &
           sleep 5
 
-          # Verify novnc_proxy is running
+          # Fallback: direct websockify if novnc_proxy didn't start
           if ! pgrep -f "novnc_proxy\|websockify" > /dev/null; then
-            echo "novnc_proxy failed, falling back to direct websockify..."
             python3 -m websockify --web noVNC/ --timeout 0 8080 localhost:5900 > /tmp/ws.log 2>&1 &
             sleep 3
           fi
 
-          # Download bore (ARM64 for Apple Silicon, fallback to x86_64 for Intel)
+          # Download cloudflared (macOS) — gives HTTPS URL required for WebCrypto
           ARCH=$(uname -m)
           if [ "$ARCH" = "arm64" ]; then
-            curl -sL -o bore.tar.gz \
-              https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-aarch64-apple-darwin.tar.gz
+            curl -sL -o cloudflared \
+              https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-arm64
           else
-            curl -sL -o bore.tar.gz \
-              https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-apple-darwin.tar.gz
+            curl -sL -o cloudflared \
+              https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64
           fi
-          tar -xzf bore.tar.gz && chmod +x bore
+          chmod +x cloudflared
 
-          nohup ./bore local 8080 --to bore.pub > bore.log 2>&1 &
+          nohup ./cloudflared tunnel --url http://localhost:8080 > cloudflared.log 2>&1 &
 
-          PORT=""
+          CF_URL=""
           for i in $(seq 1 30); do
-            PORT=$(grep -o 'bore\.pub:[0-9]*' bore.log 2>/dev/null | cut -d':' -f2 | head -n 1)
-            [ -z "$PORT" ] && PORT=$(grep -o 'remote_port=[0-9]*' bore.log 2>/dev/null | cut -d'=' -f2 | head -n 1)
-            [ -n "$PORT" ] && break
+            CF_URL=$(grep -o 'https://[a-z0-9\-]*\.trycloudflare\.com' cloudflared.log 2>/dev/null | head -n 1)
+            [ -n "$CF_URL" ] && break
             sleep 3
           done
 
@@ -88,14 +88,14 @@ jobs:
             -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
             https://discord.com/api/v10/users/@me/channels | jq -r '.id')
 
-          if [ -z "$PORT" ]; then
+          if [ -z "$CF_URL" ]; then
             curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
               -X POST -d "{\"content\": \"❌ **macOS Launch Failed** — tunnel could not start. Please try again.\"}" \
               "https://discord.com/api/v10/channels/$CID/messages"
             exit 1
           fi
 
-          BROWSER_LINK="http://bore.pub:$PORT/vnc.html?autoconnect=1&password=phantom&compression=2&quality=6"
+          BROWSER_LINK="$CF_URL/vnc.html?autoconnect=1&password=phantom&compression=2&quality=6"
 
           curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
             -X POST -d "{\"content\": \"🍎 **macOS SONOMA — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n\n🌐 **Browser Access (no app needed):**\n$BROWSER_LINK\n\n🔑 **VNC Password:** \`phantom\`\n⏱ **Duration:** $DURATION minutes\n\n*Just click the link — opens in your browser directly!*\"}" \

@@ -27,15 +27,26 @@ jobs:
           docker pull debian:bookworm
           docker run -d --name debian -p 3389:3389 debian:bookworm sleep infinity
 
+          # Install xfce4 WITHOUT xfce4-goodies to avoid the Power Manager Plugin crash popup
           docker exec debian bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            xrdp xfce4 xfce4-goodies dbus-x11 \
-            curl jq zip nmap git python3 net-tools 2>/dev/null || true"
+            xrdp xfce4 xfce4-terminal dbus-x11 tigervnc-standalone-server \
+            curl jq zip nmap git python3 net-tools sudo 2>/dev/null || true"
 
+          # Create user
           docker exec debian bash -c "useradd -m -s /bin/bash xploit && echo 'xploit:phantom' | chpasswd && usermod -aG sudo xploit"
-          docker exec debian bash -c "echo 'startxfce4' > /home/xploit/.xsession && chmod +x /home/xploit/.xsession && chown xploit:xploit /home/xploit/.xsession"
+
+          # KEY FIX: dbus-launch --exit-with-session prevents xfconfd/failsafe session errors
+          docker exec debian bash -c "printf '#!/bin/sh\nexec dbus-launch --exit-with-session startxfce4\n' > /etc/xrdp/startwm.sh && chmod +x /etc/xrdp/startwm.sh"
           docker exec debian bash -c "sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini 2>/dev/null || true"
-          docker exec -d debian bash -c "/usr/sbin/xrdp-sesman && sleep 1 && /usr/sbin/xrdp"
-          sleep 5
+
+          # Create runtime dirs xrdp needs
+          docker exec debian bash -c "mkdir -p /var/run/xrdp /run/xrdp && chmod 755 /var/run/xrdp /run/xrdp"
+
+          # Start sesman first, then xrdp (order matters)
+          docker exec -d debian bash -c "xrdp-sesman --nodaemon > /tmp/sesman.log 2>&1"
+          sleep 4
+          docker exec -d debian bash -c "xrdp --nodaemon > /tmp/xrdp.log 2>&1"
+          sleep 3
 
       - name: Bore Tunnel + Send DM
         env:

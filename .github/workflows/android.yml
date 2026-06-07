@@ -1,0 +1,85 @@
+name: Xploit-HUB-Android
+on:
+  workflow_dispatch:
+    inputs:
+      user_id:
+        description: 'Discord User ID'
+        required: true
+      user_name:
+        description: 'Discord User Name'
+        required: true
+      duration:
+        description: 'Duration in minutes'
+        required: true
+        default: '60'
+      wallpaper_url:
+        description: 'Wallpaper URL'
+        required: false
+        default: ''
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
+    steps:
+      - name: Install QEMU & Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y qemu-kvm qemu-system-x86 curl jq unzip wget git 2>/dev/null || true
+          sudo adduser $USER kvm 2>/dev/null || true
+
+      - name: Download Android-x86 ISO & Launch
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          USER_ID: ${{ github.event.inputs.user_id }}
+          USER_NAME: ${{ github.event.inputs.user_name }}
+          DURATION: ${{ github.event.inputs.duration }}
+        run: |
+          # Download Android 9 x86_64 ISO
+          wget -q "https://sourceforge.net/projects/android-x86/files/Release%209.0/android-x86_64-9.0-r2.iso/download" \
+            -O android.iso --timeout=120 || \
+          wget -q "https://osdn.net/projects/android-x86/downloads/71931/android-x86_64-9.0-r2.iso" \
+            -O android.iso --timeout=120
+
+          # Create virtual disk for Android
+          qemu-img create -f qcow2 android.qcow2 8G
+
+          # Clone noVNC for browser access
+          git clone https://github.com/novnc/noVNC.git --depth 1 > /dev/null 2>&1
+
+          # Boot Android via QEMU with VNC output on display :1
+          # GitHub runners don't have KVM so use -accel tcg (software mode)
+          KVM_FLAG=""
+          [ -e /dev/kvm ] && KVM_FLAG="-enable-kvm"
+          nohup qemu-system-x86_64 \
+            $KVM_FLAG \
+            -accel tcg \
+            -m 4096 \
+            -smp 2 \
+            -cdrom android.iso \
+            -hda android.qcow2 \
+            -vga std \
+            -vnc :1 \
+            -net nic \
+            -net user \
+            -boot d > /dev/null 2>&1 &
+
+          # noVNC proxy (VNC port 5901 → HTTP 8080)
+          ./noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080 &
+
+          # Cloudflare tunnel
+          curl -L -o cf https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && chmod +x cf
+          nohup ./cf tunnel --url http://localhost:8080 > cf.log 2>&1 &
+
+          # Wait longer for Android + tunnel to start
+          sleep 35
+          CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cf.log | head -n 1)
+
+          CID=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+            -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
+            https://discord.com/api/v10/users/@me/channels | jq -r '.id')
+          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+            -X POST -d "{\"content\": \"🤖 **ANDROID 9 — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n🔗 **Access:** $CF_URL/vnc.html\n\n*Android is booting — wait ~2 minutes after opening the link for the screen to appear. You can install any APK during the session.*\n⏱ **Duration:** $DURATION minutes\"}" \
+            https://discord.com/api/v10/channels/$CID/messages
+
+          while true; do sleep 3600; done

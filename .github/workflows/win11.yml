@@ -1,0 +1,84 @@
+name: Xploit-HUB-Win11
+on:
+  workflow_dispatch:
+    inputs:
+      user_id:
+        description: 'Discord User ID'
+        required: true
+      user_name:
+        description: 'Discord User Name'
+        required: true
+      duration:
+        description: 'Duration in minutes'
+        required: true
+        default: '60'
+      wallpaper_url:
+        description: 'Wallpaper URL'
+        required: false
+        default: ''
+
+jobs:
+  launch:
+    runs-on: windows-latest
+    timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
+    steps:
+      - name: Enable RDP & Create User
+        shell: powershell
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
+          $password = ConvertTo-SecureString "phantom" -AsPlainText -Force
+          New-LocalUser "xploit" -Password $password -FullName "Xploit Operator" -Description "Xploit HUB User" -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Administrators" -Member "xploit" -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "xploit" -ErrorAction SilentlyContinue
+
+      - name: Create Desktop Identity File
+        shell: powershell
+        env:
+          USER_NAME: ${{ github.event.inputs.user_name }}
+        run: |
+          $content = @"
+          ==========================================
+            XPLOIT HUB - WINDOWS 11 (7GB RAM)
+          ==========================================
+          OPERATOR : $env:USER_NAME
+          STATUS   : READY
+          USER     : xploit
+          PASS     : phantom
+          ==========================================
+          "@
+          New-Item -Path "$env:PUBLIC\Desktop" -ItemType Directory -Force | Out-Null
+          Set-Content -Path "$env:PUBLIC\Desktop\IDENTITY.txt" -Value $content
+
+      - name: Start Bore Tunnel & Notify Discord
+        shell: powershell
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          USER_ID: ${{ github.event.inputs.user_id }}
+          USER_NAME: ${{ github.event.inputs.user_name }}
+          DURATION: ${{ github.event.inputs.duration }}
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-pc-windows-msvc.zip" -OutFile bore.zip
+          Expand-Archive bore.zip -DestinationPath . -Force
+          $boreProcess = Start-Process -FilePath ".\bore.exe" -ArgumentList "local 3389 --to bore.pub" `
+            -RedirectStandardOutput "bore.log" -RedirectStandardError "bore_err.log" -NoNewWindow -PassThru
+          Start-Sleep -Seconds 20
+
+          $log = (Get-Content "bore.log" -ErrorAction SilentlyContinue) -join " "
+          $errlog = (Get-Content "bore_err.log" -ErrorAction SilentlyContinue) -join " "
+          $combined = "$log $errlog"
+
+          $port = [regex]::Match($combined, 'remote_port=(\d+)').Groups[1].Value
+          if (-not $port) { $port = [regex]::Match($combined, 'bore\.pub:(\d+)').Groups[1].Value }
+          if (-not $port) { $port = "CHECK_LOGS" }
+
+          $headers = @{ "Authorization" = "Bot $env:DISCORD_TOKEN"; "Content-Type" = "application/json" }
+          $dmBody  = "{`"recipient_id`": `"$env:USER_ID`"}"
+          $dmChan  = Invoke-RestMethod -Uri "https://discord.com/api/v10/users/@me/channels" -Method POST -Headers $headers -Body $dmBody
+          $chanId  = $dmChan.id
+
+          $msg = "{`"content`": `"🪟 **WINDOWS 11 — RDP SESSION ACTIVE**\n👤 **Operator:** <@$env:USER_ID>\n\n⚡ Open **Remote Desktop Connection** and enter:\n💻 **Computer:** ``bore.pub:$port``\n👤 **Username:** ``xploit``\n🔑 **Password:** ``phantom``\n⏱ **Duration:** $env:DURATION minutes\n\n*Accept any certificate warnings.*`"}"
+          Invoke-RestMethod -Uri "https://discord.com/api/v10/channels/$chanId/messages" -Method POST -Headers $headers -Body $msg
+
+          Start-Sleep -Seconds ([int]$env:DURATION * 60)

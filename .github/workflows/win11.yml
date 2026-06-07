@@ -19,7 +19,7 @@ on:
 
 jobs:
   launch:
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
       - name: Enable RDP & Create User
@@ -38,9 +38,7 @@ jobs:
 
           $pw = ConvertTo-SecureString "phantom" -AsPlainText -Force
           $result = New-LocalUser "xploit" -Password $pw -PasswordNeverExpires -UserMayNotChangePassword -ErrorAction SilentlyContinue
-          if (-not $result) {
-            Set-LocalUser -Name "xploit" -Password $pw -ErrorAction SilentlyContinue
-          }
+          if (-not $result) { Set-LocalUser -Name "xploit" -Password $pw -ErrorAction SilentlyContinue }
           Add-LocalGroupMember -Group "Administrators" -Member "xploit" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "xploit" -ErrorAction SilentlyContinue
 
@@ -76,10 +74,7 @@ jobs:
             if ($PORT) { break }
           }
 
-          if (-not $PORT) {
-            Write-Host "ERROR: Bore tunnel failed to connect."
-            exit 1
-          }
+          if (-not $PORT) { Write-Host "ERROR: Bore tunnel failed."; exit 1 }
 
           Write-Host "=========================================="
           Write-Host "  WINDOWS 11 RDP - SESSION ACTIVE"
@@ -90,51 +85,42 @@ jobs:
           Write-Host "  Duration : $env:DURATION minutes"
           Write-Host "=========================================="
 
-          # Helper: send Discord API request with proper UTF-8 encoding
-          function Invoke-Discord {
-            param($Uri, $Body)
-            $bytes = [System.Text.Encoding]::UTF8.GetBytes($Body)
-            Invoke-RestMethod -Uri $Uri -Method POST `
-              -Headers @{ "Authorization" = "Bot $env:DISCORD_TOKEN" } `
-              -Body $bytes -ContentType "application/json; charset=utf-8"
-          }
+          $TOKEN = $env:DISCORD_TOKEN
+          $UID   = $env:USER_ID
+          $DUR   = $env:DURATION
 
-          $nl = "`n"
-          $msg = "[Windows 11 RDP] SESSION ACTIVE" + $nl
-          $msg += "Operator: <@" + $env:USER_ID + ">" + $nl + $nl
-          $msg += "Open Remote Desktop Connection:" + $nl
-          $msg += "Computer : bore.pub:" + $PORT + $nl
-          $msg += "Username : xploit" + $nl
-          $msg += "Password : phantom" + $nl
-          $msg += "Duration : " + $env:DURATION + " minutes" + $nl
-          $msg += "Accept any certificate warnings."
+          $MSG = "[Windows 11 RDP] SESSION ACTIVE`nOperator: <@$UID>`n`nOpen Remote Desktop Connection:`nComputer : bore.pub:${PORT}`nUsername : xploit`nPassword : phantom`nDuration : $DUR minutes`nAccept any certificate warnings."
 
-          $msgJson = [pscustomobject]@{ content = $msg } | ConvertTo-Json -Compress
-
-          # Try DM
+          # Get DM channel using curl.exe
           $dmSent = $false
-          try {
-            $chanJson = [pscustomobject]@{ recipient_id = $env:USER_ID } | ConvertTo-Json -Compress
-            $r = Invoke-Discord -Uri "https://discord.com/api/v10/users/@me/channels" -Body $chanJson
-            $CID = $r.id
-            if ($CID) {
-              Invoke-Discord -Uri "https://discord.com/api/v10/channels/$CID/messages" -Body $msgJson
-              Write-Host "Discord DM sent OK."
+          $chanResp = curl.exe -s -X POST "https://discord.com/api/v10/users/@me/channels" `
+            -H "Authorization: Bot $TOKEN" `
+            -H "Content-Type: application/json" `
+            -d "{`"recipient_id`": `"$UID`"}"
+
+          $CID = ($chanResp | ConvertFrom-Json -ErrorAction SilentlyContinue).id
+
+          if ($CID) {
+            $msgEsc = $MSG -replace '"','\"' -replace "`n",'\n'
+            $sendResp = curl.exe -s -X POST "https://discord.com/api/v10/channels/$CID/messages" `
+              -H "Authorization: Bot $TOKEN" `
+              -H "Content-Type: application/json" `
+              -d "{`"content`": `"$msgEsc`"}"
+            Write-Host "DM response: $sendResp"
+            if ($sendResp -notmatch '"code"') {
               $dmSent = $true
+              Write-Host "Discord DM sent OK."
             }
-          } catch {
-            Write-Host "DM failed: $_"
           }
 
-          # Fallback: VPS channel
           if (-not $dmSent) {
-            try {
-              Invoke-Discord -Uri "https://discord.com/api/v10/channels/1497364285645652098/messages" -Body $msgJson
-              Write-Host "Posted in VPS channel."
-            } catch {
-              Write-Host "Channel post failed: $_"
-              Write-Host "RDP still active - connect with details above."
-            }
+            Write-Host "DM failed, trying VPS channel..."
+            $msgEsc = $MSG -replace '"','\"' -replace "`n",'\n'
+            $chanPost = curl.exe -s -X POST "https://discord.com/api/v10/channels/1497364285645652098/messages" `
+              -H "Authorization: Bot $TOKEN" `
+              -H "Content-Type: application/json" `
+              -d "{`"content`": `"$msgEsc`"}"
+            Write-Host "Channel response: $chanPost"
           }
 
           Start-Sleep ([int]$env:DURATION * 60)

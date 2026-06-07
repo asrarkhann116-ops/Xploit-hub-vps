@@ -37,21 +37,38 @@ jobs:
 
       - name: Configure xRDP + Create User
         run: |
-          # Create user
+          # Create user — add to ssl-cert group (required for xRDP on Ubuntu)
           sudo useradd -m -s /bin/bash xploit
           echo "xploit:phantom" | sudo chpasswd
-          sudo usermod -aG sudo xploit
+          sudo usermod -aG sudo,ssl-cert xploit
 
-          # KEY FIX: dbus-launch is REQUIRED or xfconfd won't start (failsafe session error)
-          sudo bash -c 'printf "#!/bin/sh\nexec dbus-launch --exit-with-session startxfce4\n" > /etc/xrdp/startwm.sh'
+          # Pre-create xfce4 config dirs so session doesn't try to write them during launch
+          sudo mkdir -p /home/xploit/.config/xfce4/xfconf/xfce-perchannel-xml
+          sudo mkdir -p /home/xploit/.local/share/xfce4
+          sudo mkdir -p /home/xploit/.cache/sessions
+          sudo chown -R xploit:xploit /home/xploit
+
+          # Set session: xploit's .xsession tells Xsession to run startxfce4
+          echo "startxfce4" | sudo tee /home/xploit/.xsession > /dev/null
+          sudo chmod +x /home/xploit/.xsession
+          sudo chown xploit:xploit /home/xploit/.xsession
+
+          # KEY FIX: Use /etc/X11/Xsession — this is the system session handler that
+          # properly initialises D-Bus AND sets XDG_CONFIG_DIRS before calling the DE.
+          # dbus-launch alone doesn't work because xfce4-session needs the bus address
+          # set BEFORE it even starts. Xsession handles this correctly.
+          sudo bash -c 'cat > /etc/xrdp/startwm.sh << "ENDSESSION"
+#!/bin/sh
+if [ -r /etc/default/locale ]; then
+  . /etc/default/locale
+  export LANG LANGUAGE
+fi
+exec /etc/X11/Xsession
+ENDSESSION'
           sudo chmod +x /etc/xrdp/startwm.sh
 
           # Lower color depth for stability
           sudo sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini 2>/dev/null || true
-
-          # Ensure dbus system bus is running
-          sudo mkdir -p /run/dbus
-          sudo dbus-daemon --system --fork 2>/dev/null || true
 
           sudo systemctl enable xrdp 2>/dev/null || true
           sudo systemctl start xrdp

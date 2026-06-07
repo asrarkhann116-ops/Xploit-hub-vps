@@ -1,4 +1,4 @@
-name: Xploit-HUB-Arch
+name: Xploit-HUB-BlackArch
 on:
   workflow_dispatch:
     inputs:
@@ -22,25 +22,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
-      - name: Pull Arch Linux + Install Desktop + VNC
+      - name: Pull BlackArch + Install Desktop + VNC
         run: |
-          # NOTE: xrdp and x11vnc are both AUR-only on Arch.
-          # tigervnc IS in official Arch repos and ships vncserver/Xvnc built-in.
-          docker pull archlinux:latest
-          docker run -d --name arch -p 5901:5901 archlinux:latest sleep infinity
+          # BlackArch is Arch-based — xrdp and x11vnc are AUR-only.
+          # Use tigervnc (official Arch/BlackArch repos) + noVNC browser access.
+          docker pull blackarchlinux/blackarch
+          docker run -d --name blackarch -p 5901:5901 blackarchlinux/blackarch sleep infinity
 
-          docker exec arch bash -c "pacman -Sy --noconfirm \
+          # Install tigervnc + XFCE4 (all available in BlackArch/Arch repos)
+          docker exec blackarch bash -c "pacman -Sy --noconfirm \
             tigervnc xfce4 xfce4-goodies \
-            curl wget git nmap python3 net-tools htop neofetch 2>/dev/null || true"
+            curl wget git nmap python3 net-tools htop neofetch \
+            metasploit sqlmap nikto exploitdb 2>/dev/null || true"
 
           # Create user
-          docker exec arch bash -c "useradd -m -s /bin/bash xploit && echo 'xploit:phantom' | chpasswd"
+          docker exec blackarch bash -c "useradd -m -s /bin/bash xploit && echo 'xploit:phantom' | chpasswd 2>/dev/null || true"
 
-          # Set up VNC password (tigervnc's vncpasswd, running session as root for simplicity)
-          docker exec arch bash -c "mkdir -p /root/.vnc && printf 'phantom\nphantom\n\n' | vncpasswd 2>/dev/null; chmod 600 /root/.vnc/passwd 2>/dev/null || true"
+          # Set up VNC password
+          docker exec blackarch bash -c "mkdir -p /root/.vnc && printf 'phantom\nphantom\n\n' | vncpasswd 2>/dev/null; chmod 600 /root/.vnc/passwd 2>/dev/null || true"
 
           # xstartup — run XFCE4 when Xvnc session starts
-          docker exec arch bash -c 'cat > /root/.vnc/xstartup << "EOF"
+          docker exec blackarch bash -c 'cat > /root/.vnc/xstartup << "EOF"
 #!/bin/sh
 export XDG_CONFIG_DIRS=/etc/xdg
 export XDG_DATA_DIRS=/usr/share:/usr/local/share
@@ -48,15 +50,14 @@ exec startxfce4
 EOF
 chmod +x /root/.vnc/xstartup'
 
-      - name: Start VNC Server (Xvnc via tigervnc)
+      - name: Start VNC Server (tigervnc Xvnc)
         run: |
           # vncserver starts Xvnc (virtual display) + runs xstartup = XFCE4
-          # Port 5901 = display :1 (tigervnc default mapping)
-          docker exec -d arch bash -c "vncserver :1 -geometry 1280x800 -depth 24 -localhost no 2>/dev/null"
+          docker exec -d blackarch bash -c "vncserver :1 -geometry 1280x800 -depth 24 -localhost no 2>/dev/null"
           sleep 6
 
-          echo "--- Checking VNC port inside container ---"
-          docker exec arch bash -c "ss -tlnp 2>/dev/null | grep 5901 || netstat -tlnp 2>/dev/null | grep 5901 || echo 'port check done'"
+          echo "--- Checking VNC port ---"
+          docker exec blackarch bash -c "ss -tlnp 2>/dev/null | grep 5901 || echo 'port check done'"
 
       - name: Setup noVNC on Host + Bore Tunnel + Send DM
         env:
@@ -68,7 +69,6 @@ chmod +x /root/.vnc/xstartup'
           pip3 install websockify --quiet 2>/dev/null || true
           git clone https://github.com/novnc/noVNC.git --depth 1 > /dev/null 2>&1
 
-          # novnc_proxy: HTTP + WebSocket proxy — proxies to container's Xvnc on 5901
           ./noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080 > /tmp/novnc.log 2>&1 &
           sleep 4
 
@@ -92,7 +92,7 @@ chmod +x /root/.vnc/xstartup'
 
           if [ -z "$PORT" ]; then
             curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-              -X POST -d "{\"content\": \"❌ **Arch Launch Failed** — bore tunnel could not start. Please try again.\"}" \
+              -X POST -d "{\"content\": \"❌ **BlackArch Launch Failed** — bore tunnel could not start. Please try again.\"}" \
               "https://discord.com/api/v10/channels/$CID/messages"
             exit 1
           fi
@@ -100,7 +100,7 @@ chmod +x /root/.vnc/xstartup'
           BROWSER_LINK="http://bore.pub:$PORT/vnc.html?autoconnect=1&password=phantom&compression=2&quality=6"
 
           curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-            -X POST -d "{\"content\": \"🏹 **REAL ARCH LINUX — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n\n🌐 **Browser Access (no app needed):**\n$BROWSER_LINK\n\n🔑 **VNC Password:** \`phantom\`\n⏱ **Duration:** $DURATION minutes\n\n*Click the link — opens directly in your browser.*\n**BTW, I use Arch.**\"}" \
+            -X POST -d "{\"content\": \"☠️ **BLACKARCH LINUX — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n\n🌐 **Browser Access (no app needed):**\n$BROWSER_LINK\n\n🔑 **VNC Password:** \`phantom\`\n⏱ **Duration:** $DURATION minutes\n\n*Click the link — opens directly in your browser.*\n**BlackArch Linux — 2800+ hacking tools available via pacman.**\"}" \
             "https://discord.com/api/v10/channels/$CID/messages"
 
           while true; do sleep 3600; done

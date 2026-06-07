@@ -19,7 +19,7 @@ on:
 
 jobs:
   launch:
-    runs-on: windows-2019
+    runs-on: windows-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
       - name: Enable RDP & Create User

@@ -14,7 +14,7 @@ on:
         default: '60'
       wallpaper_url:
         description: 'Wallpaper URL'
-        required: true
+        required: false
         default: 'https://images.wallpapersden.com/image/download/red-hacker-binary-code_bWZtZ2aUmZqaraWkpJRmbmdlrWZnZWU.jpg'
 
 jobs:
@@ -22,42 +22,40 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
-      - name: Pull Real Kali Linux & Install Desktop
+      - name: Pull Kali Linux + Install xRDP Desktop
         run: |
           docker pull kalilinux/kali-rolling
-          docker run -d --name kali -p 5901:5901 kalilinux/kali-rolling sleep infinity
-          docker exec kali bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            xfce4 xfce4-goodies x11vnc xvfb dbus-x11 curl jq zip kali-linux-top10 2>/dev/null || true"
+          docker run -d --name kali -p 3389:3389 kalilinux/kali-rolling sleep infinity
 
-      - name: Start Kali Desktop & Tunnel
+          docker exec kali bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            xrdp xfce4 xfce4-goodies dbus-x11 kali-linux-top10 \
+            curl jq zip nmap 2>/dev/null || true"
+
+          # Create user and configure xrdp
+          docker exec kali bash -c "useradd -m -s /bin/bash xploit && echo 'xploit:phantom' | chpasswd && usermod -aG sudo xploit"
+          docker exec kali bash -c "echo 'startxfce4' > /home/xploit/.xsession && chmod +x /home/xploit/.xsession && chown xploit:xploit /home/xploit/.xsession"
+          docker exec kali bash -c "sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini 2>/dev/null || true"
+          docker exec -d kali bash -c "/usr/sbin/xrdp-sesman && sleep 1 && /usr/sbin/xrdp"
+          sleep 5
+
+      - name: Bore Tunnel + Send DM
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           USER_ID: ${{ github.event.inputs.user_id }}
           USER_NAME: ${{ github.event.inputs.user_name }}
           DURATION: ${{ github.event.inputs.duration }}
-          WALLPAPER: ${{ github.event.inputs.wallpaper_url }}
         run: |
-          docker exec -d kali bash -c "Xvfb :1 -screen 0 1280x720x16 > /tmp/xvfb.log 2>&1"
-          sleep 4
+          curl -sL -o bore.tar.gz \
+            https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf bore.tar.gz && chmod +x bore
 
-          # dbus-launch fixes black screen & PolicyKit errors inside container
-          docker exec -d kali bash -c "DISPLAY=:1 dbus-launch --exit-with-session startxfce4 > /tmp/xfce.log 2>&1"
-          sleep 8
+          nohup ./bore local 3389 --to bore.pub > bore.log 2>&1 &
 
-          docker exec -d kali bash -c "x11vnc -display :1 -passwd phantom -forever -rfbport 5901 -noxdamage -o /tmp/vnc.log"
-          sleep 2
-
-          git clone https://github.com/novnc/noVNC.git --depth 1 > /dev/null 2>&1
-          ./noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080 &
-
-          curl -sL -o cf https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-          chmod +x cf
-          nohup ./cf tunnel --url http://localhost:8080 > cf.log 2>&1 &
-
-          CF_URL=""
-          for i in $(seq 1 25); do
-            CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cf.log 2>/dev/null | head -n 1)
-            [ -n "$CF_URL" ] && break
+          PORT=""
+          for i in $(seq 1 30); do
+            PORT=$(grep -o 'bore\.pub:[0-9]*' bore.log 2>/dev/null | cut -d':' -f2 | head -n 1)
+            [ -z "$PORT" ] && PORT=$(grep -o 'remote_port=[0-9]*' bore.log 2>/dev/null | cut -d'=' -f2 | head -n 1)
+            [ -n "$PORT" ] && break
             sleep 3
           done
 
@@ -65,15 +63,15 @@ jobs:
             -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
             https://discord.com/api/v10/users/@me/channels | jq -r '.id')
 
-          if [ -z "$CF_URL" ]; then
+          if [ -z "$PORT" ]; then
             curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-              -X POST -d "{\"content\": \"❌ **Kali Launch Failed** — tunnel could not start. Please try again.\"}" \
+              -X POST -d "{\"content\": \"❌ **Kali Launch Failed** — bore tunnel could not start. Please try again.\"}" \
               "https://discord.com/api/v10/channels/$CID/messages"
             exit 1
           fi
 
           curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-            -X POST -d "{\"content\": \"💀 **REAL KALI LINUX — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n🔗 **Access:** $CF_URL/vnc.html?autoconnect=1&compression=2&quality=6\n🔑 **Password:** \`phantom\`\n⏱ **Duration:** $DURATION minutes\n\n**Real Kali Linux (kali-rolling) — 100+ tools included.**\"}" \
+            -X POST -d "{\"content\": \"💀 **REAL KALI LINUX xRDP — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n\n🖥️ **Open Remote Desktop Connection:**\n**Computer:** \`bore.pub:$PORT\`\n**Username:** \`xploit\`\n**Password:** \`phantom\`\n\n*Accept any certificate warnings.*\n⏱ **Duration:** $DURATION minutes\n\n**Real Kali Linux (kali-rolling) — 100+ tools included.**\"}" \
             "https://discord.com/api/v10/channels/$CID/messages"
 
           while true; do sleep 3600; done

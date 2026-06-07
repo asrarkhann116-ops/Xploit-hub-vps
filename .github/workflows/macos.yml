@@ -32,7 +32,13 @@ jobs:
           sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist \
             com.apple.screensharing -dict Disabled -bool false 2>/dev/null || true
           sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
-          sleep 5
+
+          # Wait for VNC to actually start accepting connections
+          echo "Waiting for VNC port 5900..."
+          for i in $(seq 1 30); do
+            nc -z localhost 5900 2>/dev/null && echo "VNC is up!" && break
+            sleep 3
+          done
 
       - name: Setup noVNC + Bore Tunnel & Notify Discord
         env:
@@ -41,15 +47,21 @@ jobs:
           USER_NAME: ${{ github.event.inputs.user_name }}
           DURATION: ${{ github.event.inputs.duration }}
         run: |
-          # Install websockify — bridges macOS VNC (port 5900) to WebSocket (port 6080)
           pip3 install websockify --quiet 2>/dev/null || pip install websockify --quiet 2>/dev/null || true
 
-          # Clone noVNC (served as static web UI by websockify)
           git clone https://github.com/novnc/noVNC.git --depth 1 > /dev/null 2>&1
 
-          # Start websockify: HTTP server on 6080 + WebSocket proxy to VNC 5900
-          python3 -m websockify --web noVNC/ 6080 localhost:5900 > /tmp/ws.log 2>&1 &
-          sleep 4
+          # novnc_proxy handles both HTTP file serving AND WebSocket proxy to VNC
+          # This is the same reliable approach used by the Linux workflows
+          ./noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 8080 > /tmp/novnc.log 2>&1 &
+          sleep 5
+
+          # Verify novnc_proxy is running
+          if ! pgrep -f "novnc_proxy\|websockify" > /dev/null; then
+            echo "novnc_proxy failed, falling back to direct websockify..."
+            python3 -m websockify --web noVNC/ --timeout 0 8080 localhost:5900 > /tmp/ws.log 2>&1 &
+            sleep 3
+          fi
 
           # Download bore (ARM64 for Apple Silicon, fallback to x86_64 for Intel)
           ARCH=$(uname -m)
@@ -62,11 +74,10 @@ jobs:
           fi
           tar -xzf bore.tar.gz && chmod +x bore
 
-          # Bore tunnels the noVNC HTTP server (port 6080) — bore forwards all TCP including HTTP & WebSocket
-          nohup ./bore local 6080 --to bore.pub > bore.log 2>&1 &
+          nohup ./bore local 8080 --to bore.pub > bore.log 2>&1 &
 
           PORT=""
-          for i in $(seq 1 25); do
+          for i in $(seq 1 30); do
             PORT=$(grep -o 'bore\.pub:[0-9]*' bore.log 2>/dev/null | cut -d':' -f2 | head -n 1)
             [ -z "$PORT" ] && PORT=$(grep -o 'remote_port=[0-9]*' bore.log 2>/dev/null | cut -d'=' -f2 | head -n 1)
             [ -n "$PORT" ] && break
@@ -84,7 +95,6 @@ jobs:
             exit 1
           fi
 
-          # noVNC browser link — bore forwards HTTP + WebSocket so no app needed
           BROWSER_LINK="http://bore.pub:$PORT/vnc.html?autoconnect=1&password=phantom&compression=2&quality=6"
 
           curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \

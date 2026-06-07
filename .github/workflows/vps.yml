@@ -14,7 +14,7 @@ on:
         default: '60'
       wallpaper_url:
         description: 'Wallpaper URL'
-        required: true
+        required: false
         default: 'https://images.wallpapersden.com/image/download/red-hacker-binary-code_bWZtZ2aUmZqaraWkpJRmbmdlrWZnZWU.jpg'
 
 jobs:
@@ -22,78 +22,60 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
-      - name: System Prep & Arsenal Installation
+      - name: Install xRDP + Desktop + Arsenal
         run: |
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            xfce4 xfce4-goodies xvfb x11vnc dbus-x11 \
-            curl jq figlet zenity zip wget unzip git vim nano tmux \
-            nmap sqlmap dirb net-tools ncat python3 python3-pip \
-            2>/dev/null || true
-          wget -q https://github.com/projectdiscovery/nuclei/releases/download/v3.2.3/nuclei_3.2.3_linux_amd64.zip -O nuclei.zip
-          unzip -q nuclei.zip && sudo mv nuclei /usr/local/bin/ && rm nuclei.zip
+            xrdp xfce4 xfce4-goodies dbus-x11 \
+            curl jq figlet zip wget unzip git vim nano tmux \
+            nmap sqlmap dirb net-tools ncat python3 python3-pip 2>/dev/null || true
 
-      - name: Elite Branding & Launch
+          wget -q https://github.com/projectdiscovery/nuclei/releases/download/v3.2.3/nuclei_3.2.3_linux_amd64.zip \
+            -O nuclei.zip 2>/dev/null || true
+          unzip -q nuclei.zip 2>/dev/null && sudo mv nuclei /usr/local/bin/ 2>/dev/null || true
+          rm -f nuclei.zip
+
+      - name: Configure xRDP + Create User
+        run: |
+          sudo useradd -m -s /bin/bash xploit
+          echo "xploit:phantom" | sudo chpasswd
+          sudo usermod -aG sudo xploit
+
+          echo "startxfce4" | sudo tee /home/xploit/.xsession
+          sudo chmod +x /home/xploit/.xsession
+          sudo chown xploit:xploit /home/xploit/.xsession
+
+          # xrdp must use xfce4 via .xsession
+          sudo bash -c 'echo "test -x /etc/X11/Xsession && exec /etc/X11/Xsession" >> /etc/xrdp/startwm.sh' 2>/dev/null || true
+          echo "startxfce4" | sudo tee /root/.xsession
+
+          # Reduce color depth to 24bpp for stability
+          sudo sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini 2>/dev/null || true
+          sudo sed -i 's/^port=3389/port=3389/' /etc/xrdp/xrdp.ini 2>/dev/null || true
+
+          sudo systemctl enable xrdp 2>/dev/null || true
+          sudo systemctl start xrdp
+          sleep 3
+          sudo systemctl status xrdp --no-pager || true
+
+      - name: Bore Tunnel + Send DM
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           USER_ID: ${{ github.event.inputs.user_id }}
           USER_NAME: ${{ github.event.inputs.user_name }}
           DURATION: ${{ github.event.inputs.duration }}
-          WALLPAPER: ${{ github.event.inputs.wallpaper_url }}
         run: |
-          Xvfb :1 -screen 0 1280x720x16 &
-          sleep 3
+          curl -sL -o bore.tar.gz \
+            https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf bore.tar.gz && chmod +x bore
 
-          # dbus-launch fixes black screen & PolicyKit errors
-          DISPLAY=:1 dbus-launch --exit-with-session startxfce4 > /tmp/xfce.log 2>&1 &
-          sleep 8
+          nohup ./bore local 3389 --to bore.pub > bore.log 2>&1 &
 
-          curl -sL -o /tmp/wall.jpg "$WALLPAPER" 2>/dev/null || true
-          DISPLAY=:1 xfconf-query -c xfce4-desktop \
-            -p /backdrop/screen0/monitor0/workspace0/last-image \
-            -n -t string -s "/tmp/wall.jpg" 2>/dev/null || true
-
-          x11vnc -display :1 -passwd phantom -forever \
-            -noxdamage -noxfixes -noxrecord -quiet -bg -o /tmp/x11vnc.log
-
-          mkdir -p ~/Desktop
-          cat > ~/Desktop/IDENTITY.txt << EOF
-==========================================
-  XPLOIT HUB ELITE VPS (7GB RAM)
-==========================================
-OPERATOR : $USER_NAME
-STATUS   : ARSENAL LOADED
-TOOLS    : Nmap, SQLMap, Nuclei, Dirb
-==========================================
-EOF
-
-          echo 'export PS1="\[\e[1;31m\]XploitHUB:\[\e[0m\]\w\$ "' >> ~/.bashrc
-          echo 'clear && figlet "Xploit HUB"' >> ~/.bashrc
-
-          cat > ~/Desktop/MEGA_SAVE.sh << 'SAVEEOF'
-#!/bin/bash
-zip -r /tmp/backup.zip ~/Desktop ~/Documents 2>/dev/null
-LINK=$(curl -s --upload-file /tmp/backup.zip https://transfer.sh/backup.zip)
-CID=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-  -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
-  https://discord.com/api/v10/users/@me/channels | jq -r '.id')
-curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-  -X POST -d "{\"content\": \"✅ **Backup Done!**\n📦 Download: $LINK\"}" \
-  "https://discord.com/api/v10/channels/$CID/messages"
-SAVEEOF
-          chmod +x ~/Desktop/MEGA_SAVE.sh
-
-          git clone https://github.com/novnc/noVNC.git --depth 1 > /dev/null 2>&1
-          ./noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 8080 &
-
-          curl -sL -o cf https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-          chmod +x cf
-          nohup ./cf tunnel --url http://localhost:8080 > cf.log 2>&1 &
-
-          CF_URL=""
-          for i in $(seq 1 25); do
-            CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cf.log 2>/dev/null | head -n 1)
-            [ -n "$CF_URL" ] && break
+          PORT=""
+          for i in $(seq 1 30); do
+            PORT=$(grep -o 'bore\.pub:[0-9]*' bore.log 2>/dev/null | cut -d':' -f2 | head -n 1)
+            [ -z "$PORT" ] && PORT=$(grep -o 'remote_port=[0-9]*' bore.log 2>/dev/null | cut -d'=' -f2 | head -n 1)
+            [ -n "$PORT" ] && break
             sleep 3
           done
 
@@ -101,15 +83,15 @@ SAVEEOF
             -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
             https://discord.com/api/v10/users/@me/channels | jq -r '.id')
 
-          if [ -z "$CF_URL" ]; then
+          if [ -z "$PORT" ]; then
             curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-              -X POST -d "{\"content\": \"❌ **VPS Launch Failed** — tunnel could not start. Please try again.\"}" \
+              -X POST -d "{\"content\": \"❌ **Ubuntu VPS Launch Failed** — bore tunnel could not start. Please try again.\"}" \
               "https://discord.com/api/v10/channels/$CID/messages"
             exit 1
           fi
 
           curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-            -X POST -d "{\"content\": \"🐧 **UBUNTU 22.04 — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n🔗 **Access:** $CF_URL/vnc.html?autoconnect=1&compression=2&quality=6\n🔑 **Password:** \`phantom\`\n⏱ **Duration:** $DURATION minutes\"}" \
+            -X POST -d "{\"content\": \"🐧 **UBUNTU 22.04 xRDP — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n\n🖥️ **Open Remote Desktop Connection:**\n**Computer:** \`bore.pub:$PORT\`\n**Username:** \`xploit\`\n**Password:** \`phantom\`\n\n*Accept any certificate warnings.*\n⏱ **Duration:** $DURATION minutes\n\n**Tools loaded:** Nmap, SQLMap, Nuclei, Dirb\"}" \
             "https://discord.com/api/v10/channels/$CID/messages"
 
           while true; do sleep 3600; done

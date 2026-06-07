@@ -27,53 +27,65 @@ jobs:
         run: |
           $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
 
-          # ── DEBLOAT — remove bloatware for lighter/faster session ──
+          # --- DEBLOAT: remove bloatware for lighter/faster session ---
           $bloat = @(
-            "Microsoft.Xbox*","Microsoft.ZuneMusic","Microsoft.ZuneVideo",
-            "Microsoft.WindowsMaps","Microsoft.SkypeApp","Microsoft.BingWeather",
-            "Microsoft.BingNews","Microsoft.GetHelp","Microsoft.Getstarted",
-            "Microsoft.MicrosoftSolitaireCollection","Microsoft.MixedReality.Portal",
-            "Microsoft.People","Microsoft.WindowsFeedbackHub","Microsoft.YourPhone",
-            "Microsoft.Microsoft3DViewer","Microsoft.Print3D"
+            'Microsoft.Xbox.TCUI','Microsoft.XboxApp','Microsoft.XboxGameOverlay',
+            'Microsoft.XboxGamingOverlay','Microsoft.XboxIdentityProvider',
+            'Microsoft.XboxSpeechToTextOverlay','Microsoft.ZuneMusic',
+            'Microsoft.ZuneVideo','Microsoft.WindowsMaps','Microsoft.SkypeApp',
+            'Microsoft.BingWeather','Microsoft.BingNews','Microsoft.GetHelp',
+            'Microsoft.Getstarted','Microsoft.MicrosoftSolitaireCollection',
+            'Microsoft.MixedReality.Portal','Microsoft.People',
+            'Microsoft.WindowsFeedbackHub','Microsoft.YourPhone',
+            'Microsoft.Microsoft3DViewer','Microsoft.Print3D'
           )
           foreach ($app in $bloat) {
-            Get-AppxPackage $app -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue
+            Get-AppxPackage -Name $app -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue
           }
 
-          # Disable heavy background services
-          $services = @("WSearch","SysMain","DiagTrack","dmwappushservice","wuauserv",
-                        "XblAuthManager","XblGameSave","XboxNetApiSvc","XboxGipSvc",
-                        "RetailDemo","WMPNetworkSvc","Fax","MapsBroker")
+          # --- Disable heavy background services ---
+          $services = @(
+            'WSearch','SysMain','DiagTrack','dmwappushservice','wuauserv',
+            'XblAuthManager','XblGameSave','XboxNetApiSvc','XboxGipSvc',
+            'RetailDemo','WMPNetworkSvc','Fax','MapsBroker'
+          )
           foreach ($s in $services) {
             try { Stop-Service -Name $s -Force -ErrorAction SilentlyContinue } catch {}
             try { Set-Service  -Name $s -StartupType Disabled -ErrorAction SilentlyContinue } catch {}
           }
 
-          # Disable telemetry
-          Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" `
-            -Name "AllowTelemetry" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+          # --- Disable telemetry ---
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' `
+            -Name 'AllowTelemetry' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
 
-          Write-Host "Debloat complete — system is lighter now"
+          Write-Host 'Debloat complete - system is lighter now'
 
-          # ── SECURITY POLICY ──
+          # --- Security policy ---
           secedit /export /cfg C:\secpol.cfg /quiet
-          (Get-Content C:\secpol.cfg) -replace "PasswordComplexity = 1","PasswordComplexity = 0" | Set-Content C:\secpol.cfg
+          (Get-Content 'C:\secpol.cfg') -replace 'PasswordComplexity = 1','PasswordComplexity = 0' |
+            Set-Content 'C:\secpol.cfg'
           secedit /configure /db C:\Windows\security\local.sdb /cfg C:\secpol.cfg /quiet
 
-          # ── ENABLE RDP ──
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
+          # --- Enable RDP ---
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+            -Name 'fDenyTSConnections' -Value 0
+          Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+            -Name 'UserAuthentication' -Value 0
 
-          # ── CREATE USER ──
-          $pw = ConvertTo-SecureString "phantom" -AsPlainText -Force
-          $result = New-LocalUser "xploit" -Password $pw -PasswordNeverExpires -UserMayNotChangePassword -ErrorAction SilentlyContinue
-          if (-not $result) { Set-LocalUser -Name "xploit" -Password $pw -ErrorAction SilentlyContinue }
-          Add-LocalGroupMember -Group "Administrators"       -Member "xploit" -ErrorAction SilentlyContinue
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "xploit" -ErrorAction SilentlyContinue
+          # --- Create user ---
+          $pw = ConvertTo-SecureString 'phantom' -AsPlainText -Force
+          $u = Get-LocalUser -Name 'xploit' -ErrorAction SilentlyContinue
+          if ($u) {
+            Set-LocalUser -Name 'xploit' -Password $pw -ErrorAction SilentlyContinue
+          } else {
+            New-LocalUser 'xploit' -Password $pw -PasswordNeverExpires -UserMayNotChangePassword -ErrorAction SilentlyContinue
+          }
+          Add-LocalGroupMember -Group 'Administrators'       -Member 'xploit' -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group 'Remote Desktop Users' -Member 'xploit' -ErrorAction SilentlyContinue
 
-          $u = Get-LocalUser -Name "xploit" -ErrorAction SilentlyContinue
-          if ($u) { Write-Host "SUCCESS: user xploit ready" } else { Write-Host "ERROR: user not found"; exit 1 }
+          $check = Get-LocalUser -Name 'xploit' -ErrorAction SilentlyContinue
+          if ($check) { Write-Host 'SUCCESS: user xploit ready' } else { Write-Host 'ERROR: user not found'; exit 1 }
 
       - name: Bore Tunnel & Send DM
         shell: powershell
@@ -85,35 +97,35 @@ jobs:
         run: |
           $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
           $ProgressPreference = 'SilentlyContinue'
-          Invoke-WebRequest "https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-pc-windows-msvc.zip" -OutFile bore.zip
+          Invoke-WebRequest 'https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-pc-windows-msvc.zip' -OutFile bore.zip
           Expand-Archive -LiteralPath bore.zip -DestinationPath . -Force
 
-          Start-Process -FilePath ".\bore.exe" -ArgumentList "local","3389","--to","bore.pub" `
-            -RedirectStandardOutput "bore.log" -RedirectStandardError "bore.err" -NoNewWindow
+          Start-Process -FilePath '.\bore.exe' -ArgumentList 'local','3389','--to','bore.pub' `
+            -RedirectStandardOutput 'bore.log' -RedirectStandardError 'bore.err' -NoNewWindow
 
-          $PORT = ""
+          $PORT = ''
           for ($i = 0; $i -lt 20; $i++) {
             Start-Sleep 3
             $log = @()
             if (Test-Path bore.log) { $log += Get-Content bore.log -Encoding UTF8 -ErrorAction SilentlyContinue }
             if (Test-Path bore.err) { $log += Get-Content bore.err -Encoding UTF8 -ErrorAction SilentlyContinue }
             foreach ($line in $log) {
-              if ($line -match "bore\.pub:(\d+)")   { $PORT = $Matches[1]; break }
-              if ($line -match "remote_port=(\d+)") { $PORT = $Matches[1]; break }
+              if ($line -match 'bore\.pub:(\d+)')   { $PORT = $Matches[1]; break }
+              if ($line -match 'remote_port=(\d+)') { $PORT = $Matches[1]; break }
             }
             if ($PORT) { break }
           }
 
-          if (-not $PORT) { Write-Host "ERROR: Bore tunnel failed."; exit 1 }
+          if (-not $PORT) { Write-Host 'ERROR: Bore tunnel failed.'; exit 1 }
 
-          Write-Host "=========================================="
-          Write-Host "  TINY10 RDP - SESSION ACTIVE"
-          Write-Host "=========================================="
+          Write-Host '======================================'
+          Write-Host '  TINY10 RDP - SESSION ACTIVE'
+          Write-Host '======================================'
           Write-Host "  Computer : bore.pub:$PORT"
-          Write-Host "  Username : xploit"
-          Write-Host "  Password : phantom"
+          Write-Host '  Username : xploit'
+          Write-Host '  Password : phantom'
           Write-Host "  Duration : $env:DURATION minutes"
-          Write-Host "=========================================="
+          Write-Host '======================================'
 
           $TOKEN = $env:DISCORD_TOKEN
           $UID   = $env:USER_ID
@@ -128,35 +140,35 @@ jobs:
           $MSG += "Password : phantom" + $nl
           $MSG += "Duration : $DUR minutes" + $nl
           $MSG += "Accept any certificate warnings." + $nl + $nl
-          $MSG += "Debloated — Xbox, bloatware, telemetry all removed for faster performance."
+          $MSG += "Debloated -- Xbox, bloatware, telemetry all removed for faster performance."
 
-          $chanFile = "$env:TEMP\chan.json"
-          $msgFile  = "$env:TEMP\msg.json"
+          $chanFile  = "$env:TEMP\chan.json"
+          $msgFile   = "$env:TEMP\msg.json"
           $utf8NoBOM = [System.Text.UTF8Encoding]::new($false)
-          $chanJson = [pscustomobject]@{ recipient_id = $UID } | ConvertTo-Json -Compress
-          $msgJson  = [pscustomobject]@{ content = $MSG } | ConvertTo-Json -Compress
+          $chanJson  = [pscustomobject]@{ recipient_id = $UID } | ConvertTo-Json -Compress
+          $msgJson   = [pscustomobject]@{ content = $MSG } | ConvertTo-Json -Compress
           [System.IO.File]::WriteAllText($chanFile, $chanJson, $utf8NoBOM)
           [System.IO.File]::WriteAllText($msgFile,  $msgJson,  $utf8NoBOM)
 
           $AUTH   = "Authorization: Bot $TOKEN"
           $dmSent = $false
 
-          $chanResp = curl.exe -s -X POST "https://discord.com/api/v10/users/@me/channels" `
-            -H $AUTH -H "Content-Type: application/json" --data "@$chanFile"
+          $chanResp = curl.exe -s -X POST 'https://discord.com/api/v10/users/@me/channels' `
+            -H $AUTH -H 'Content-Type: application/json' --data "@$chanFile"
           Write-Host "Chan resp: $chanResp"
           $CID = ($chanResp | ConvertFrom-Json -ErrorAction SilentlyContinue).id
 
           if ($CID) {
             $sendResp = curl.exe -s -X POST "https://discord.com/api/v10/channels/$CID/messages" `
-              -H $AUTH -H "Content-Type: application/json" --data "@$msgFile"
+              -H $AUTH -H 'Content-Type: application/json' --data "@$msgFile"
             Write-Host "DM resp: $sendResp"
-            if ($sendResp -notmatch '"code"') { $dmSent = $true; Write-Host "DM sent OK." }
+            if ($sendResp -notmatch '"code"') { $dmSent = $true; Write-Host 'DM sent OK.' }
           }
 
           if (-not $dmSent) {
-            Write-Host "Trying VPS channel fallback..."
-            $chanPost = curl.exe -s -X POST "https://discord.com/api/v10/channels/1497364285645652098/messages" `
-              -H $AUTH -H "Content-Type: application/json" --data "@$msgFile"
+            Write-Host 'Trying VPS channel fallback...'
+            $chanPost = curl.exe -s -X POST 'https://discord.com/api/v10/channels/1497364285645652098/messages' `
+              -H $AUTH -H 'Content-Type: application/json' --data "@$msgFile"
             Write-Host "Channel resp: $chanPost"
           }
 

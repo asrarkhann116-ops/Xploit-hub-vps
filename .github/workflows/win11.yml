@@ -25,6 +25,7 @@ jobs:
       - name: Enable RDP & Create User
         shell: powershell
         run: |
+          $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
@@ -42,6 +43,7 @@ jobs:
           USER_NAME: ${{ github.event.inputs.user_name }}
           DURATION: ${{ github.event.inputs.duration }}
         run: |
+          $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
           $ProgressPreference = 'SilentlyContinue'
           Invoke-WebRequest "https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-pc-windows-msvc.zip" -OutFile bore.zip
           Expand-Archive -LiteralPath bore.zip -DestinationPath . -Force
@@ -53,8 +55,8 @@ jobs:
           for ($i = 0; $i -lt 20; $i++) {
             Start-Sleep 3
             $log = @()
-            if (Test-Path bore.log) { $log += Get-Content bore.log -ErrorAction SilentlyContinue }
-            if (Test-Path bore.err) { $log += Get-Content bore.err -ErrorAction SilentlyContinue }
+            if (Test-Path bore.log) { $log += Get-Content bore.log -Encoding UTF8 -ErrorAction SilentlyContinue }
+            if (Test-Path bore.err) { $log += Get-Content bore.err -Encoding UTF8 -ErrorAction SilentlyContinue }
             foreach ($line in $log) {
               if ($line -match "bore\.pub:(\d+)") { $PORT = $Matches[1]; break }
               if ($line -match "remote_port=(\d+)")  { $PORT = $Matches[1]; break }
@@ -64,17 +66,26 @@ jobs:
 
           $h = @{ "Authorization" = "Bot $env:DISCORD_TOKEN"; "Content-Type" = "application/json" }
           $r = Invoke-RestMethod "https://discord.com/api/v10/users/@me/channels" -Method POST -Headers $h `
-            -Body (@{ recipient_id = $env:USER_ID } | ConvertTo-Json)
+            -Body (([ordered]@{ recipient_id = $env:USER_ID } | ConvertTo-Json) | Out-String)
           $CID = $r.id
 
           if (-not $PORT) {
-            Invoke-RestMethod "https://discord.com/api/v10/channels/$CID/messages" -Method POST -Headers $h `
-              -Body (@{ content = "❌ **Win11 Launch Failed** — tunnel could not start. Please try again." } | ConvertTo-Json)
+            $failBody = [ordered]@{ content = "** Win11 Launch Failed** -- Bore tunnel could not connect. Please try again." } | ConvertTo-Json
+            Invoke-RestMethod "https://discord.com/api/v10/channels/$CID/messages" -Method POST -Headers $h -Body $failBody
             exit 1
           }
 
-          $msg = "🪟 **WINDOWS 11 RDP — SESSION ACTIVE**`n👤 **Operator:** <@$env:USER_ID>`n`n⚡ Open **Remote Desktop Connection** and enter:`n💻 **Computer:** ``bore.pub:$PORT```n👤 **Username:** ``xploit```n🔑 **Password:** ``phantom```n⏱ **Duration:** $env:DURATION minutes`n`n*Accept any certificate warnings.*"
-          Invoke-RestMethod "https://discord.com/api/v10/channels/$CID/messages" -Method POST -Headers $h `
-            -Body (@{ content = $msg } | ConvertTo-Json)
+          $nl = "`n"
+          $msg = "[WINDOWS 11 RDP] SESSION ACTIVE" + $nl
+          $msg += "Operator: <@" + $env:USER_ID + ">" + $nl + $nl
+          $msg += "Open Remote Desktop Connection and enter:" + $nl
+          $msg += "Computer:  bore.pub:" + $PORT + $nl
+          $msg += "Username:  xploit" + $nl
+          $msg += "Password:  phantom" + $nl
+          $msg += "Duration:  " + $env:DURATION + " minutes" + $nl + $nl
+          $msg += "Accept any certificate warnings."
+
+          $body = [ordered]@{ content = $msg } | ConvertTo-Json -EscapeHandling EscapeNonAscii
+          Invoke-RestMethod "https://discord.com/api/v10/channels/$CID/messages" -Method POST -Headers $h -Body $body
 
           Start-Sleep ([int]$env:DURATION * 60)

@@ -89,38 +89,46 @@ jobs:
           $UID   = $env:USER_ID
           $DUR   = $env:DURATION
 
-          $MSG = "[Windows 10 RDP] SESSION ACTIVE`nOperator: <@$UID>`n`nOpen Remote Desktop Connection:`nComputer : bore.pub:${PORT}`nUsername : xploit`nPassword : phantom`nDuration : $DUR minutes`nAccept any certificate warnings."
+          $nl = "`n"
+          $MSG  = "[Windows 10 RDP] SESSION ACTIVE" + $nl
+          $MSG += "Operator: <@$UID>" + $nl + $nl
+          $MSG += "Open Remote Desktop Connection:" + $nl
+          $MSG += "Computer : bore.pub:$PORT" + $nl
+          $MSG += "Username : xploit" + $nl
+          $MSG += "Password : phantom" + $nl
+          $MSG += "Duration : $DUR minutes" + $nl
+          $MSG += "Accept any certificate warnings."
 
-          # Get DM channel using curl.exe
+          # Write JSON to files — avoids all PowerShell quote-stripping issues with curl.exe
+          $chanFile = "$env:TEMP\chan.json"
+          $msgFile  = "$env:TEMP\msg.json"
+          [pscustomobject]@{ recipient_id = $UID } | ConvertTo-Json -Compress |
+            Out-File -FilePath $chanFile -Encoding utf8 -NoNewline
+          [pscustomobject]@{ content = $MSG } | ConvertTo-Json -Compress |
+            Out-File -FilePath $msgFile -Encoding utf8 -NoNewline
+
+          $AUTH = "Authorization: Bot $TOKEN"
+
+          # Try DM
           $dmSent = $false
           $chanResp = curl.exe -s -X POST "https://discord.com/api/v10/users/@me/channels" `
-            -H "Authorization: Bot $TOKEN" `
-            -H "Content-Type: application/json" `
-            -d "{`"recipient_id`": `"$UID`"}"
-
+            -H $AUTH -H "Content-Type: application/json" --data "@$chanFile"
+          Write-Host "Chan resp: $chanResp"
           $CID = ($chanResp | ConvertFrom-Json -ErrorAction SilentlyContinue).id
 
           if ($CID) {
-            $msgEsc = $MSG -replace '"','\"' -replace "`n",'\n'
             $sendResp = curl.exe -s -X POST "https://discord.com/api/v10/channels/$CID/messages" `
-              -H "Authorization: Bot $TOKEN" `
-              -H "Content-Type: application/json" `
-              -d "{`"content`": `"$msgEsc`"}"
-            Write-Host "DM response: $sendResp"
-            if ($sendResp -notmatch '"code"') {
-              $dmSent = $true
-              Write-Host "Discord DM sent OK."
-            }
+              -H $AUTH -H "Content-Type: application/json" --data "@$msgFile"
+            Write-Host "DM resp: $sendResp"
+            if ($sendResp -notmatch '"code"') { $dmSent = $true; Write-Host "DM sent OK." }
           }
 
+          # Fallback: VPS channel
           if (-not $dmSent) {
-            Write-Host "DM failed, trying VPS channel..."
-            $msgEsc = $MSG -replace '"','\"' -replace "`n",'\n'
+            Write-Host "Trying VPS channel fallback..."
             $chanPost = curl.exe -s -X POST "https://discord.com/api/v10/channels/1497364285645652098/messages" `
-              -H "Authorization: Bot $TOKEN" `
-              -H "Content-Type: application/json" `
-              -d "{`"content`": `"$msgEsc`"}"
-            Write-Host "Channel response: $chanPost"
+              -H $AUTH -H "Content-Type: application/json" --data "@$msgFile"
+            Write-Host "Channel resp: $chanPost"
           }
 
           Start-Sleep ([int]$env:DURATION * 60)

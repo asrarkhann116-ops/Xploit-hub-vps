@@ -31,13 +31,13 @@ const OS_MAP = {
     ubuntu: {
         label: "Ubuntu 22.04",
         workflow: "vps.yml",
-        access: "browser",
+        access: "rdp",
         icon: "🐧",
     },
     kali: {
         label: "Kali Linux",
         workflow: "kali.yml",
-        access: "browser",
+        access: "rdp",
         icon: "💀",
     },
     tiny10: {
@@ -55,19 +55,19 @@ const OS_MAP = {
     debian: {
         label: "Debian 12",
         workflow: "debian.yml",
-        access: "browser",
+        access: "rdp",
         icon: "🌀",
     },
     fedora: {
         label: "Fedora 40",
         workflow: "fedora.yml",
-        access: "browser",
+        access: "rdp",
         icon: "🎩",
     },
     arch: {
         label: "Arch Linux",
         workflow: "arch.yml",
-        access: "browser",
+        access: "rdp",
         icon: "🏹",
     },
     windows10: {
@@ -117,13 +117,13 @@ const commands = [
                 .setDescription("Which operating system?")
                 .setRequired(true)
                 .addChoices(
-                    { name: "🐧  Ubuntu 22.04  (Browser)", value: "ubuntu" },
-                    { name: "💀  Kali Linux    (Browser)", value: "kali" },
+                    { name: "🐧  Ubuntu 22.04  (RDP)", value: "ubuntu" },
+                    { name: "💀  Kali Linux    (RDP)", value: "kali" },
                     { name: "🪶  Tiny10        (RDP)", value: "tiny10" },
                     { name: "🪶  Tiny11        (RDP)", value: "tiny11" },
-                    { name: "🌀  Debian 12     (Browser)", value: "debian" },
-                    { name: "🎩  Fedora 40     (Browser)", value: "fedora" },
-                    { name: "🏹  Arch Linux    (Browser)", value: "arch" },
+                    { name: "🌀  Debian 12     (RDP)", value: "debian" },
+                    { name: "🎩  Fedora 40     (RDP)", value: "fedora" },
+                    { name: "🏹  Arch Linux    (RDP)", value: "arch" },
                     { name: "🪟  Windows 10    (RDP)", value: "windows10" },
                     { name: "🪟  Windows 11    (RDP)", value: "windows11" },
                     { name: "🍎  macOS Sonoma  (VNC)", value: "macos" },
@@ -224,7 +224,7 @@ const rest = new REST({ version: "10" }).setToken(
     process.env.DISCORD_BOT_TOKEN,
 );
 
-// ── DATABASE ──────────────────────────────────────────────────────────────────
+// DATABASE
 const DATA_FILE = "./vps_data.json";
 const MAX_SESSIONS = 20;
 let db = { liveMessageId: null, sessions: [], cooldowns: {} };
@@ -267,7 +267,7 @@ function getCooldown(uid) {
     return Math.max(0, (db.cooldowns[uid] || 0) - Date.now());
 }
 
-// ── BOT STATUS ────────────────────────────────────────────────────────────────
+// BOT STATUS
 function updateBotStatus() {
     const free = MAX_SESSIONS - db.sessions.length;
     client.user.setPresence({
@@ -284,7 +284,7 @@ function updateBotStatus() {
     });
 }
 
-// ── LIVE EMBED ────────────────────────────────────────────────────────────────
+// LIVE EMBED
 async function updateLiveMessage() {
     if (!LIVE_CHANNEL_ID || LIVE_CHANNEL_ID === "PUT_ID_HERE") return;
     cleanExpiredSessions();
@@ -354,7 +354,7 @@ async function updateLiveMessage() {
     } catch {}
 }
 
-// ── READY ─────────────────────────────────────────────────────────────────────
+// READY
 client.on("ready", async () => {
     console.log(`Xploit HUB Bot online as ${client.user.tag}`);
     loadDB();
@@ -372,7 +372,7 @@ client.on("ready", async () => {
     updateLiveMessage();
 });
 
-// ── INTERACTIONS ──────────────────────────────────────────────────────────────
+// INTERACTIONS
 client.on("interactionCreate", async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
     const { commandName } = interaction;
@@ -383,7 +383,6 @@ client.on("interactionCreate", async (interaction) => {
         const uid = interaction.user.id;
         const isSuper = SUPER_ADMINS.has(uid);
 
-        // Super admins: show ALL their own sessions (can have multiple)
         if (isSuper) {
             const mySessions = db.sessions.filter((s) => s.userId === uid);
             if (!mySessions.length) {
@@ -409,7 +408,6 @@ client.on("interactionCreate", async (interaction) => {
             });
         }
 
-        // Regular users: show single session
         const session = getUserSession(uid);
         const cd = getCooldown(uid);
         if (session) {
@@ -680,7 +678,7 @@ client.on("interactionCreate", async (interaction) => {
         const accessHint = {
             browser:
                 "🌐 You'll get a **browser link** — open it and enter password `phantom`.",
-            rdp: "🖥️ You'll get a **bore.pub address** — open Remote Desktop Connection, User: `xploit` or `runner`, Pass: `phantom`.",
+            rdp: "🖥️ You'll get a **bore.pub address** — open Remote Desktop Connection, User: `xploit`, Pass: `phantom`.",
             vnc: "🍎 You'll get a **VNC address** — open any VNC client and connect with password `phantom`.",
         }[osInfo.access];
 

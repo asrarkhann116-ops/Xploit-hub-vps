@@ -28,14 +28,11 @@ jobs:
           DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
             xfce4 xfce4-goodies xrdp jq figlet zenity zip curl \
             nmap sqlmap dirb net-tools wget unzip 2>/dev/null || true
-
           wget -q https://github.com/projectdiscovery/nuclei/releases/download/v3.2.3/nuclei_3.2.3_linux_amd64.zip -O nuclei.zip
           unzip -q nuclei.zip && sudo mv nuclei /usr/local/bin/ && rm nuclei.zip
-
           echo "xfce4-session" > ~/.xsession
           sudo cp ~/.xsession /etc/skel/
           sudo systemctl restart xrdp
-
           echo "runner:phantom" | sudo chpasswd
 
       - name: Elite Branding & Bore Tunnel Setup
@@ -48,52 +45,47 @@ jobs:
         run: |
           mkdir -p ~/Desktop
           cat > ~/Desktop/IDENTITY.txt << EOF
-==========================================
-   XPLOIT HUB ELITE RDP (7GB RAM)
-==========================================
-OPERATOR : $USER_NAME
-STATUS   : ARSENAL LOADED
-TOOLS    : Nmap, SQLMap, Nuclei, Dirb
-==========================================
-EOF
+          ==========================================
+             XPLOIT HUB ELITE RDP (7GB RAM)
+          ==========================================
+          OPERATOR : $USER_NAME
+          STATUS   : ARSENAL LOADED
+          TOOLS    : Nmap, SQLMap, Nuclei, Dirb
+          ==========================================
+          EOF
 
           echo 'export PS1="\[\e[1;31m\]XploitHUB@Arsenal:\[\e[0m\]\w\$ "' >> ~/.bashrc
           echo 'clear && figlet "Xploit HUB"' >> ~/.bashrc
 
           mkdir -p ~/.config/autostart
           curl -sL -o /tmp/wall.jpg "$WALLPAPER" 2>/dev/null || true
-
           cat > ~/.config/autostart/branding.desktop << EOF
-[Desktop Entry]
-Type=Application
-Name=Branding
-Exec=sh -c 'sleep 3 && xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -n -t string -s /tmp/wall.jpg'
-EOF
+          [Desktop Entry]
+          Type=Application
+          Name=Branding
+          Exec=sh -c 'sleep 3 && xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -n -t string -s /tmp/wall.jpg'
+          EOF
 
-          # MEGA SAVE script — unquoted heredoc so DISCORD_TOKEN and USER_ID get baked in now
-          # Runtime vars (\$LINK, \$CID) are escaped so they evaluate when the script runs
           cat > ~/Desktop/MEGA_SAVE.sh << SAVEEOF
-#!/bin/bash
-zenity --info --text="Compressing files..." --title="Xploit Backup"
-zip -r /tmp/xploit_backup.zip /home/runner/Desktop /home/runner/Documents 2>/dev/null
-LINK=\$(curl -s --upload-file /tmp/xploit_backup.zip https://bashupload.com/xploit_backup.zip)
-[ -z "\$LINK" ] && LINK=\$(curl -s --upload-file /tmp/xploit_backup.zip https://transfer.sh/xploit_backup.zip)
-CID=\$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-  -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
-  https://discord.com/api/v10/users/@me/channels | jq -r '.id')
-curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-  -X POST -d "{\"content\": \"✅ **Backup Done!**\n📦 Download: \$LINK\"}" \
-  "https://discord.com/api/v10/channels/\$CID/messages"
-zenity --info --text="✅ Backup link sent to your DM!" --title="Done"
-SAVEEOF
+          #!/bin/bash
+          zenity --info --text="Compressing files..." --title="Xploit Backup"
+          zip -r /tmp/xploit_backup.zip /home/runner/Desktop /home/runner/Documents 2>/dev/null
+          LINK=\$(curl -s --upload-file /tmp/xploit_backup.zip https://bashupload.com/xploit_backup.zip)
+          [ -z "\$LINK" ] && LINK=\$(curl -s --upload-file /tmp/xploit_backup.zip https://transfer.sh/xploit_backup.zip)
+          CID=\$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+            -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
+            https://discord.com/api/v10/users/@me/channels | jq -r '.id')
+          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+            -X POST -d "{\"content\": \"✅ **Backup Done!**\n📦 Download: \$LINK\"}" \
+            "https://discord.com/api/v10/channels/\$CID/messages"
+          zenity --info --text="✅ Backup link sent to your DM!" --title="Done"
+          SAVEEOF
           chmod +x ~/Desktop/MEGA_SAVE.sh
 
-          # Start Bore tunnel
           curl -sL -o bore.tar.gz https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
           tar -xzf bore.tar.gz && chmod +x bore
           nohup ./bore local 3389 --to bore.pub > bore.log 2>&1 &
 
-          # Retry loop — check every 3s for up to 60s
           PORT=""
           for i in $(seq 1 20); do
             PORT=$(grep -o 'remote_port=[0-9]*' bore.log 2>/dev/null | cut -d'=' -f2 | head -n 1)
@@ -102,14 +94,13 @@ SAVEEOF
             sleep 3
           done
 
-          # Get DM channel
           CHANNEL_ID=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
             -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
             https://discord.com/api/v10/users/@me/channels | jq -r '.id')
 
           if [ -z "$PORT" ]; then
             curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-              -X POST -d "{\"content\": \"❌ **RDP Launch Failed** — tunnel could not start. Please try launching again.\"}" \
+              -X POST -d "{\"content\": \"❌ **RDP Launch Failed** — tunnel could not start. Please try again.\"}" \
               "https://discord.com/api/v10/channels/$CHANNEL_ID/messages"
             exit 1
           fi

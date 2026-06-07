@@ -54,7 +54,6 @@ jobs:
             shodan paramiko cryptography flask colorama \
             termcolor dnspython pyOpenSSL ldap3 \
             2>/dev/null || true
-
           export GOPATH=$HOME/go
           export PATH=$PATH:$GOPATH/bin
           go install github.com/tomnomnom/httprobe@latest 2>/dev/null || true
@@ -66,16 +65,12 @@ jobs:
           go install github.com/ffuf/ffuf/v2@latest 2>/dev/null || true
           go install github.com/lc/gau/v2/cmd/gau@latest 2>/dev/null || true
           sudo cp $GOPATH/bin/* /usr/local/bin/ 2>/dev/null || true
-
           wget -q https://github.com/projectdiscovery/nuclei/releases/download/v3.2.3/nuclei_3.2.3_linux_amd64.zip -O nuclei.zip
           unzip -q nuclei.zip && sudo mv nuclei /usr/local/bin/ && rm nuclei.zip
-
           wget -q https://github.com/owasp-amass/amass/releases/download/v4.2.0/amass_Linux_amd64.zip -O amass.zip
           unzip -q amass.zip -d amass_dir && sudo mv amass_dir/amass_Linux_amd64/amass /usr/local/bin/ && rm -rf amass.zip amass_dir
-
           wget -q https://github.com/hahwul/dalfox/releases/download/v2.9.2/dalfox_linux_amd64.tar.gz -O dalfox.tar.gz
           tar -xzf dalfox.tar.gz && sudo mv dalfox /usr/local/bin/ && rm dalfox.tar.gz
-
           sudo mkdir -p /usr/share/wordlists
           [ -f /usr/share/wordlists/rockyou.txt.gz ] && sudo gunzip /usr/share/wordlists/rockyou.txt.gz 2>/dev/null || true
 
@@ -105,32 +100,32 @@ jobs:
 
           mkdir -p ~/Desktop
           cat > ~/Desktop/ARSENAL.txt << 'EOF'
-╔══════════════════════════════════════════════╗
-║   💀 XPLOIT HUB — KALI ARSENAL (7GB RAM)   ║
-╠══════════════════════════════════════════════╣
-║  RECON      : nmap masscan amass subfinder  ║
-║               theharvester recon-ng fierce  ║
-║               dnsenum dnsrecon httprobe gau ║
-║               waybackurls assetfinder httpx ║
-║  WEB SCAN   : nikto sqlmap wpscan whatweb   ║
-║               gobuster dirb wfuzz ffuf      ║
-║               nuclei dalfox naabu           ║
-║  PASSWORD   : hydra medusa john hashcat     ║
-║               crunch cewl wordlists         ║
-║  WIRELESS   : aircrack-ng wifite reaver     ║
-║               mdk4                          ║
-║  NETWORK    : tcpdump wireshark socat       ║
-║               ettercap arpwatch dsniff      ║
-║               macchanger proxychains4 tor   ║
-║  EXPLOIT    : metasploit exploitdb          ║
-║               msfvenom searchsploit         ║
-║  FORENSICS  : binwalk foremost steghide     ║
-║               exiftool autopsy testdisk     ║
-║  RE         : gdb radare2 strace ltrace     ║
-║  PYTHON     : impacket scapy pwntools       ║
-║               shodan paramiko ldap3         ║
-╚══════════════════════════════════════════════╝
-EOF
+          ╔══════════════════════════════════════════════╗
+          ║   💀 XPLOIT HUB — KALI ARSENAL (7GB RAM)   ║
+          ╠══════════════════════════════════════════════╣
+          ║  RECON      : nmap masscan amass subfinder  ║
+          ║               theharvester recon-ng fierce  ║
+          ║               dnsenum dnsrecon httprobe gau ║
+          ║               waybackurls assetfinder httpx ║
+          ║  WEB SCAN   : nikto sqlmap wpscan whatweb   ║
+          ║               gobuster dirb wfuzz ffuf      ║
+          ║               nuclei dalfox naabu           ║
+          ║  PASSWORD   : hydra medusa john hashcat     ║
+          ║               crunch cewl wordlists         ║
+          ║  WIRELESS   : aircrack-ng wifite reaver     ║
+          ║               mdk4                          ║
+          ║  NETWORK    : tcpdump wireshark socat       ║
+          ║               ettercap arpwatch dsniff      ║
+          ║               macchanger proxychains4 tor   ║
+          ║  EXPLOIT    : metasploit exploitdb          ║
+          ║               msfvenom searchsploit         ║
+          ║  FORENSICS  : binwalk foremost steghide     ║
+          ║               exiftool autopsy testdisk     ║
+          ║  RE         : gdb radare2 strace ltrace     ║
+          ║  PYTHON     : impacket scapy pwntools       ║
+          ║               shodan paramiko ldap3         ║
+          ╚══════════════════════════════════════════════╝
+          EOF
 
           echo 'export PS1="\[\e[1;32m\]root@kali:\[\e[0m\]\w\$ "' >> ~/.bashrc
           echo 'export GOPATH=$HOME/go' >> ~/.bashrc
@@ -140,19 +135,19 @@ EOF
           echo 'cat ~/Desktop/ARSENAL.txt' >> ~/.bashrc
 
           cat > ~/Desktop/MEGA_SAVE.sh << SAVEEOF
-#!/bin/bash
-zenity --info --text="💀 Kali HUB: Compressing files..." --title="Backup"
-zip -r /tmp/kali_backup.zip ~/Desktop ~/Documents /root 2>/dev/null
-LINK=\$(curl -s --upload-file /tmp/kali_backup.zip https://bashupload.com/kali_backup.zip)
-[ -z "\$LINK" ] && LINK=\$(curl -s --upload-file /tmp/kali_backup.zip https://transfer.sh/kali_backup.zip)
-CID=\$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-  -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
-  https://discord.com/api/v10/users/@me/channels | jq -r '.id')
-curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-  -X POST -d "{\"content\": \"💀 **Kali Backup Done!**\n👤 Operator: <@$USER_ID>\n📦 Download: \$LINK\"}" \
-  "https://discord.com/api/v10/channels/\$CID/messages"
-zenity --info --text="✅ Backup sent to your DM!" --title="Done"
-SAVEEOF
+          #!/bin/bash
+          zenity --info --text="💀 Kali HUB: Compressing files..." --title="Backup"
+          zip -r /tmp/kali_backup.zip ~/Desktop ~/Documents /root 2>/dev/null
+          LINK=\$(curl -s --upload-file /tmp/kali_backup.zip https://bashupload.com/kali_backup.zip)
+          [ -z "\$LINK" ] && LINK=\$(curl -s --upload-file /tmp/kali_backup.zip https://transfer.sh/kali_backup.zip)
+          CID=\$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+            -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
+            https://discord.com/api/v10/users/@me/channels | jq -r '.id')
+          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+            -X POST -d "{\"content\": \"💀 **Kali Backup Done!**\n👤 Operator: <@$USER_ID>\n📦 Download: \$LINK\"}" \
+            "https://discord.com/api/v10/channels/\$CID/messages"
+          zenity --info --text="✅ Backup sent to your DM!" --title="Done"
+          SAVEEOF
           chmod +x ~/Desktop/MEGA_SAVE.sh
 
           git clone https://github.com/novnc/noVNC.git --depth 1 > /dev/null 2>&1
@@ -162,7 +157,6 @@ SAVEEOF
           chmod +x cf
           nohup ./cf tunnel --url http://localhost:8080 > cf.log 2>&1 &
 
-          # Retry loop — check every 3s for up to 60s
           CF_URL=""
           for i in $(seq 1 20); do
             CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cf.log 2>/dev/null | head -n 1)

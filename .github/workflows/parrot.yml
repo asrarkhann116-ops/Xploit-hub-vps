@@ -55,25 +55,25 @@ jobs:
 
           mkdir -p ~/Desktop
           cat > ~/Desktop/IDENTITY.txt << EOF
-XPLOIT HUB — PARROT OS | OPERATOR: $USER_NAME
-TOOLS: Nmap, SQLMap, Nikto, Gobuster, John, Hashcat, Tor
-EOF
+          XPLOIT HUB — PARROT OS | OPERATOR: $USER_NAME
+          TOOLS: Nmap, SQLMap, Nikto, Gobuster, John, Hashcat, Tor
+          EOF
 
           echo 'export PS1="\[\e[1;36m\]Parrot@XploitHUB:\[\e[0m\]\w\$ "' >> ~/.bashrc
           echo 'clear && figlet "Parrot HUB"' >> ~/.bashrc
 
           cat > ~/Desktop/MEGA_SAVE.sh << SAVEEOF
-#!/bin/bash
-zip -r /tmp/backup.zip ~/Desktop ~/Documents 2>/dev/null
-LINK=\$(curl -s --upload-file /tmp/backup.zip https://bashupload.com/backup.zip)
-[ -z "\$LINK" ] && LINK=\$(curl -s --upload-file /tmp/backup.zip https://transfer.sh/backup.zip)
-CID=\$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-  -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
-  https://discord.com/api/v10/users/@me/channels | jq -r '.id')
-curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-  -X POST -d "{\"content\": \"✅ **Parrot Backup Done!**\n📦 Download: \$LINK\"}" \
-  "https://discord.com/api/v10/channels/\$CID/messages"
-SAVEEOF
+          #!/bin/bash
+          zip -r /tmp/backup.zip ~/Desktop ~/Documents 2>/dev/null
+          LINK=\$(curl -s --upload-file /tmp/backup.zip https://bashupload.com/backup.zip)
+          [ -z "\$LINK" ] && LINK=\$(curl -s --upload-file /tmp/backup.zip https://transfer.sh/backup.zip)
+          CID=\$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+            -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
+            https://discord.com/api/v10/users/@me/channels | jq -r '.id')
+          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+            -X POST -d "{\"content\": \"✅ **Parrot Backup Done!**\n📦 Download: \$LINK\"}" \
+            "https://discord.com/api/v10/channels/\$CID/messages"
+          SAVEEOF
           chmod +x ~/Desktop/MEGA_SAVE.sh
 
           git clone https://github.com/novnc/noVNC.git --depth 1 > /dev/null 2>&1
@@ -83,7 +83,6 @@ SAVEEOF
           chmod +x cf
           nohup ./cf tunnel --url http://localhost:8080 > cf.log 2>&1 &
 
-          # Retry loop — check every 3s for up to 60s
           CF_URL=""
           for i in $(seq 1 20); do
             CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cf.log 2>/dev/null | head -n 1)

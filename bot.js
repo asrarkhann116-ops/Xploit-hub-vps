@@ -40,11 +40,17 @@ const OS_MAP = {
         access: "browser",
         icon: "💀",
     },
-    parrot: {
-        label: "Parrot OS",
-        workflow: "parrot.yml",
-        access: "browser",
-        icon: "🅿",
+    tiny10: {
+        label: "Tiny10 (Debloated Win10)",
+        workflow: "tiny10.yml",
+        access: "rdp",
+        icon: "🪶",
+    },
+    tiny11: {
+        label: "Tiny11 (Debloated Win11)",
+        workflow: "tiny11.yml",
+        access: "rdp",
+        icon: "🪶",
     },
     debian: {
         label: "Debian 12",
@@ -113,7 +119,8 @@ const commands = [
                 .addChoices(
                     { name: "🐧  Ubuntu 22.04  (Browser)", value: "ubuntu" },
                     { name: "💀  Kali Linux    (Browser)", value: "kali" },
-                    { name: "🦜  Parrot OS     (Browser)", value: "parrot" },
+                    { name: "🪶  Tiny10        (RDP)", value: "tiny10" },
+                    { name: "🪶  Tiny11        (RDP)", value: "tiny11" },
                     { name: "🌀  Debian 12     (Browser)", value: "debian" },
                     { name: "🎩  Fedora 40     (Browser)", value: "fedora" },
                     { name: "🏹  Arch Linux    (Browser)", value: "arch" },

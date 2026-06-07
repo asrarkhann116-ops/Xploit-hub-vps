@@ -85,7 +85,7 @@ jobs:
           $msg += "Duration:  " + $env:DURATION + " minutes" + $nl + $nl
           $msg += "Accept any certificate warnings."
 
-          $body = [ordered]@{ content = $msg } | ConvertTo-Json -EscapeHandling EscapeNonAscii
+          $body = [ordered]@{ content = $msg } | ConvertTo-Json
           Invoke-RestMethod "https://discord.com/api/v10/channels/$CID/messages" -Method POST -Headers $h -Body $body
 
           Start-Sleep ([int]$env:DURATION * 60)

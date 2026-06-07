@@ -39,15 +39,15 @@ jobs:
           USER_NAME: ${{ github.event.inputs.user_name }}
         run: |
           $content = @"
-          ==========================================
-            XPLOIT HUB - WINDOWS 11 (7GB RAM)
-          ==========================================
-          OPERATOR : $env:USER_NAME
-          STATUS   : READY
-          USER     : xploit
-          PASS     : phantom
-          ==========================================
-          "@
+==========================================
+  XPLOIT HUB - WINDOWS 11 (7GB RAM)
+==========================================
+OPERATOR : $env:USER_NAME
+STATUS   : READY
+USER     : xploit
+PASS     : phantom
+==========================================
+"@
           New-Item -Path "$env:PUBLIC\Desktop" -ItemType Directory -Force | Out-Null
           Set-Content -Path "$env:PUBLIC\Desktop\IDENTITY.txt" -Value $content
 
@@ -63,20 +63,29 @@ jobs:
           Expand-Archive bore.zip -DestinationPath . -Force
           $boreProcess = Start-Process -FilePath ".\bore.exe" -ArgumentList "local 3389 --to bore.pub" `
             -RedirectStandardOutput "bore.log" -RedirectStandardError "bore_err.log" -NoNewWindow -PassThru
-          Start-Sleep -Seconds 20
 
-          $log = (Get-Content "bore.log" -ErrorAction SilentlyContinue) -join " "
-          $errlog = (Get-Content "bore_err.log" -ErrorAction SilentlyContinue) -join " "
-          $combined = "$log $errlog"
-
-          $port = [regex]::Match($combined, 'remote_port=(\d+)').Groups[1].Value
-          if (-not $port) { $port = [regex]::Match($combined, 'bore\.pub:(\d+)').Groups[1].Value }
-          if (-not $port) { $port = "CHECK_LOGS" }
+          # Retry loop — check every 3s for up to 60s
+          $port = ""
+          for ($i = 0; $i -lt 20; $i++) {
+            $log = (Get-Content "bore.log" -ErrorAction SilentlyContinue) -join " "
+            $errlog = (Get-Content "bore_err.log" -ErrorAction SilentlyContinue) -join " "
+            $combined = "$log $errlog"
+            $port = [regex]::Match($combined, 'remote_port=(\d+)').Groups[1].Value
+            if (-not $port) { $port = [regex]::Match($combined, 'bore\.pub:(\d+)').Groups[1].Value }
+            if ($port) { break }
+            Start-Sleep -Seconds 3
+          }
 
           $headers = @{ "Authorization" = "Bot $env:DISCORD_TOKEN"; "Content-Type" = "application/json" }
           $dmBody  = "{`"recipient_id`": `"$env:USER_ID`"}"
           $dmChan  = Invoke-RestMethod -Uri "https://discord.com/api/v10/users/@me/channels" -Method POST -Headers $headers -Body $dmBody
           $chanId  = $dmChan.id
+
+          if (-not $port) {
+            $failMsg = "{`"content`": `"❌ **Windows 11 Launch Failed** — tunnel could not start. Please try again.`"}"
+            Invoke-RestMethod -Uri "https://discord.com/api/v10/channels/$chanId/messages" -Method POST -Headers $headers -Body $failMsg
+            exit 1
+          }
 
           $msg = "{`"content`": `"🪟 **WINDOWS 11 — RDP SESSION ACTIVE**\n👤 **Operator:** <@$env:USER_ID>\n\n⚡ Open **Remote Desktop Connection** and enter:\n💻 **Computer:** ``bore.pub:$port``\n👤 **Username:** ``xploit``\n🔑 **Password:** ``phantom``\n⏱ **Duration:** $env:DURATION minutes\n\n*Accept any certificate warnings.*`"}"
           Invoke-RestMethod -Uri "https://discord.com/api/v10/channels/$chanId/messages" -Method POST -Headers $headers -Body $msg

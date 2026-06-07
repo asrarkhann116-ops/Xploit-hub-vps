@@ -29,30 +29,19 @@ jobs:
             xfce4 xfce4-goodies xvfb x11vnc websockify \
             curl jq figlet zenity zip wget unzip git vim nano tmux screen \
             htop neofetch lolcat cowsay \
-            \
             nmap masscan whois dnsutils dnsenum dnsrecon fierce \
             theharvester recon-ng traceroute \
-            \
             nikto dirb gobuster wfuzz sqlmap whatweb wpscan \
-            \
             hydra medusa john hashcat crunch cewl wordlists \
-            \
             aircrack-ng reaver wifite mdk4 \
-            \
             tcpdump netcat-openbsd socat ettercap-text-only \
             arpwatch macchanger dsniff \
-            \
             exploitdb metasploit-framework \
-            \
             binwalk foremost steghide exiftool testdisk autopsy \
-            \
             gdb strace ltrace radare2 \
-            \
             proxychains4 tor torsocks \
-            \
             python3 python3-pip python3-venv ruby perl \
             golang-go \
-            \
             net-tools iptables tcpflow tshark \
             libssl-dev libffi-dev build-essential \
             ncat smbclient ftp telnet \
@@ -60,14 +49,12 @@ jobs:
 
       - name: Install Go & Python Tools
         run: |
-          # Python tools via pip
           pip3 install --quiet --break-system-packages \
             impacket requests beautifulsoup4 scapy pwntools \
             shodan paramiko cryptography flask colorama \
             termcolor dnspython pyOpenSSL ldap3 \
             2>/dev/null || true
 
-          # Go tools
           export GOPATH=$HOME/go
           export PATH=$PATH:$GOPATH/bin
           go install github.com/tomnomnom/httprobe@latest 2>/dev/null || true
@@ -80,22 +67,17 @@ jobs:
           go install github.com/lc/gau/v2/cmd/gau@latest 2>/dev/null || true
           sudo cp $GOPATH/bin/* /usr/local/bin/ 2>/dev/null || true
 
-          # Nuclei
           wget -q https://github.com/projectdiscovery/nuclei/releases/download/v3.2.3/nuclei_3.2.3_linux_amd64.zip -O nuclei.zip
           unzip -q nuclei.zip && sudo mv nuclei /usr/local/bin/ && rm nuclei.zip
 
-          # Amass
           wget -q https://github.com/owasp-amass/amass/releases/download/v4.2.0/amass_Linux_amd64.zip -O amass.zip
           unzip -q amass.zip -d amass_dir && sudo mv amass_dir/amass_Linux_amd64/amass /usr/local/bin/ && rm -rf amass.zip amass_dir
 
-          # Dalfox (XSS scanner)
           wget -q https://github.com/hahwul/dalfox/releases/download/v2.9.2/dalfox_linux_amd64.tar.gz -O dalfox.tar.gz
           tar -xzf dalfox.tar.gz && sudo mv dalfox /usr/local/bin/ && rm dalfox.tar.gz
 
-          # Decompress rockyou wordlist if compressed
           sudo mkdir -p /usr/share/wordlists
           [ -f /usr/share/wordlists/rockyou.txt.gz ] && sudo gunzip /usr/share/wordlists/rockyou.txt.gz 2>/dev/null || true
-          ls /usr/share/wordlists/ 2>/dev/null || true
 
       - name: Launch Kali Environment
         env:
@@ -108,54 +90,48 @@ jobs:
           export GOPATH=$HOME/go
           export PATH=$PATH:$GOPATH/bin
 
-          # Start virtual display
           Xvfb :1 -screen 0 1280x720x16 &
           sleep 2
           DISPLAY=:1 startxfce4 &
           sleep 4
 
-          # Set Kali wallpaper
-          curl -sL -o /tmp/wall.jpg "$WALLPAPER"
+          curl -sL -o /tmp/wall.jpg "$WALLPAPER" 2>/dev/null || true
           DISPLAY=:1 xfconf-query -c xfce4-desktop \
             -p /backdrop/screen0/monitor0/workspace0/last-image \
             -n -t string -s "/tmp/wall.jpg" 2>/dev/null || true
 
-          # Start x11vnc (low-latency)
           x11vnc -display :1 -passwd phantom -forever \
-            -noxdamage -noxfixes -noxrecord \
-            -quiet -bg -o /tmp/x11vnc.log
+            -noxdamage -noxfixes -noxrecord -quiet -bg -o /tmp/x11vnc.log
 
-          # Desktop identity
           mkdir -p ~/Desktop
-          cat << 'EOF' > ~/Desktop/ARSENAL.txt
-          ╔══════════════════════════════════════════════╗
-          ║   💀 XPLOIT HUB — KALI ARSENAL (7GB RAM)   ║
-          ╠══════════════════════════════════════════════╣
-          ║  RECON      : nmap masscan amass subfinder  ║
-          ║               theharvester recon-ng fierce  ║
-          ║               dnsenum dnsrecon httprobe gau ║
-          ║               waybackurls assetfinder httpx ║
-          ║  WEB SCAN   : nikto sqlmap wpscan whatweb   ║
-          ║               gobuster dirb wfuzz ffuf      ║
-          ║               nuclei dalfox naabu           ║
-          ║  PASSWORD   : hydra medusa john hashcat     ║
-          ║               crunch cewl wordlists         ║
-          ║  WIRELESS   : aircrack-ng wifite reaver     ║
-          ║               mdk4                          ║
-          ║  NETWORK    : tcpdump wireshark socat       ║
-          ║               ettercap arpwatch dsniff      ║
-          ║               macchanger proxychains4 tor   ║
-          ║  EXPLOIT    : metasploit exploitdb          ║
-          ║               msfvenom searchsploit         ║
-          ║  FORENSICS  : binwalk foremost steghide     ║
-          ║               exiftool autopsy testdisk     ║
-          ║  RE         : gdb radare2 strace ltrace     ║
-          ║  PYTHON     : impacket scapy pwntools       ║
-          ║               shodan paramiko ldap3         ║
-          ╚══════════════════════════════════════════════╝
-          EOF
+          cat > ~/Desktop/ARSENAL.txt << 'EOF'
+╔══════════════════════════════════════════════╗
+║   💀 XPLOIT HUB — KALI ARSENAL (7GB RAM)   ║
+╠══════════════════════════════════════════════╣
+║  RECON      : nmap masscan amass subfinder  ║
+║               theharvester recon-ng fierce  ║
+║               dnsenum dnsrecon httprobe gau ║
+║               waybackurls assetfinder httpx ║
+║  WEB SCAN   : nikto sqlmap wpscan whatweb   ║
+║               gobuster dirb wfuzz ffuf      ║
+║               nuclei dalfox naabu           ║
+║  PASSWORD   : hydra medusa john hashcat     ║
+║               crunch cewl wordlists         ║
+║  WIRELESS   : aircrack-ng wifite reaver     ║
+║               mdk4                          ║
+║  NETWORK    : tcpdump wireshark socat       ║
+║               ettercap arpwatch dsniff      ║
+║               macchanger proxychains4 tor   ║
+║  EXPLOIT    : metasploit exploitdb          ║
+║               msfvenom searchsploit         ║
+║  FORENSICS  : binwalk foremost steghide     ║
+║               exiftool autopsy testdisk     ║
+║  RE         : gdb radare2 strace ltrace     ║
+║  PYTHON     : impacket scapy pwntools       ║
+║               shodan paramiko ldap3         ║
+╚══════════════════════════════════════════════╝
+EOF
 
-          # Terminal branding
           echo 'export PS1="\[\e[1;32m\]root@kali:\[\e[0m\]\w\$ "' >> ~/.bashrc
           echo 'export GOPATH=$HOME/go' >> ~/.bashrc
           echo 'export PATH=$PATH:$HOME/go/bin' >> ~/.bashrc
@@ -163,45 +139,50 @@ jobs:
           echo 'figlet -f slant "Kali HUB" | lolcat 2>/dev/null || figlet "Kali HUB"' >> ~/.bashrc
           echo 'cat ~/Desktop/ARSENAL.txt' >> ~/.bashrc
 
-          # Mega Save script — unquoted heredoc so vars get baked in at creation time
-          cat << SAVEEOF > ~/Desktop/MEGA_SAVE.sh
-          #!/bin/bash
-          zenity --info --text="💀 Kali HUB: Compressing files..." --title="Backup"
-          zip -r /tmp/kali_backup.zip ~/Desktop ~/Documents /root 2>/dev/null
-          LINK=\$(curl -s --upload-file /tmp/kali_backup.zip https://bashupload.com/kali_backup.zip)
-          [ -z "\$LINK" ] && LINK=\$(curl -s --upload-file /tmp/kali_backup.zip https://transfer.sh/kali_backup.zip)
-          CID=\$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" \\
-            -H "Content-Type: application/json" \\
-            -X POST -d '{"recipient_id": "$USER_ID"}' \\
-            https://discord.com/api/v10/users/@me/channels | jq -r '.id')
-          curl -s -H "Authorization: Bot $DISCORD_TOKEN" \\
-            -H "Content-Type: application/json" \\
-            -X POST -d "{\"content\": \"💀 **Kali Backup Done!**\n👤 Operator: <@$USER_ID>\n📦 Download: \$LINK\"}" \\
-            "https://discord.com/api/v10/channels/\$CID/messages"
-          zenity --info --text="✅ Backup sent to your DM!" --title="Done"
-          SAVEEOF
+          cat > ~/Desktop/MEGA_SAVE.sh << SAVEEOF
+#!/bin/bash
+zenity --info --text="💀 Kali HUB: Compressing files..." --title="Backup"
+zip -r /tmp/kali_backup.zip ~/Desktop ~/Documents /root 2>/dev/null
+LINK=\$(curl -s --upload-file /tmp/kali_backup.zip https://bashupload.com/kali_backup.zip)
+[ -z "\$LINK" ] && LINK=\$(curl -s --upload-file /tmp/kali_backup.zip https://transfer.sh/kali_backup.zip)
+CID=\$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+  -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
+  https://discord.com/api/v10/users/@me/channels | jq -r '.id')
+curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+  -X POST -d "{\"content\": \"💀 **Kali Backup Done!**\n👤 Operator: <@$USER_ID>\n📦 Download: \$LINK\"}" \
+  "https://discord.com/api/v10/channels/\$CID/messages"
+zenity --info --text="✅ Backup sent to your DM!" --title="Done"
+SAVEEOF
           chmod +x ~/Desktop/MEGA_SAVE.sh
 
-          # noVNC
           git clone https://github.com/novnc/noVNC.git --depth 1 > /dev/null 2>&1
           ./noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 8080 &
 
-          # Cloudflare tunnel
           curl -sL -o cf https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x cf
           nohup ./cf tunnel --url http://localhost:8080 > cf.log 2>&1 &
 
-          sleep 20
-          CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cf.log | head -n 1)
+          # Retry loop — check every 3s for up to 60s
+          CF_URL=""
+          for i in $(seq 1 20); do
+            CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cf.log 2>/dev/null | head -n 1)
+            [ -n "$CF_URL" ] && break
+            sleep 3
+          done
 
-          # Send DM
-          CID=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" \
-            -H "Content-Type: application/json" \
+          CID=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
             -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
             https://discord.com/api/v10/users/@me/channels | jq -r '.id')
-          curl -s -H "Authorization: Bot $DISCORD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -X POST -d "{\"content\": \"💀 **KALI LINUX — FULL ARSENAL ACTIVE**\n👤 **Operator:** <@$USER_ID>\n🔗 **Access:** $CF_URL/vnc.html?autoconnect=1\&compression=2\&quality=6\n🔑 **Password:** \`phantom\`\n⏱ **Duration:** $DURATION minutes\n\n**100+ tools ready in terminal. Open terminal → type any tool name.**\n💾 Double-click MEGA_SAVE.sh before session ends to backup files.\"}" \
-            https://discord.com/api/v10/channels/$CID/messages
+
+          if [ -z "$CF_URL" ]; then
+            curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+              -X POST -d "{\"content\": \"❌ **Kali Launch Failed** — tunnel could not start. Please try again.\"}" \
+              "https://discord.com/api/v10/channels/$CID/messages"
+            exit 1
+          fi
+
+          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+            -X POST -d "{\"content\": \"💀 **KALI LINUX — FULL ARSENAL ACTIVE**\n👤 **Operator:** <@$USER_ID>\n🔗 **Access:** $CF_URL/vnc.html?autoconnect=1\&compression=2\&quality=6\n🔑 **Password:** \`phantom\`\n⏱ **Duration:** $DURATION minutes\n\n**100+ tools ready. Open terminal → type any tool name.**\n💾 Double-click MEGA_SAVE.sh before session ends to backup.\"}" \
+            "https://discord.com/api/v10/channels/$CID/messages"
 
           while true; do sleep 3600; done

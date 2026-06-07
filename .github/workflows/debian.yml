@@ -43,7 +43,7 @@ jobs:
           DISPLAY=:1 startxfce4 &
           sleep 4
 
-          curl -sL -o /tmp/wall.jpg "$WALLPAPER"
+          curl -sL -o /tmp/wall.jpg "$WALLPAPER" 2>/dev/null || true
           DISPLAY=:1 xfconf-query -c xfce4-desktop \
             -p /backdrop/screen0/monitor0/workspace0/last-image \
             -n -t string -s "/tmp/wall.jpg" 2>/dev/null || true
@@ -57,17 +57,18 @@ jobs:
           echo 'export PS1="\[\e[1;34m\]Debian@XploitHUB:\[\e[0m\]\w\$ "' >> ~/.bashrc
           echo 'clear && figlet "Debian HUB"' >> ~/.bashrc
 
-          cat << SAVEEOF > ~/Desktop/MEGA_SAVE.sh
-          #!/bin/bash
-          zip -r /tmp/backup.zip ~/Desktop ~/Documents 2>/dev/null
-          LINK=\$(curl -s --upload-file /tmp/backup.zip https://bashupload.com/backup.zip)
-          [ -z "\$LINK" ] && LINK=\$(curl -s --upload-file /tmp/backup.zip https://transfer.sh/backup.zip)
-          CID=\$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \\
-            -X POST -d '{"recipient_id": "$USER_ID"}' https://discord.com/api/v10/users/@me/channels | jq -r '.id')
-          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \\
-            -X POST -d "{\"content\": \"✅ **Debian Backup Done!**\n📦 Download: \$LINK\"}" \\
-            "https://discord.com/api/v10/channels/\$CID/messages"
-          SAVEEOF
+          cat > ~/Desktop/MEGA_SAVE.sh << SAVEEOF
+#!/bin/bash
+zip -r /tmp/backup.zip ~/Desktop ~/Documents 2>/dev/null
+LINK=\$(curl -s --upload-file /tmp/backup.zip https://bashupload.com/backup.zip)
+[ -z "\$LINK" ] && LINK=\$(curl -s --upload-file /tmp/backup.zip https://transfer.sh/backup.zip)
+CID=\$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+  -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
+  https://discord.com/api/v10/users/@me/channels | jq -r '.id')
+curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+  -X POST -d "{\"content\": \"✅ **Debian Backup Done!**\n📦 Download: \$LINK\"}" \
+  "https://discord.com/api/v10/channels/\$CID/messages"
+SAVEEOF
           chmod +x ~/Desktop/MEGA_SAVE.sh
 
           git clone https://github.com/novnc/noVNC.git --depth 1 > /dev/null 2>&1
@@ -77,13 +78,27 @@ jobs:
           chmod +x cf
           nohup ./cf tunnel --url http://localhost:8080 > cf.log 2>&1 &
 
-          sleep 20
-          CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cf.log | head -n 1)
+          # Retry loop — check every 3s for up to 60s
+          CF_URL=""
+          for i in $(seq 1 20); do
+            CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cf.log 2>/dev/null | head -n 1)
+            [ -n "$CF_URL" ] && break
+            sleep 3
+          done
 
           CID=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-            -X POST -d "{\"recipient_id\": \"$USER_ID\"}" https://discord.com/api/v10/users/@me/channels | jq -r '.id')
+            -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
+            https://discord.com/api/v10/users/@me/channels | jq -r '.id')
+
+          if [ -z "$CF_URL" ]; then
+            curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+              -X POST -d "{\"content\": \"❌ **Debian Launch Failed** — tunnel could not start. Please try again.\"}" \
+              "https://discord.com/api/v10/channels/$CID/messages"
+            exit 1
+          fi
+
           curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
             -X POST -d "{\"content\": \"🌀 **DEBIAN 12 — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n🔗 **Access:** $CF_URL/vnc.html?autoconnect=1\&compression=2\&quality=6\n🔑 **Password:** \`phantom\`\n⏱ **Duration:** $DURATION minutes\"}" \
-            https://discord.com/api/v10/channels/$CID/messages
+            "https://discord.com/api/v10/channels/$CID/messages"
 
           while true; do sleep 3600; done

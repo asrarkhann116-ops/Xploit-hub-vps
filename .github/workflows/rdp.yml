@@ -27,7 +27,6 @@ jobs:
         run: |
           $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
 
-          # Disable password complexity so simple passwords work
           secedit /export /cfg C:\secpol.cfg /quiet
           (Get-Content C:\secpol.cfg) -replace "PasswordComplexity = 1","PasswordComplexity = 0" | Set-Content C:\secpol.cfg
           secedit /configure /db C:\Windows\security\local.sdb /cfg C:\secpol.cfg /quiet
@@ -40,13 +39,11 @@ jobs:
           $pw = ConvertTo-SecureString "phantom" -AsPlainText -Force
           $result = New-LocalUser "xploit" -Password $pw -PasswordNeverExpires -UserMayNotChangePassword -ErrorAction SilentlyContinue
           if (-not $result) {
-            Write-Host "User may already exist, resetting password..."
             Set-LocalUser -Name "xploit" -Password $pw -ErrorAction SilentlyContinue
           }
           Add-LocalGroupMember -Group "Administrators" -Member "xploit" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "xploit" -ErrorAction SilentlyContinue
 
-          # Verify user was created
           $u = Get-LocalUser -Name "xploit" -ErrorAction SilentlyContinue
           if ($u) { Write-Host "SUCCESS: user xploit ready" } else { Write-Host "ERROR: user xploit not found"; exit 1 }
 
@@ -57,7 +54,6 @@ jobs:
           USER_ID: ${{ github.event.inputs.user_id }}
           USER_NAME: ${{ github.event.inputs.user_name }}
           DURATION: ${{ github.event.inputs.duration }}
-          VPS_CHANNEL_ID: ${{ secrets.VPS_CHANNEL_ID }}
         run: |
           $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
           $ProgressPreference = 'SilentlyContinue'
@@ -94,7 +90,14 @@ jobs:
           Write-Host "  Duration : $env:DURATION minutes"
           Write-Host "=========================================="
 
-          $h = @{ "Authorization" = "Bot $env:DISCORD_TOKEN"; "Content-Type" = "application/json" }
+          # Helper: send Discord API request with proper UTF-8 encoding
+          function Invoke-Discord {
+            param($Uri, $Body)
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($Body)
+            Invoke-RestMethod -Uri $Uri -Method POST `
+              -Headers @{ "Authorization" = "Bot $env:DISCORD_TOKEN" } `
+              -Body $bytes -ContentType "application/json; charset=utf-8"
+          }
 
           $nl = "`n"
           $msg = "[Windows 10 RDP] SESSION ACTIVE" + $nl
@@ -106,33 +109,31 @@ jobs:
           $msg += "Duration : " + $env:DURATION + " minutes" + $nl
           $msg += "Accept any certificate warnings."
 
-          $msgBody = '{"content":' + ($msg | ConvertTo-Json) + '}'
+          $msgJson = [pscustomobject]@{ content = $msg } | ConvertTo-Json -Compress
 
-          # Try DM first
+          # Try DM
           $dmSent = $false
-          $chanBody = '{"recipient_id":"' + $env:USER_ID + '"}'
           try {
-            $r = Invoke-RestMethod "https://discord.com/api/v10/users/@me/channels" -Method POST -Headers $h -Body $chanBody
+            $chanJson = [pscustomobject]@{ recipient_id = $env:USER_ID } | ConvertTo-Json -Compress
+            $r = Invoke-Discord -Uri "https://discord.com/api/v10/users/@me/channels" -Body $chanJson
             $CID = $r.id
             if ($CID) {
-              Invoke-RestMethod "https://discord.com/api/v10/channels/$CID/messages" -Method POST -Headers $h -Body $msgBody
-              Write-Host "Discord DM sent successfully."
+              Invoke-Discord -Uri "https://discord.com/api/v10/channels/$CID/messages" -Body $msgJson
+              Write-Host "Discord DM sent OK."
               $dmSent = $true
             }
           } catch {
-            Write-Host "DM failed (expected if user has DMs off): $_"
+            Write-Host "DM failed: $_"
           }
 
-          # Fallback: post in VPS channel
+          # Fallback: VPS channel
           if (-not $dmSent) {
-            $VPS_CID = $env:VPS_CHANNEL_ID
-            if (-not $VPS_CID) { $VPS_CID = "1497364285645652098" }
             try {
-              Invoke-RestMethod "https://discord.com/api/v10/channels/$VPS_CID/messages" -Method POST -Headers $h -Body $msgBody
-              Write-Host "Fallback: posted in VPS channel."
+              Invoke-Discord -Uri "https://discord.com/api/v10/channels/1497364285645652098/messages" -Body $msgJson
+              Write-Host "Posted in VPS channel."
             } catch {
-              Write-Host "WARNING: Channel post also failed: $_"
-              Write-Host "RDP still active -- use details above."
+              Write-Host "Channel post failed: $_"
+              Write-Host "RDP still active - connect with details above."
             }
           }
 

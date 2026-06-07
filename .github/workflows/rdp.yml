@@ -64,28 +64,50 @@ jobs:
             if ($PORT) { break }
           }
 
-          $h = @{ "Authorization" = "Bot $env:DISCORD_TOKEN"; "Content-Type" = "application/json" }
-          $r = Invoke-RestMethod "https://discord.com/api/v10/users/@me/channels" -Method POST -Headers $h `
-            -Body (([ordered]@{ recipient_id = $env:USER_ID } | ConvertTo-Json) | Out-String)
-          $CID = $r.id
-
           if (-not $PORT) {
-            $failBody = [ordered]@{ content = "** RDP Launch Failed** -- Bore tunnel could not connect. Please try again." } | ConvertTo-Json
-            Invoke-RestMethod "https://discord.com/api/v10/channels/$CID/messages" -Method POST -Headers $h -Body $failBody
+            Write-Host "ERROR: Bore tunnel failed to connect."
             exit 1
           }
 
-          $nl = "`n"
-          $msg = "[WINDOWS 10 RDP] SESSION ACTIVE" + $nl
-          $msg += "Operator: <@" + $env:USER_ID + ">" + $nl + $nl
-          $msg += "Open Remote Desktop Connection and enter:" + $nl
-          $msg += "Computer:  bore.pub:" + $PORT + $nl
-          $msg += "Username:  xploit" + $nl
-          $msg += "Password:  phantom" + $nl
-          $msg += "Duration:  " + $env:DURATION + " minutes" + $nl + $nl
-          $msg += "Accept any certificate warnings."
+          Write-Host "=========================================="
+          Write-Host "  WINDOWS 10 RDP - SESSION ACTIVE"
+          Write-Host "=========================================="
+          Write-Host "  Computer : bore.pub:$PORT"
+          Write-Host "  Username : xploit"
+          Write-Host "  Password : phantom"
+          Write-Host "  Duration : $env:DURATION minutes"
+          Write-Host "=========================================="
 
-          $body = [ordered]@{ content = $msg } | ConvertTo-Json
-          Invoke-RestMethod "https://discord.com/api/v10/channels/$CID/messages" -Method POST -Headers $h -Body $body
+          $h = @{ "Authorization" = "Bot $env:DISCORD_TOKEN"; "Content-Type" = "application/json" }
+
+          $chanBody = '{"recipient_id":"' + $env:USER_ID + '"}'
+          try {
+            $r = Invoke-RestMethod "https://discord.com/api/v10/users/@me/channels" -Method POST -Headers $h -Body $chanBody
+            $CID = $r.id
+          } catch {
+            Write-Host "WARNING: Could not open DM channel: $_"
+            $CID = ""
+          }
+
+          if ($CID) {
+            $nl = "`n"
+            $msg = "[WINDOWS 10 RDP] SESSION ACTIVE" + $nl
+            $msg += "Operator: <@" + $env:USER_ID + ">" + $nl + $nl
+            $msg += "Open Remote Desktop Connection and enter:" + $nl
+            $msg += "Computer:  bore.pub:" + $PORT + $nl
+            $msg += "Username:  xploit" + $nl
+            $msg += "Password:  phantom" + $nl
+            $msg += "Duration:  " + $env:DURATION + " minutes" + $nl + $nl
+            $msg += "Accept any certificate warnings."
+
+            $msgBody = '{"content":' + ($msg | ConvertTo-Json) + '}'
+            try {
+              Invoke-RestMethod "https://discord.com/api/v10/channels/$CID/messages" -Method POST -Headers $h -Body $msgBody
+              Write-Host "Discord DM sent successfully."
+            } catch {
+              Write-Host "WARNING: Discord DM failed: $_"
+              Write-Host "RDP still active -- check logs above for connection details."
+            }
+          }
 
           Start-Sleep ([int]$env:DURATION * 60)

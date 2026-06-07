@@ -26,7 +26,8 @@ jobs:
         run: |
           docker pull debian:bookworm
           docker run -d --name debian -p 5901:5901 debian:bookworm sleep infinity
-          docker exec debian bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-goodies x11vnc xvfb curl jq zip nmap git python3 net-tools 2>/dev/null || true"
+          docker exec debian bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            xfce4 xfce4-goodies x11vnc xvfb dbus-x11 curl jq zip nmap git python3 net-tools 2>/dev/null || true"
 
       - name: Start Debian Desktop & Tunnel
         env:
@@ -37,9 +38,12 @@ jobs:
           WALLPAPER: ${{ github.event.inputs.wallpaper_url }}
         run: |
           docker exec -d debian bash -c "Xvfb :1 -screen 0 1280x720x16 > /tmp/xvfb.log 2>&1"
-          sleep 3
-          docker exec -d debian bash -c "DISPLAY=:1 startxfce4 > /tmp/xfce.log 2>&1"
-          sleep 5
+          sleep 4
+
+          # dbus-launch fixes black screen & PolicyKit errors inside container
+          docker exec -d debian bash -c "DISPLAY=:1 dbus-launch --exit-with-session startxfce4 > /tmp/xfce.log 2>&1"
+          sleep 8
+
           docker exec -d debian bash -c "x11vnc -display :1 -passwd phantom -forever -rfbport 5901 -noxdamage -o /tmp/vnc.log"
           sleep 2
 
@@ -51,7 +55,7 @@ jobs:
           nohup ./cf tunnel --url http://localhost:8080 > cf.log 2>&1 &
 
           CF_URL=""
-          for i in $(seq 1 20); do
+          for i in $(seq 1 25); do
             CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cf.log 2>/dev/null | head -n 1)
             [ -n "$CF_URL" ] && break
             sleep 3

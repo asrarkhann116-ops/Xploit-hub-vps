@@ -27,7 +27,11 @@ jobs:
           docker pull archlinux:latest
           docker run -d --name arch -p 5901:5901 archlinux:latest sleep infinity
           docker exec arch bash -c "pacman -Syu --noconfirm 2>/dev/null || true"
-          docker exec arch bash -c "pacman -S --noconfirm xfce4 xfce4-goodies xorg-server-xvfb x11vnc curl jq zip nmap git python neofetch htop 2>/dev/null || true"
+          # dbus is required for XFCE to work properly — prevents black screen
+          docker exec arch bash -c "pacman -S --noconfirm \
+            xfce4 xfce4-goodies xorg-server-xvfb x11vnc dbus curl jq zip nmap git python htop 2>/dev/null || true"
+          # Enable dbus service inside container
+          docker exec arch bash -c "mkdir -p /run/dbus && dbus-daemon --system --fork 2>/dev/null || true"
 
       - name: Start Arch Desktop & Tunnel
         env:
@@ -38,9 +42,12 @@ jobs:
           WALLPAPER: ${{ github.event.inputs.wallpaper_url }}
         run: |
           docker exec -d arch bash -c "Xvfb :1 -screen 0 1280x720x16 > /tmp/xvfb.log 2>&1"
-          sleep 3
-          docker exec -d arch bash -c "DISPLAY=:1 startxfce4 > /tmp/xfce.log 2>&1"
-          sleep 5
+          sleep 4
+
+          # dbus-run-session wraps XFCE with a proper D-Bus session — fixes connection errors
+          docker exec -d arch bash -c "DISPLAY=:1 dbus-run-session startxfce4 > /tmp/xfce.log 2>&1"
+          sleep 8
+
           docker exec -d arch bash -c "x11vnc -display :1 -passwd phantom -forever -rfbport 5901 -noxdamage -o /tmp/vnc.log"
           sleep 2
 
@@ -52,7 +59,7 @@ jobs:
           nohup ./cf tunnel --url http://localhost:8080 > cf.log 2>&1 &
 
           CF_URL=""
-          for i in $(seq 1 20); do
+          for i in $(seq 1 25); do
             CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cf.log 2>/dev/null | head -n 1)
             [ -n "$CF_URL" ] && break
             sleep 3

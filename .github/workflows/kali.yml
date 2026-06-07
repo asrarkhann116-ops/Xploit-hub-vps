@@ -26,7 +26,8 @@ jobs:
         run: |
           docker pull kalilinux/kali-rolling
           docker run -d --name kali -p 5901:5901 kalilinux/kali-rolling sleep infinity
-          docker exec kali bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-goodies x11vnc xvfb curl jq zip kali-linux-top10 2>/dev/null || true"
+          docker exec kali bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            xfce4 xfce4-goodies x11vnc xvfb dbus-x11 curl jq zip kali-linux-top10 2>/dev/null || true"
 
       - name: Start Kali Desktop & Tunnel
         env:
@@ -37,13 +38,15 @@ jobs:
           WALLPAPER: ${{ github.event.inputs.wallpaper_url }}
         run: |
           docker exec -d kali bash -c "Xvfb :1 -screen 0 1280x720x16 > /tmp/xvfb.log 2>&1"
-          sleep 3
-          docker exec -d kali bash -c "DISPLAY=:1 startxfce4 > /tmp/xfce.log 2>&1"
-          sleep 5
+          sleep 4
+
+          # dbus-launch fixes black screen & PolicyKit errors inside container
+          docker exec -d kali bash -c "DISPLAY=:1 dbus-launch --exit-with-session startxfce4 > /tmp/xfce.log 2>&1"
+          sleep 8
+
           docker exec -d kali bash -c "x11vnc -display :1 -passwd phantom -forever -rfbport 5901 -noxdamage -o /tmp/vnc.log"
           sleep 2
 
-          sudo apt-get install -y git 2>/dev/null || true
           git clone https://github.com/novnc/noVNC.git --depth 1 > /dev/null 2>&1
           ./noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080 &
 
@@ -52,7 +55,7 @@ jobs:
           nohup ./cf tunnel --url http://localhost:8080 > cf.log 2>&1 &
 
           CF_URL=""
-          for i in $(seq 1 20); do
+          for i in $(seq 1 25); do
             CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cf.log 2>/dev/null | head -n 1)
             [ -n "$CF_URL" ] && break
             sleep 3
@@ -70,7 +73,7 @@ jobs:
           fi
 
           curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-            -X POST -d "{\"content\": \"💀 **REAL KALI LINUX — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n🔗 **Access:** $CF_URL/vnc.html?autoconnect=1&compression=2&quality=6\n🔑 **Password:** \`phantom\`\n⏱ **Duration:** $DURATION minutes\n\n**This is real Kali Linux (kali-rolling). 100+ tools included.**\"}" \
+            -X POST -d "{\"content\": \"💀 **REAL KALI LINUX — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n🔗 **Access:** $CF_URL/vnc.html?autoconnect=1&compression=2&quality=6\n🔑 **Password:** \`phantom\`\n⏱ **Duration:** $DURATION minutes\n\n**Real Kali Linux (kali-rolling) — 100+ tools included.**\"}" \
             "https://discord.com/api/v10/channels/$CID/messages"
 
           while true; do sleep 3600; done

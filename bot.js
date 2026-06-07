@@ -19,6 +19,9 @@ const VPS_CHANNEL_ID = "1497364285645652098";
 const LIVE_CHANNEL_ID = process.env.LIVE_CHANNEL_ID;
 const COOLDOWN_MS = 15 * 60 * 1000;
 
+// Admins who can run multiple VPS slots simultaneously with no cooldown
+const SUPER_ADMINS = new Set(["1104652354655113268"]);
+
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
 });
@@ -370,8 +373,38 @@ client.on("interactionCreate", async (interaction) => {
     // /vps-status
     if (commandName === "vps-status") {
         cleanExpiredSessions();
-        const session = getUserSession(interaction.user.id);
-        const cd = getCooldown(interaction.user.id);
+        const uid = interaction.user.id;
+        const isSuper = SUPER_ADMINS.has(uid);
+
+        // Super admins: show ALL their own sessions (can have multiple)
+        if (isSuper) {
+            const mySessions = db.sessions.filter((s) => s.userId === uid);
+            if (!mySessions.length) {
+                return interaction.reply({
+                    content: `👑 **[Admin]** No active sessions. You can launch multiple at once!`,
+                    ephemeral: true,
+                });
+            }
+            const lines = mySessions.map((s, i) => {
+                const left = Math.max(0, Math.floor((s.expiresAt - Date.now()) / 60000));
+                const os = OS_MAP[s.os] || {};
+                return `**${i + 1}.** ${os.icon || "💻"} \`${os.label || s.os}\` — \`${left} min left\``;
+            }).join("\n");
+            return interaction.reply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle("👑 Your Active Sessions (Admin)")
+                        .setColor("#FFD700")
+                        .setDescription(lines)
+                        .setFooter({ text: `${mySessions.length} session(s) running — no limits, no cooldown.` }),
+                ],
+                ephemeral: true,
+            });
+        }
+
+        // Regular users: show single session
+        const session = getUserSession(uid);
+        const cd = getCooldown(uid);
         if (session) {
             const left = Math.max(
                 0,
@@ -603,14 +636,16 @@ client.on("interactionCreate", async (interaction) => {
 
         cleanExpiredSessions();
 
-        if (getUserSession(interaction.user.id))
+        const isSuper = SUPER_ADMINS.has(interaction.user.id);
+
+        if (!isSuper && getUserSession(interaction.user.id))
             return interaction.reply({
                 content: `🚫 You already have an active VPS. Use \`/vps-status\` to check it.`,
                 ephemeral: true,
             });
 
         const cd = getCooldown(interaction.user.id);
-        if (cd > 0)
+        if (!isSuper && cd > 0)
             return interaction.reply({
                 content: `⏳ **Cooldown:** Wait \`${Math.ceil(cd / 60000)} minutes\` before your next VPS.`,
                 ephemeral: true,

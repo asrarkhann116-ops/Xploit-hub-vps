@@ -22,54 +22,34 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
-      - name: Install QEMU & Dependencies
+      - name: Enable KVM for Hardware Acceleration
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y qemu-kvm qemu-system-x86 curl jq unzip wget git 2>/dev/null || true
-          sudo adduser $USER kvm 2>/dev/null || true
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -la /dev/kvm
 
-      - name: Download Android-x86 ISO & Launch
+      - name: Launch Real Android 11 Emulator
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           USER_ID: ${{ github.event.inputs.user_id }}
           USER_NAME: ${{ github.event.inputs.user_name }}
           DURATION: ${{ github.event.inputs.duration }}
         run: |
-          wget -q "https://sourceforge.net/projects/android-x86/files/Release%209.0/android-x86_64-9.0-r2.iso/download" \
-            -O android.iso --timeout=120 || \
-          wget -q "https://osdn.net/projects/android-x86/downloads/71931/android-x86_64-9.0-r2.iso" \
-            -O android.iso --timeout=120
+          docker run -d --privileged --name android \
+            -p 6080:6080 \
+            -e EMULATOR_DEVICE="Samsung Galaxy S10" \
+            -e WEB_VNC=true \
+            --device /dev/kvm \
+            budtmo/docker-android:emulator_11.0
 
-          qemu-img create -f qcow2 android.qcow2 8G
-
-          git clone https://github.com/novnc/noVNC.git --depth 1 > /dev/null 2>&1
-
-          # Fix: use KVM if available, otherwise TCG — never both at once
-          if [ -e /dev/kvm ]; then
-            ACCEL="-enable-kvm"
-          else
-            ACCEL="-accel tcg"
-          fi
-
-          nohup qemu-system-x86_64 \
-            $ACCEL \
-            -m 4096 \
-            -smp 2 \
-            -cdrom android.iso \
-            -hda android.qcow2 \
-            -vga std \
-            -vnc :1 \
-            -net nic \
-            -net user \
-            -boot d > /dev/null 2>&1 &
-
-          ./noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080 &
+          echo "Android emulator starting — waiting 90s for boot..."
+          sleep 90
 
           curl -sL -o cf https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x cf
-          nohup ./cf tunnel --url http://localhost:8080 > cf.log 2>&1 &
+          nohup ./cf tunnel --url http://localhost:6080 > cf.log 2>&1 &
 
-          # Retry loop — check every 3s for up to 60s
           CF_URL=""
           for i in $(seq 1 20); do
             CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cf.log 2>/dev/null | head -n 1)
@@ -89,7 +69,7 @@ jobs:
           fi
 
           curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-            -X POST -d "{\"content\": \"🤖 **ANDROID 9 — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n🔗 **Access:** $CF_URL/vnc.html\n\n*Android is booting — wait ~2 minutes for the screen to appear.*\n⏱ **Duration:** $DURATION minutes\"}" \
+            -X POST -d "{\"content\": \"🤖 **ANDROID 11 — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n🔗 **Access:** $CF_URL\n\n*Real Android 11 (Samsung Galaxy S10 profile) with KVM acceleration.*\n*If screen is black, wait 1-2 more minutes — it's still booting.*\n⏱ **Duration:** $DURATION minutes\"}" \
             "https://discord.com/api/v10/channels/$CID/messages"
 
           while true; do sleep 3600; done

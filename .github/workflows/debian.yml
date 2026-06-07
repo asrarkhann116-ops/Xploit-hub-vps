@@ -22,15 +22,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
-      - name: Install Debian Desktop
+      - name: Pull Real Debian & Install Desktop
         run: |
-          sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            xfce4 xfce4-goodies xvfb x11vnc websockify \
-            curl jq figlet zip git wget python3 python3-pip net-tools nmap \
-            2>/dev/null || true
+          docker pull debian:bookworm
+          docker run -d --name debian -p 5901:5901 debian:bookworm sleep infinity
+          docker exec debian bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-goodies x11vnc xvfb curl jq zip nmap git python3 net-tools 2>/dev/null || true"
 
-      - name: Setup & Launch
+      - name: Start Debian Desktop & Tunnel
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           USER_ID: ${{ github.event.inputs.user_id }}
@@ -38,41 +36,15 @@ jobs:
           DURATION: ${{ github.event.inputs.duration }}
           WALLPAPER: ${{ github.event.inputs.wallpaper_url }}
         run: |
-          Xvfb :1 -screen 0 1280x720x16 &
+          docker exec -d debian bash -c "Xvfb :1 -screen 0 1280x720x16 > /tmp/xvfb.log 2>&1"
+          sleep 3
+          docker exec -d debian bash -c "DISPLAY=:1 startxfce4 > /tmp/xfce.log 2>&1"
+          sleep 5
+          docker exec -d debian bash -c "x11vnc -display :1 -passwd phantom -forever -rfbport 5901 -noxdamage -o /tmp/vnc.log"
           sleep 2
-          DISPLAY=:1 startxfce4 &
-          sleep 4
-
-          curl -sL -o /tmp/wall.jpg "$WALLPAPER" 2>/dev/null || true
-          DISPLAY=:1 xfconf-query -c xfce4-desktop \
-            -p /backdrop/screen0/monitor0/workspace0/last-image \
-            -n -t string -s "/tmp/wall.jpg" 2>/dev/null || true
-
-          x11vnc -display :1 -passwd phantom -forever \
-            -noxdamage -noxfixes -noxrecord -quiet -bg -o /tmp/x11vnc.log
-
-          mkdir -p ~/Desktop
-          echo "XPLOIT HUB — DEBIAN 12 | OPERATOR: $USER_NAME" > ~/Desktop/IDENTITY.txt
-
-          echo 'export PS1="\[\e[1;34m\]Debian@XploitHUB:\[\e[0m\]\w\$ "' >> ~/.bashrc
-          echo 'clear && figlet "Debian HUB"' >> ~/.bashrc
-
-          cat > ~/Desktop/MEGA_SAVE.sh << SAVEEOF
-          #!/bin/bash
-          zip -r /tmp/backup.zip ~/Desktop ~/Documents 2>/dev/null
-          LINK=\$(curl -s --upload-file /tmp/backup.zip https://bashupload.com/backup.zip)
-          [ -z "\$LINK" ] && LINK=\$(curl -s --upload-file /tmp/backup.zip https://transfer.sh/backup.zip)
-          CID=\$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-            -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
-            https://discord.com/api/v10/users/@me/channels | jq -r '.id')
-          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-            -X POST -d "{\"content\": \"✅ **Debian Backup Done!**\n📦 Download: \$LINK\"}" \
-            "https://discord.com/api/v10/channels/\$CID/messages"
-          SAVEEOF
-          chmod +x ~/Desktop/MEGA_SAVE.sh
 
           git clone https://github.com/novnc/noVNC.git --depth 1 > /dev/null 2>&1
-          ./noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 8080 &
+          ./noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 8080 &
 
           curl -sL -o cf https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x cf
@@ -97,7 +69,7 @@ jobs:
           fi
 
           curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-            -X POST -d "{\"content\": \"🌀 **DEBIAN 12 — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n🔗 **Access:** $CF_URL/vnc.html?autoconnect=1\&compression=2\&quality=6\n🔑 **Password:** \`phantom\`\n⏱ **Duration:** $DURATION minutes\"}" \
+            -X POST -d "{\"content\": \"🌀 **REAL DEBIAN 12 — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n🔗 **Access:** $CF_URL/vnc.html?autoconnect=1&compression=2&quality=6\n🔑 **Password:** \`phantom\`\n⏱ **Duration:** $DURATION minutes\"}" \
             "https://discord.com/api/v10/channels/$CID/messages"
 
           while true; do sleep 3600; done

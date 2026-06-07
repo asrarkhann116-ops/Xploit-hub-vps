@@ -9,104 +9,72 @@ on:
         description: 'Discord User Name'
         required: true
       duration:
-        description: 'Duration'
+        description: 'Duration in minutes'
         required: true
         default: '60'
       wallpaper_url:
         description: 'Wallpaper URL'
         required: true
-        default: 'https://i.pinimg.com/736x/42/3a/2f/423a2f1a8f888cb9068dc68daed56967.jpg'
+        default: 'https://images.wallpapersden.com/image/download/red-hacker-binary-code_bWZtZ2aUmZqaraWkpJRmbmdlrWZnZWU.jpg'
 
 jobs:
   launch:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
-      - name: System Prep & Arsenal Installation
+      - name: Enable RDP & Create User
+        shell: powershell
         run: |
-          sudo apt-get update -qq
-          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
-            xfce4 xfce4-goodies xrdp jq figlet zenity zip curl \
-            nmap sqlmap dirb net-tools wget unzip 2>/dev/null || true
-          wget -q https://github.com/projectdiscovery/nuclei/releases/download/v3.2.3/nuclei_3.2.3_linux_amd64.zip -O nuclei.zip
-          unzip -q nuclei.zip && sudo mv nuclei /usr/local/bin/ && rm nuclei.zip
-          echo "xfce4-session" > ~/.xsession
-          sudo cp ~/.xsession /etc/skel/
-          sudo systemctl restart xrdp
-          echo "runner:phantom" | sudo chpasswd
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
+          $pw = ConvertTo-SecureString "phantom" -AsPlainText -Force
+          New-LocalUser "xploit" -Password $pw -PasswordNeverExpires -UserMayNotChangePassword -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Administrators" -Member "xploit" -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "xploit" -ErrorAction SilentlyContinue
+          Write-Host "RDP enabled - user xploit / phantom ready"
 
-      - name: Elite Branding & Bore Tunnel Setup
+      - name: Bore Tunnel & Send DM
+        shell: powershell
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           USER_ID: ${{ github.event.inputs.user_id }}
           USER_NAME: ${{ github.event.inputs.user_name }}
           DURATION: ${{ github.event.inputs.duration }}
-          WALLPAPER: ${{ github.event.inputs.wallpaper_url }}
         run: |
-          mkdir -p ~/Desktop
-          cat > ~/Desktop/IDENTITY.txt << EOF
-          ==========================================
-             XPLOIT HUB ELITE RDP (7GB RAM)
-          ==========================================
-          OPERATOR : $USER_NAME
-          STATUS   : ARSENAL LOADED
-          TOOLS    : Nmap, SQLMap, Nuclei, Dirb
-          ==========================================
-          EOF
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest "https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-pc-windows-msvc.zip" -OutFile bore.zip
+          Expand-Archive -LiteralPath bore.zip -DestinationPath . -Force
 
-          echo 'export PS1="\[\e[1;31m\]XploitHUB@Arsenal:\[\e[0m\]\w\$ "' >> ~/.bashrc
-          echo 'clear && figlet "Xploit HUB"' >> ~/.bashrc
+          Start-Process -FilePath ".\bore.exe" -ArgumentList "local","3389","--to","bore.pub" `
+            -RedirectStandardOutput "bore.log" -RedirectStandardError "bore.err" -NoNewWindow
 
-          mkdir -p ~/.config/autostart
-          curl -sL -o /tmp/wall.jpg "$WALLPAPER" 2>/dev/null || true
-          cat > ~/.config/autostart/branding.desktop << EOF
-          [Desktop Entry]
-          Type=Application
-          Name=Branding
-          Exec=sh -c 'sleep 3 && xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -n -t string -s /tmp/wall.jpg'
-          EOF
+          $PORT = ""
+          for ($i = 0; $i -lt 20; $i++) {
+            Start-Sleep 3
+            $log = @()
+            if (Test-Path bore.log) { $log += Get-Content bore.log -ErrorAction SilentlyContinue }
+            if (Test-Path bore.err) { $log += Get-Content bore.err -ErrorAction SilentlyContinue }
+            foreach ($line in $log) {
+              if ($line -match "bore\.pub:(\d+)") { $PORT = $Matches[1]; break }
+              if ($line -match "remote_port=(\d+)")  { $PORT = $Matches[1]; break }
+            }
+            if ($PORT) { break }
+          }
 
-          cat > ~/Desktop/MEGA_SAVE.sh << SAVEEOF
-          #!/bin/bash
-          zenity --info --text="Compressing files..." --title="Xploit Backup"
-          zip -r /tmp/xploit_backup.zip /home/runner/Desktop /home/runner/Documents 2>/dev/null
-          LINK=\$(curl -s --upload-file /tmp/xploit_backup.zip https://bashupload.com/xploit_backup.zip)
-          [ -z "\$LINK" ] && LINK=\$(curl -s --upload-file /tmp/xploit_backup.zip https://transfer.sh/xploit_backup.zip)
-          CID=\$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-            -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
-            https://discord.com/api/v10/users/@me/channels | jq -r '.id')
-          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-            -X POST -d "{\"content\": \"✅ **Backup Done!**\n📦 Download: \$LINK\"}" \
-            "https://discord.com/api/v10/channels/\$CID/messages"
-          zenity --info --text="✅ Backup link sent to your DM!" --title="Done"
-          SAVEEOF
-          chmod +x ~/Desktop/MEGA_SAVE.sh
+          $h = @{ "Authorization" = "Bot $env:DISCORD_TOKEN"; "Content-Type" = "application/json" }
+          $r = Invoke-RestMethod "https://discord.com/api/v10/users/@me/channels" -Method POST -Headers $h `
+            -Body (@{ recipient_id = $env:USER_ID } | ConvertTo-Json)
+          $CID = $r.id
 
-          curl -sL -o bore.tar.gz https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf bore.tar.gz && chmod +x bore
-          nohup ./bore local 3389 --to bore.pub > bore.log 2>&1 &
-
-          PORT=""
-          for i in $(seq 1 20); do
-            PORT=$(grep -o 'remote_port=[0-9]*' bore.log 2>/dev/null | cut -d'=' -f2 | head -n 1)
-            [ -z "$PORT" ] && PORT=$(grep -o 'bore\.pub:[0-9]*' bore.log 2>/dev/null | cut -d':' -f2 | head -n 1)
-            [ -n "$PORT" ] && break
-            sleep 3
-          done
-
-          CHANNEL_ID=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-            -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
-            https://discord.com/api/v10/users/@me/channels | jq -r '.id')
-
-          if [ -z "$PORT" ]; then
-            curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-              -X POST -d "{\"content\": \"❌ **RDP Launch Failed** — tunnel could not start. Please try again.\"}" \
-              "https://discord.com/api/v10/channels/$CHANNEL_ID/messages"
+          if (-not $PORT) {
+            Invoke-RestMethod "https://discord.com/api/v10/channels/$CID/messages" -Method POST -Headers $h `
+              -Body (@{ content = "❌ **RDP Launch Failed** — tunnel could not start. Please try again." } | ConvertTo-Json)
             exit 1
-          fi
+          }
 
-          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-            -X POST -d "{\"content\": \"🚀 **XPLOIT HUB RDP — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n\n⚡ Open **Remote Desktop Connection** and enter:\n💻 **Computer:** \`bore.pub:$PORT\`\n👤 **Username:** \`runner\`\n🔑 **Password:** \`phantom\`\n⏱ **Duration:** $DURATION minutes\n\n*Accept any certificate warnings.*\"}" \
-            "https://discord.com/api/v10/channels/$CHANNEL_ID/messages"
+          $msg = "🪟 **WINDOWS 10 RDP — SESSION ACTIVE**`n👤 **Operator:** <@$env:USER_ID>`n`n⚡ Open **Remote Desktop Connection** and enter:`n💻 **Computer:** ``bore.pub:$PORT```n👤 **Username:** ``xploit```n🔑 **Password:** ``phantom```n⏱ **Duration:** $env:DURATION minutes`n`n*Accept any certificate warnings.*"
+          Invoke-RestMethod "https://discord.com/api/v10/channels/$CID/messages" -Method POST -Headers $h `
+            -Body (@{ content = $msg } | ConvertTo-Json)
 
-          while true; do sleep 3600; done
+          Start-Sleep ([int]$env:DURATION * 60)

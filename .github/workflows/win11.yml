@@ -14,8 +14,8 @@ on:
         default: '60'
       wallpaper_url:
         description: 'Wallpaper URL'
-        required: false
-        default: ''
+        required: true
+        default: 'https://images.wallpapersden.com/image/download/red-hacker-binary-code_bWZtZ2aUmZqaraWkpJRmbmdlrWZnZWU.jpg'
 
 jobs:
   launch:
@@ -28,30 +28,13 @@ jobs:
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
-          $password = ConvertTo-SecureString "phantom" -AsPlainText -Force
-          New-LocalUser "xploit" -Password $password -FullName "Xploit Operator" -Description "Xploit HUB User" -ErrorAction SilentlyContinue
+          $pw = ConvertTo-SecureString "phantom" -AsPlainText -Force
+          New-LocalUser "xploit" -Password $pw -PasswordNeverExpires -UserMayNotChangePassword -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Administrators" -Member "xploit" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "xploit" -ErrorAction SilentlyContinue
+          Write-Host "RDP enabled - user xploit / phantom ready"
 
-      - name: Create Desktop Identity File
-        shell: powershell
-        env:
-          USER_NAME: ${{ github.event.inputs.user_name }}
-        run: |
-          $content = @"
-==========================================
-  XPLOIT HUB - WINDOWS 11 (7GB RAM)
-==========================================
-OPERATOR : $env:USER_NAME
-STATUS   : READY
-USER     : xploit
-PASS     : phantom
-==========================================
-"@
-          New-Item -Path "$env:PUBLIC\Desktop" -ItemType Directory -Force | Out-Null
-          Set-Content -Path "$env:PUBLIC\Desktop\IDENTITY.txt" -Value $content
-
-      - name: Start Bore Tunnel & Notify Discord
+      - name: Bore Tunnel & Send DM
         shell: powershell
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
@@ -59,35 +42,39 @@ PASS     : phantom
           USER_NAME: ${{ github.event.inputs.user_name }}
           DURATION: ${{ github.event.inputs.duration }}
         run: |
-          Invoke-WebRequest -Uri "https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-pc-windows-msvc.zip" -OutFile bore.zip
-          Expand-Archive bore.zip -DestinationPath . -Force
-          $boreProcess = Start-Process -FilePath ".\bore.exe" -ArgumentList "local 3389 --to bore.pub" `
-            -RedirectStandardOutput "bore.log" -RedirectStandardError "bore_err.log" -NoNewWindow -PassThru
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest "https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-pc-windows-msvc.zip" -OutFile bore.zip
+          Expand-Archive -LiteralPath bore.zip -DestinationPath . -Force
 
-          # Retry loop — check every 3s for up to 60s
-          $port = ""
+          Start-Process -FilePath ".\bore.exe" -ArgumentList "local","3389","--to","bore.pub" `
+            -RedirectStandardOutput "bore.log" -RedirectStandardError "bore.err" -NoNewWindow
+
+          $PORT = ""
           for ($i = 0; $i -lt 20; $i++) {
-            $log = (Get-Content "bore.log" -ErrorAction SilentlyContinue) -join " "
-            $errlog = (Get-Content "bore_err.log" -ErrorAction SilentlyContinue) -join " "
-            $combined = "$log $errlog"
-            $port = [regex]::Match($combined, 'remote_port=(\d+)').Groups[1].Value
-            if (-not $port) { $port = [regex]::Match($combined, 'bore\.pub:(\d+)').Groups[1].Value }
-            if ($port) { break }
-            Start-Sleep -Seconds 3
+            Start-Sleep 3
+            $log = @()
+            if (Test-Path bore.log) { $log += Get-Content bore.log -ErrorAction SilentlyContinue }
+            if (Test-Path bore.err) { $log += Get-Content bore.err -ErrorAction SilentlyContinue }
+            foreach ($line in $log) {
+              if ($line -match "bore\.pub:(\d+)") { $PORT = $Matches[1]; break }
+              if ($line -match "remote_port=(\d+)")  { $PORT = $Matches[1]; break }
+            }
+            if ($PORT) { break }
           }
 
-          $headers = @{ "Authorization" = "Bot $env:DISCORD_TOKEN"; "Content-Type" = "application/json" }
-          $dmBody  = "{`"recipient_id`": `"$env:USER_ID`"}"
-          $dmChan  = Invoke-RestMethod -Uri "https://discord.com/api/v10/users/@me/channels" -Method POST -Headers $headers -Body $dmBody
-          $chanId  = $dmChan.id
+          $h = @{ "Authorization" = "Bot $env:DISCORD_TOKEN"; "Content-Type" = "application/json" }
+          $r = Invoke-RestMethod "https://discord.com/api/v10/users/@me/channels" -Method POST -Headers $h `
+            -Body (@{ recipient_id = $env:USER_ID } | ConvertTo-Json)
+          $CID = $r.id
 
-          if (-not $port) {
-            $failMsg = "{`"content`": `"❌ **Windows 11 Launch Failed** — tunnel could not start. Please try again.`"}"
-            Invoke-RestMethod -Uri "https://discord.com/api/v10/channels/$chanId/messages" -Method POST -Headers $headers -Body $failMsg
+          if (-not $PORT) {
+            Invoke-RestMethod "https://discord.com/api/v10/channels/$CID/messages" -Method POST -Headers $h `
+              -Body (@{ content = "❌ **Win11 Launch Failed** — tunnel could not start. Please try again." } | ConvertTo-Json)
             exit 1
           }
 
-          $msg = "{`"content`": `"🪟 **WINDOWS 11 — RDP SESSION ACTIVE**\n👤 **Operator:** <@$env:USER_ID>\n\n⚡ Open **Remote Desktop Connection** and enter:\n💻 **Computer:** ``bore.pub:$port``\n👤 **Username:** ``xploit``\n🔑 **Password:** ``phantom``\n⏱ **Duration:** $env:DURATION minutes\n\n*Accept any certificate warnings.*`"}"
-          Invoke-RestMethod -Uri "https://discord.com/api/v10/channels/$chanId/messages" -Method POST -Headers $headers -Body $msg
+          $msg = "🪟 **WINDOWS 11 RDP — SESSION ACTIVE**`n👤 **Operator:** <@$env:USER_ID>`n`n⚡ Open **Remote Desktop Connection** and enter:`n💻 **Computer:** ``bore.pub:$PORT```n👤 **Username:** ``xploit```n🔑 **Password:** ``phantom```n⏱ **Duration:** $env:DURATION minutes`n`n*Accept any certificate warnings.*"
+          Invoke-RestMethod "https://discord.com/api/v10/channels/$CID/messages" -Method POST -Headers $h `
+            -Body (@{ content = $msg } | ConvertTo-Json)
 
-          Start-Sleep -Seconds ([int]$env:DURATION * 60)
+          Start-Sleep ([int]$env:DURATION * 60)

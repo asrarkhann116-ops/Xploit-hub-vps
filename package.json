@@ -2,6 +2,7 @@
   "name": "xploit-hub-vps-bot",
   "version": "1.0.0",
   "description": "Discord Bot to manage ephemeral GitHub VPS",
+  "type": "module",
   "main": "bot.js",
   "dependencies": {
     "@octokit/rest": "^20.0.0",

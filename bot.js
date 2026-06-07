@@ -67,7 +67,7 @@ const OS_MAP = {
     arch: {
         label: "Arch Linux",
         workflow: "arch.yml",
-        access: "rdp",
+        access: "browser",
         icon: "🏹",
     },
     windows10: {
@@ -82,11 +82,17 @@ const OS_MAP = {
         access: "rdp",
         icon: "🍷",
     },
-    macos: {
-        label: "macOS Sonoma",
-        workflow: "macos.yml",
-        access: "vnc",
-        icon: "🍎",
+    parrot: {
+        label: "Parrot OS",
+        workflow: "parrot.yml",
+        access: "rdp",
+        icon: "🦜",
+    },
+    blackarch: {
+        label: "BlackArch Linux",
+        workflow: "blackarch.yml",
+        access: "browser",
+        icon: "☠️",
     },
     android: {
         label: "Android 9",
@@ -123,10 +129,11 @@ const commands = [
                     { name: "🪶  Tiny11        (RDP)", value: "tiny11" },
                     { name: "🌀  Debian 12     (RDP)", value: "debian" },
                     { name: "🎩  Fedora 40     (RDP)", value: "fedora" },
-                    { name: "🏹  Arch Linux    (RDP)", value: "arch" },
+                    { name: "🏹  Arch Linux    (Browser)", value: "arch" },
+                    { name: "🦜  Parrot OS     (RDP)", value: "parrot" },
+                    { name: "☠️  BlackArch     (Browser)", value: "blackarch" },
                     { name: "🪟  Windows 10    (RDP)", value: "windows10" },
                     { name: "🪟  Windows 11    (RDP)", value: "windows11" },
-                    { name: "🍎  macOS Sonoma  (VNC)", value: "macos" },
                     { name: "🤖  Android 9     (Browser)", value: "android" },
                 ),
         )
@@ -613,6 +620,18 @@ client.on("interactionCreate", async (interaction) => {
                 label: "Arch Linux — Tools",
                 fields: [{ name: "🛠️ Installed", value: "`nmap` `net-tools` `python3` `git` `neofetch` `htop`" }],
             },
+            blackarch: {
+                color: "#1A1A1A",
+                icon: "☠️",
+                label: "BlackArch Linux — 2800+ Tools",
+                fields: [
+                    { name: "🔍 Recon",          value: "`nmap` `masscan` `amass` `subfinder` `theharvester` `dnsenum` `dnsrecon` `fierce` `gobuster` `ffuf`" },
+                    { name: "🌐 Web Scanning",    value: "`sqlmap` `nikto` `wfuzz` `dalfox` `dirb` `whatweb` `wpscan` `nuclei` `httpx`" },
+                    { name: "🔑 Password Attack", value: "`hydra` `john` `hashcat` `medusa` `crunch` `cewl`" },
+                    { name: "💥 Exploitation",    value: "`metasploit` `msfvenom` `exploitdb` `searchsploit`" },
+                    { name: "📦 Extra",           value: "`2800+ tools via `pacman -S blackarch-<category>``" },
+                ],
+            },
         };
 
         const info = TOOL_LISTS[os] || TOOL_LISTS.ubuntu;
@@ -679,7 +698,6 @@ client.on("interactionCreate", async (interaction) => {
             browser:
                 "🌐 You'll get a **browser link** — open it and enter password `phantom`.",
             rdp: "🖥️ You'll get a **bore.pub address** — open Remote Desktop Connection, User: `xploit`, Pass: `phantom`.",
-            vnc: "🍎 You'll get a **VNC address** — open any VNC client and connect with password `phantom`.",
         }[osInfo.access];
 
         try {

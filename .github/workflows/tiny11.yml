@@ -90,7 +90,7 @@ jobs:
           $check = Get-LocalUser -Name 'xploit' -ErrorAction SilentlyContinue
           if ($check) { Write-Host 'SUCCESS: user xploit ready' } else { Write-Host 'ERROR: user not found'; exit 1 }
 
-      - name: Bore Tunnel & Send DM
+      - name: Pinggy Tunnel & Send DM
         shell: powershell
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
@@ -99,51 +99,41 @@ jobs:
           DURATION: ${{ github.event.inputs.duration }}
         run: |
           $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
-          $ProgressPreference = 'SilentlyContinue'
-          Invoke-WebRequest 'https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-pc-windows-msvc.zip' -OutFile bore.zip
-          Expand-Archive -LiteralPath bore.zip -DestinationPath . -Force
-
-          Start-Process -FilePath '.\bore.exe' -ArgumentList 'local','3389','--to','bore.pub' `
-            -RedirectStandardOutput 'bore.log' -RedirectStandardError 'bore.err' -NoNewWindow
-
-          $PORT = ''
-          for ($i = 0; $i -lt 20; $i++) {
-            Start-Sleep 3
-            $log = @()
-            if (Test-Path bore.log) { $log += Get-Content bore.log -Encoding UTF8 -ErrorAction SilentlyContinue }
-            if (Test-Path bore.err) { $log += Get-Content bore.err -Encoding UTF8 -ErrorAction SilentlyContinue }
-            foreach ($line in $log) {
-              if ($line -match 'bore\.pub:(\d+)')   { $PORT = $Matches[1]; break }
-              if ($line -match 'remote_port=(\d+)') { $PORT = $Matches[1]; break }
-            }
-            if ($PORT) { break }
-          }
-
-          if (-not $PORT) { Write-Host 'ERROR: Bore tunnel failed.'; exit 1 }
-
-          Write-Host '======================================'
-          Write-Host '  TINY11 RDP - SESSION ACTIVE'
-          Write-Host '======================================'
-          Write-Host "  Computer : bore.pub:$PORT"
-          Write-Host '  Username : xploit'
-          Write-Host '  Password : phantom'
-          Write-Host "  Duration : $env:DURATION minutes"
-          Write-Host '======================================'
-
           $TOKEN = $env:DISCORD_TOKEN
           $UID   = $env:USER_ID
           $DUR   = $env:DURATION
           $nl    = "`n"
+          $AUTH  = "Authorization: Bot $TOKEN"
 
-          $MSG  = "🪶 [Tiny11 RDP] SESSION ACTIVE" + $nl
-          $MSG += "Operator: <@$UID>" + $nl + $nl
-          $MSG += "Open Remote Desktop Connection:" + $nl
-          $MSG += "Computer : bore.pub:$PORT" + $nl
-          $MSG += "Username : xploit" + $nl
-          $MSG += "Password : phantom" + $nl
-          $MSG += "Duration : $DUR minutes" + $nl
-          $MSG += "Accept any certificate warnings." + $nl + $nl
-          $MSG += "Debloated -- Xbox, Teams, OneDrive, telemetry all removed for faster performance."
+          # Pinggy TCP tunnel — SSH already built-in on Windows Server 2025, zero download needed
+          $PinggyJob = Start-Process -FilePath 'ssh' `
+            -ArgumentList '-p','443','-o','StrictHostKeyChecking=no','-o','ServerAliveInterval=30',`
+                          '-o','ExitOnForwardFailure=yes','-R0:localhost:3389','tcp@a.pinggy.io' `
+            -RedirectStandardOutput 'pinggy.log' -RedirectStandardError 'pinggy.err' -NoNewWindow -PassThru
+
+          $ADDR = ''
+          for ($i = 0; $i -lt 25; $i++) {
+            Start-Sleep 3
+            $log = ''
+            if (Test-Path pinggy.log) { $log += (Get-Content pinggy.log -Raw -ErrorAction SilentlyContinue) }
+            if (Test-Path pinggy.err) { $log += (Get-Content pinggy.err -Raw -ErrorAction SilentlyContinue) }
+            if ($log -match '([a-z0-9]+\.a\.pinggy\.online:\d+)') { $ADDR = $Matches[1]; break }
+          }
+
+          if (-not $ADDR) { Write-Host 'ERROR: Pinggy tunnel failed.'; exit 1 }
+
+          Write-Host "Pinggy address: $ADDR"
+
+          $MSG  = "🪶 **[Tiny11 RDP] SESSION ACTIVE**" + $nl
+          $MSG += "👤 **Operator:** <@$UID>" + $nl + $nl
+          $MSG += "🖥️ **Open Remote Desktop Connection:**" + $nl
+          $MSG += "**Computer:** ``$ADDR``" + $nl
+          $MSG += "**Username:** ``xploit``" + $nl
+          $MSG += "**Password:** ``phantom``" + $nl + $nl
+          $MSG += "*Accept any certificate warnings.*" + $nl
+          $MSG += "⏱ **Duration:** 1 Hour" + $nl + $nl
+          $MSG += "Debloated — Xbox, Teams, OneDrive, telemetry all removed for faster performance." + $nl
+          $MSG += "⚠️ Pinggy free = max 1 hour tunnel. After 1hr, run /vps again for a fresh session."
 
           $chanFile  = "$env:TEMP\chan.json"
           $msgFile   = "$env:TEMP\msg.json"

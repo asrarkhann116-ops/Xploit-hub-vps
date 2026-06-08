@@ -1,0 +1,139 @@
+name: Xploit-HUB-RDP
+on:
+  workflow_dispatch:
+    inputs:
+      user_id:
+        description: 'Discord User ID'
+        required: true
+      user_name:
+        description: 'Discord User Name'
+        required: true
+      duration:
+        description: 'Duration in minutes'
+        required: true
+        default: '60'
+      wallpaper_url:
+        description: 'Wallpaper URL'
+        required: true
+        default: 'https://images.wallpapersden.com/image/download/red-hacker-binary-code_bWZtZ2aUmZqaraWkpJRmbmdlrWZnZWU.jpg'
+
+jobs:
+  launch:
+    runs-on: windows-2022
+    timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
+    steps:
+      - name: Enable RDP & Create User
+        shell: powershell
+        run: |
+          $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
+
+          secedit /export /cfg C:\secpol.cfg /quiet
+          (Get-Content 'C:\secpol.cfg') -replace 'PasswordComplexity = 1','PasswordComplexity = 0' |
+            Set-Content 'C:\secpol.cfg'
+          secedit /configure /db C:\Windows\security\local.sdb /cfg C:\secpol.cfg /quiet
+          Write-Host 'Password complexity disabled'
+
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+            -Name 'fDenyTSConnections' -Value 0
+          Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+            -Name 'UserAuthentication' -Value 0
+
+          $pw = ConvertTo-SecureString 'phantom' -AsPlainText -Force
+          $u = Get-LocalUser -Name 'xploit' -ErrorAction SilentlyContinue
+          if ($u) {
+            Set-LocalUser -Name 'xploit' -Password $pw -ErrorAction SilentlyContinue
+          } else {
+            New-LocalUser 'xploit' -Password $pw -PasswordNeverExpires -UserMayNotChangePassword -ErrorAction SilentlyContinue
+          }
+          Add-LocalGroupMember -Group 'Administrators'       -Member 'xploit' -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group 'Remote Desktop Users' -Member 'xploit' -ErrorAction SilentlyContinue
+
+          $check = Get-LocalUser -Name 'xploit' -ErrorAction SilentlyContinue
+          if ($check) { Write-Host 'SUCCESS: user xploit ready' } else { Write-Host 'ERROR: user xploit not found'; exit 1 }
+
+      - name: Bore Tunnel & Send DM
+        shell: powershell
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          USER_ID: ${{ github.event.inputs.user_id }}
+          USER_NAME: ${{ github.event.inputs.user_name }}
+          DURATION: ${{ github.event.inputs.duration }}
+        run: |
+          $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest 'https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-pc-windows-msvc.zip' -OutFile bore.zip
+          Expand-Archive -LiteralPath bore.zip -DestinationPath . -Force
+
+          Start-Process -FilePath '.\bore.exe' -ArgumentList 'local','3389','--to','bore.pub' `
+            -RedirectStandardOutput 'bore.log' -RedirectStandardError 'bore.err' -NoNewWindow
+
+          $PORT = ''
+          for ($i = 0; $i -lt 20; $i++) {
+            Start-Sleep 3
+            $log = @()
+            if (Test-Path bore.log) { $log += Get-Content bore.log -Encoding UTF8 -ErrorAction SilentlyContinue }
+            if (Test-Path bore.err) { $log += Get-Content bore.err -Encoding UTF8 -ErrorAction SilentlyContinue }
+            foreach ($line in $log) {
+              if ($line -match 'bore\.pub:(\d+)')   { $PORT = $Matches[1]; break }
+              if ($line -match 'remote_port=(\d+)') { $PORT = $Matches[1]; break }
+            }
+            if ($PORT) { break }
+          }
+
+          if (-not $PORT) { Write-Host 'ERROR: Bore tunnel failed.'; exit 1 }
+
+          Write-Host '======================================'
+          Write-Host '  WINDOWS 10 RDP - SESSION ACTIVE'
+          Write-Host '======================================'
+          Write-Host "  Computer : bore.pub:$PORT"
+          Write-Host '  Username : xploit'
+          Write-Host '  Password : phantom'
+          Write-Host "  Duration : $env:DURATION minutes"
+          Write-Host '======================================'
+
+          $TOKEN = $env:DISCORD_TOKEN
+          $UID   = $env:USER_ID
+          $DUR   = $env:DURATION
+          $nl    = "`n"
+
+          $MSG  = "👾 [Windows 10 RDP] SESSION ACTIVE" + $nl
+          $MSG += "Operator: <@$UID>" + $nl + $nl
+          $MSG += "Open Remote Desktop Connection:" + $nl
+          $MSG += "Computer : bore.pub:$PORT" + $nl
+          $MSG += "Username : xploit" + $nl
+          $MSG += "Password : phantom" + $nl
+          $MSG += "Duration : $DUR minutes" + $nl
+          $MSG += "Accept any certificate warnings."
+
+          $chanFile  = "$env:TEMP\chan.json"
+          $msgFile   = "$env:TEMP\msg.json"
+          $utf8NoBOM = [System.Text.UTF8Encoding]::new($false)
+          $chanJson  = [pscustomobject]@{ recipient_id = $UID } | ConvertTo-Json -Compress
+          $msgJson   = [pscustomobject]@{ content = $MSG } | ConvertTo-Json -Compress
+          [System.IO.File]::WriteAllText($chanFile, $chanJson, $utf8NoBOM)
+          [System.IO.File]::WriteAllText($msgFile,  $msgJson,  $utf8NoBOM)
+
+          $AUTH   = "Authorization: Bot $TOKEN"
+          $dmSent = $false
+
+          $chanResp = curl.exe -s -X POST 'https://discord.com/api/v10/users/@me/channels' `
+            -H $AUTH -H 'Content-Type: application/json' --data "@$chanFile"
+          Write-Host "Chan resp: $chanResp"
+          $CID = ($chanResp | ConvertFrom-Json -ErrorAction SilentlyContinue).id
+
+          if ($CID) {
+            $sendResp = curl.exe -s -X POST "https://discord.com/api/v10/channels/$CID/messages" `
+              -H $AUTH -H 'Content-Type: application/json' --data "@$msgFile"
+            Write-Host "DM resp: $sendResp"
+            if ($sendResp -notmatch '"code"') { $dmSent = $true; Write-Host 'DM sent OK.' }
+          }
+
+          if (-not $dmSent) {
+            Write-Host 'Trying VPS channel fallback...'
+            $chanPost = curl.exe -s -X POST 'https://discord.com/api/v10/channels/1497364285645652098/messages' `
+              -H $AUTH -H 'Content-Type: application/json' --data "@$msgFile"
+            Write-Host "Channel resp: $chanPost"
+          }
+
+          Start-Sleep ([int]$env:DURATION * 60)

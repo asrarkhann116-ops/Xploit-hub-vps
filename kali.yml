@@ -1,0 +1,91 @@
+name: Xploit-HUB-Kali
+on:
+  workflow_dispatch:
+    inputs:
+      user_id:
+        description: 'Discord User ID'
+        required: true
+      user_name:
+        description: 'Discord User Name'
+        required: true
+      duration:
+        description: 'Duration in minutes'
+        required: true
+        default: '60'
+      wallpaper_url:
+        description: 'Wallpaper URL'
+        required: false
+        default: 'https://images.wallpapersden.com/image/download/red-hacker-binary-code_bWZtZ2aUmZqaraWkpJRmbmdlrWZnZWU.jpg'
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
+    steps:
+      - name: Pull Kali Linux + Install xRDP
+        run: |
+          docker pull kalilinux/kali-rolling
+          docker run -d --name kali -p 3389:3389 kalilinux/kali-rolling sleep infinity
+
+          # KEY: tigervnc-standalone-server provides Xvnc which xrdp-sesman needs
+          # Remove kali-linux-top10 — it's huge and causes install timeouts
+          docker exec kali bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            xrdp xfce4 dbus-x11 tigervnc-standalone-server \
+            curl jq zip nmap git python3 net-tools 2>/dev/null || true"
+
+          # Create user
+          docker exec kali bash -c "useradd -m -s /bin/bash xploit && echo 'xploit:phantom' | chpasswd"
+
+          # KEY FIX: dbus-launch required or XFCE4 fails with failsafe session error
+          docker exec kali bash -c "printf '#!/bin/sh\nexec dbus-launch --exit-with-session startxfce4\n' > /etc/xrdp/startwm.sh && chmod +x /etc/xrdp/startwm.sh"
+          docker exec kali bash -c "sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini 2>/dev/null || true"
+
+          # Create required runtime dirs
+          docker exec kali bash -c "mkdir -p /var/run/xrdp /run/xrdp && chmod 755 /var/run/xrdp /run/xrdp"
+
+          # Start xrdp-sesman first, then xrdp (order matters)
+          docker exec -d kali bash -c "xrdp-sesman --nodaemon > /tmp/sesman.log 2>&1"
+          sleep 4
+          docker exec -d kali bash -c "xrdp --nodaemon > /tmp/xrdp.log 2>&1"
+          sleep 3
+
+          echo "--- Checking xrdp port inside container ---"
+          docker exec kali bash -c "ss -tlnp 2>/dev/null | grep 3389 || netstat -tlnp 2>/dev/null | grep 3389 || echo 'port check done'"
+
+      - name: Bore Tunnel + Send DM
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          USER_ID: ${{ github.event.inputs.user_id }}
+          USER_NAME: ${{ github.event.inputs.user_name }}
+          DURATION: ${{ github.event.inputs.duration }}
+        run: |
+          curl -sL -o bore.tar.gz \
+            https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf bore.tar.gz && chmod +x bore
+
+          nohup ./bore local 3389 --to bore.pub > bore.log 2>&1 &
+
+          PORT=""
+          for i in $(seq 1 30); do
+            PORT=$(grep -o 'bore\.pub:[0-9]*' bore.log 2>/dev/null | cut -d':' -f2 | head -n 1)
+            [ -z "$PORT" ] && PORT=$(grep -o 'remote_port=[0-9]*' bore.log 2>/dev/null | cut -d'=' -f2 | head -n 1)
+            [ -n "$PORT" ] && break
+            sleep 3
+          done
+
+          CID=$(curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+            -X POST -d "{\"recipient_id\": \"$USER_ID\"}" \
+            https://discord.com/api/v10/users/@me/channels | jq -r '.id')
+
+          if [ -z "$PORT" ]; then
+            curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+              -X POST -d "{\"content\": \"❌ **Kali Launch Failed** — bore tunnel could not start. Please try again.\"}" \
+              "https://discord.com/api/v10/channels/$CID/messages"
+            exit 1
+          fi
+
+          curl -s -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
+            -X POST -d "{\"content\": \"💀 **REAL KALI LINUX xRDP — SESSION ACTIVE**\n👤 **Operator:** <@$USER_ID>\n\n🖥️ **Open Remote Desktop Connection:**\n**Computer:** \`bore.pub:$PORT\`\n**Username:** \`xploit\`\n**Password:** \`phantom\`\n\n*Accept any certificate warnings.*\n⏱ **Duration:** $DURATION minutes\n\n**Real Kali Linux (kali-rolling) — 100+ tools included.**\"}" \
+            "https://discord.com/api/v10/channels/$CID/messages"
+
+          while true; do sleep 3600; done

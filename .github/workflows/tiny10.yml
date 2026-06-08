@@ -129,7 +129,7 @@ jobs:
           $MSG += "**Password:** ``phantom``" + $nl + $nl
           $MSG += "*Accept any certificate warnings.*" + $nl
           $MSG += "⏱ **Duration:** 1 Hour" + $nl + $nl
-          $MSG += "Debloated — Xbox, bloatware, telemetry all removed for faster performance." + $nl
+          $MSG += "Debloated -- Xbox, bloatware, telemetry all removed for faster performance." + $nl
           $MSG += "⚠️ Pinggy free = max 1 hour tunnel. After 1hr, run /vps again for a fresh session."
 
           $chanFile  = "$env:TEMP\chan.json"

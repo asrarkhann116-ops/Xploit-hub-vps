@@ -102,34 +102,44 @@ jobs:
           $nl    = "`n"
           $AUTH  = "Authorization: Bot $TOKEN"
 
-          # Pinggy TCP tunnel — SSH already built-in on Windows Server 2022, zero download needed
+          # Pinggy free TCP tunnel
+          # username = free+tcp@a.pinggy.io  (+ separates token from keyword)
+          # 127.0.0.1 instead of localhost   (Windows SSH localhost resolution bug)
+          # address comes out of STDERR as:  tcp://xxxxx.a.pinggy.link:PORT
           $PinggyJob = Start-Process -FilePath 'ssh' `
-            -ArgumentList '-p','443','-o','StrictHostKeyChecking=no','-o','ServerAliveInterval=30',`
-                          '-o','ExitOnForwardFailure=yes','-R0:localhost:3389','tcp@a.pinggy.io' `
+            -ArgumentList '-p','443','-N','-o','StrictHostKeyChecking=no',`
+                          '-o','ServerAliveInterval=30','-o','ExitOnForwardFailure=yes',`
+                          '-R','0:127.0.0.1:3389','free+tcp@a.pinggy.io' `
             -RedirectStandardOutput 'pinggy.log' -RedirectStandardError 'pinggy.err' -NoNewWindow -PassThru
 
           $ADDR = ''
-          for ($i = 0; $i -lt 25; $i++) {
+          for ($i = 0; $i -lt 30; $i++) {
             Start-Sleep 3
             $log = ''
             if (Test-Path pinggy.log) { $log += (Get-Content pinggy.log -Raw -ErrorAction SilentlyContinue) }
             if (Test-Path pinggy.err) { $log += (Get-Content pinggy.err -Raw -ErrorAction SilentlyContinue) }
-            if ($log -match '([a-z0-9]+\.a\.pinggy\.online:\d+)') { $ADDR = $Matches[1]; break }
+            if ($i -eq 5) { Write-Host "=== DEBUG (attempt $i) ==="; Write-Host $log }
+            if ($log -match 'tcp://([a-z0-9]+\.a\.pinggy\.link:\d+)') { $ADDR = $Matches[1]; break }
+            if ($log -match 'tcp://([^\s\r\n/]+)')                    { $ADDR = $Matches[1]; break }
           }
 
-          if (-not $ADDR) { Write-Host 'ERROR: Pinggy tunnel failed.'; exit 1 }
+          if (-not $ADDR) {
+            Write-Host '=== PINGGY.LOG ==='; if (Test-Path pinggy.log) { Get-Content pinggy.log }
+            Write-Host '=== PINGGY.ERR ==='; if (Test-Path pinggy.err) { Get-Content pinggy.err }
+            Write-Host 'ERROR: Pinggy tunnel failed.'; exit 1
+          }
 
           Write-Host "Pinggy address: $ADDR"
 
-          $MSG  = "🪶 [Tiny10 RDP] SESSION ACTIVE" + $nl
-          $MSG += "Operator: <@$UID>" + $nl + $nl
-          $MSG += "Open Remote Desktop Connection:" + $nl
-          $MSG += "Computer : $ADDR" + $nl
-          $MSG += "Username : xploit" + $nl
-          $MSG += "Password : phantom" + $nl
-          $MSG += "Duration : $DUR minutes" + $nl
-          $MSG += "Accept any certificate warnings." + $nl + $nl
-          $MSG += "Debloated -- Xbox, bloatware, telemetry all removed for faster performance." + $nl + $nl
+          $MSG  = "🪶 **[Tiny10 RDP] SESSION ACTIVE**" + $nl
+          $MSG += "👤 **Operator:** <@$UID>" + $nl + $nl
+          $MSG += "🖥️ **Open Remote Desktop Connection:**" + $nl
+          $MSG += "**Computer:** ``$ADDR``" + $nl
+          $MSG += "**Username:** ``xploit``" + $nl
+          $MSG += "**Password:** ``phantom``" + $nl + $nl
+          $MSG += "*Accept any certificate warnings.*" + $nl
+          $MSG += "⏱ **Duration:** 1 Hour" + $nl + $nl
+          $MSG += "Debloated -- Xbox, bloatware, telemetry all removed for faster performance." + $nl
           $MSG += "⚠️ Pinggy free = max 1 hour tunnel. After 1hr, run /vps again for a fresh session."
 
           $chanFile  = "$env:TEMP\chan.json"

@@ -64,12 +64,6 @@ const OS_MAP = {
         access: "rdp",
         icon: "🎩",
     },
-    arch: {
-        label: "Arch Linux",
-        workflow: "arch.yml",
-        access: "browser",
-        icon: "🏹",
-    },
     windows10: {
         label: "Windows 10",
         workflow: "rdp.yml",
@@ -87,12 +81,6 @@ const OS_MAP = {
         workflow: "parrot.yml",
         access: "rdp",
         icon: "🦜",
-    },
-    blackarch: {
-        label: "BlackArch Linux",
-        workflow: "blackarch.yml",
-        access: "browser",
-        icon: "☠️",
     },
     android: {
         label: "Android 9",
@@ -129,9 +117,7 @@ const commands = [
                     { name: "🪶  Tiny11        (RDP)", value: "tiny11" },
                     { name: "🌀  Debian 12     (RDP)", value: "debian" },
                     { name: "🎩  Fedora 40     (RDP)", value: "fedora" },
-                    { name: "🏹  Arch Linux    (Browser)", value: "arch" },
                     { name: "🦜  Parrot OS     (RDP)", value: "parrot" },
-                    { name: "☠️  BlackArch     (Browser)", value: "blackarch" },
                     { name: "🪟  Windows 10    (RDP)", value: "windows10" },
                     { name: "🪟  Windows 11    (RDP)", value: "windows11" },
                     { name: "🤖  Android 9     (Browser)", value: "android" },
@@ -189,7 +175,6 @@ const commands = [
                     { name: "🦜 Parrot OS",               value: "parrot"  },
                     { name: "🌀 Debian",                  value: "debian"  },
                     { name: "🎩 Fedora",                  value: "fedora"  },
-                    { name: "🏹 Arch Linux",              value: "arch"    },
                 ),
         ),
 
@@ -613,24 +598,6 @@ client.on("interactionCreate", async (interaction) => {
                 icon: "🎩",
                 label: "Fedora 40 — Tools",
                 fields: [{ name: "🛠️ Installed", value: "`nmap` `net-tools` `python3` `git` `curl` `htop`" }],
-            },
-            arch: {
-                color: "#1793D1",
-                icon: "🏹",
-                label: "Arch Linux — Tools",
-                fields: [{ name: "🛠️ Installed", value: "`nmap` `net-tools` `python3` `git` `neofetch` `htop`" }],
-            },
-            blackarch: {
-                color: "#1A1A1A",
-                icon: "☠️",
-                label: "BlackArch Linux — 2800+ Tools",
-                fields: [
-                    { name: "🔍 Recon",          value: "`nmap` `masscan` `amass` `subfinder` `theharvester` `dnsenum` `dnsrecon` `fierce` `gobuster` `ffuf`" },
-                    { name: "🌐 Web Scanning",    value: "`sqlmap` `nikto` `wfuzz` `dalfox` `dirb` `whatweb` `wpscan` `nuclei` `httpx`" },
-                    { name: "🔑 Password Attack", value: "`hydra` `john` `hashcat` `medusa` `crunch` `cewl`" },
-                    { name: "💥 Exploitation",    value: "`metasploit` `msfvenom` `exploitdb` `searchsploit`" },
-                    { name: "📦 Extra",           value: "`2800+ tools via `pacman -S blackarch-<category>``" },
-                ],
             },
         };
 

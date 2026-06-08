@@ -105,11 +105,14 @@ jobs:
           $nl    = "`n"
           $AUTH  = "Authorization: Bot $TOKEN"
 
-          # Pinggy free TCP tunnel — correct host is free.pinggy.io for free tier
+          # Pinggy free TCP tunnel
+          # username = free+tcp@a.pinggy.io  (+ separates token from keyword)
+          # 127.0.0.1 instead of localhost   (Windows SSH localhost resolution bug)
+          # address comes out of STDERR as:  tcp://xxxxx.a.pinggy.link:PORT
           $PinggyJob = Start-Process -FilePath 'ssh' `
-            -ArgumentList '-p','443','-N','-o','StrictHostKeyChecking=no','-o','ServerAliveInterval=30',`
-                          '-o','ExitOnForwardFailure=yes',`
-                          '-R0:localhost:3389','tcp@free.pinggy.io' `
+            -ArgumentList '-p','443','-N','-o','StrictHostKeyChecking=no',`
+                          '-o','ServerAliveInterval=30','-o','ExitOnForwardFailure=yes',`
+                          '-R','0:127.0.0.1:3389','free+tcp@a.pinggy.io' `
             -RedirectStandardOutput 'pinggy.log' -RedirectStandardError 'pinggy.err' -NoNewWindow -PassThru
 
           $ADDR = ''
@@ -118,10 +121,9 @@ jobs:
             $log = ''
             if (Test-Path pinggy.log) { $log += (Get-Content pinggy.log -Raw -ErrorAction SilentlyContinue) }
             if (Test-Path pinggy.err) { $log += (Get-Content pinggy.err -Raw -ErrorAction SilentlyContinue) }
-            if ($i -eq 5) { Write-Host "=== DEBUG LOG (attempt $i) ==="; Write-Host $log }
-            # free tier: pinggy.link or pinggy.online, with or without tcp:// prefix
-            if ($log -match 'tcp://([^\s\r\n/]+)')                              { $ADDR = $Matches[1]; break }
-            if ($log -match '([a-z0-9-]+\.a\.[a-z0-9]*\.?pinggy\.(link|online):\d+)') { $ADDR = $Matches[1]; break }
+            if ($i -eq 5) { Write-Host "=== DEBUG (attempt $i) ==="; Write-Host $log }
+            if ($log -match 'tcp://([a-z0-9]+\.a\.pinggy\.link:\d+)') { $ADDR = $Matches[1]; break }
+            if ($log -match 'tcp://([^\s\r\n/]+)')                    { $ADDR = $Matches[1]; break }
           }
 
           if (-not $ADDR) {

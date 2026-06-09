@@ -660,22 +660,13 @@ client.on("interactionCreate", async (interaction) => {
                 ephemeral: true,
             });
 
-        const PINGGY_OS = new Set(["tiny10", "tiny11"]);
-        const isPinggy = PINGGY_OS.has(osKey);
+        const duration = interaction.options.getString("duration");
 
-        const rawDuration = interaction.options.getString("duration");
-        const duration = isPinggy && parseInt(rawDuration) > 60 ? "60" : rawDuration;
-        const durationLabel = isPinggy
-            ? "1 Hour ⚠️ (Pinggy max)"
-            : `${duration} minutes`;
-
-        const accessHint = isPinggy
-            ? "🖥️ You'll get a **Pinggy address** like `xyz.a.pinggy.online:PORT` — open Remote Desktop Connection, User: `xploit`, Pass: `phantom`.\n⚠️ **Pinggy free tunnels expire after 1 hour.** Run `/vps` again after that."
-            : {
-                browser:
-                    "🌐 You'll get a **browser link** — open it and enter password `phantom`.",
-                rdp: "🖥️ You'll get a **bore.pub address** — open Remote Desktop Connection, User: `xploit`, Pass: `phantom`.",
-              }[osInfo.access];
+        const accessHint = {
+            browser:
+                "🌐 You'll get a **browser link** — open it and enter password `phantom`.",
+            rdp: "🖥️ You'll get a **bore.pub address** — open Remote Desktop Connection, User: `xploit`, Pass: `phantom`.",
+        }[osInfo.access];
 
         try {
             db.sessions.push({
@@ -699,7 +690,7 @@ client.on("interactionCreate", async (interaction) => {
                         .addFields(
                             {
                                 name: "⏱ Duration",
-                                value: `\`${durationLabel}\``,
+                                value: `\`${duration} minutes\``,
                                 inline: true,
                             },
                             {

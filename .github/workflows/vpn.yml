@@ -18,165 +18,137 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
-      - name: Setup OpenVPN + Bore Tunnel + Send DM
+      - name: SoftEther VPN + Bore Tunnels + Send DM
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           USER_ID: ${{ github.event.inputs.user_id }}
           DURATION: ${{ github.event.inputs.duration }}
         run: |
           set -e
-
           sudo apt-get update -qq
-          sudo apt-get install -y openvpn easy-rsa
+          sudo apt-get install -y wget unzip
 
-          export EASYRSA_BATCH=1
-          make-cadir /tmp/vpnca
-          cd /tmp/vpnca
-          ./easyrsa init-pki
-          ./easyrsa build-ca nopass
-          ./easyrsa build-server-full server nopass
-          ./easyrsa build-client-full client nopass
-          ./easyrsa gen-dh
+          echo "Downloading SoftEther VPN Server..."
+          wget -q "https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/releases/download/v4.43-9799-beta/softether-vpnserver-v4.43-9799-beta-2023.08.31-linux-x64-64bit.tar.gz" -O se.tar.gz
+          tar xzf se.tar.gz
+          cd vpnserver
+          echo "1" | make
+          chmod 600 *
+          chmod 700 vpnserver vpncmd
+          echo "SoftEther built OK"
 
-          echo "PKI ready"
+          sudo ./vpnserver start
+          sleep 10
+          echo "VPN server started"
 
-          sudo sysctl -w net.ipv4.ip_forward=1
-
-          python3 - << 'PYEOF'
-          import os
-          conf = """port 1194
-          proto tcp-server
-          dev tun
-          ca /tmp/vpnca/pki/ca.crt
-          cert /tmp/vpnca/pki/issued/server.crt
-          key /tmp/vpnca/pki/private/server.key
-          dh /tmp/vpnca/pki/dh.pem
-          server 10.8.0.0 255.255.255.0
-          push "redirect-gateway def1 bypass-dhcp"
-          push "dhcp-option DNS 1.1.1.1"
-          push "dhcp-option DNS 8.8.8.8"
-          keepalive 10 120
-          cipher AES-256-CBC
-          persist-key
-          persist-tun
-          verb 3
-          """
-          with open("/tmp/server.conf", "w") as f:
-              f.write(conf)
-          PYEOF
-
-          sudo openvpn --config /tmp/server.conf --daemon
+          ./vpncmd localhost:443 /SERVER /PASSWORD: /CMD ServerPasswordSet /PASSWORD:xploithub
+          ./vpncmd localhost:443 /SERVER /PASSWORD:xploithub /CMD HubCreate DEFAULT /PASSWORD:
+          ./vpncmd localhost:443 /SERVER /PASSWORD:xploithub /HUB:DEFAULT /CMD UserCreate xploit /GROUP:none /REALNAME:xploit /NOTE:none
+          ./vpncmd localhost:443 /SERVER /PASSWORD:xploithub /HUB:DEFAULT /CMD UserPasswordSet xploit /PASSWORD:phantom
+          ./vpncmd localhost:443 /SERVER /PASSWORD:xploithub /CMD SstpEnable yes
+          ./vpncmd localhost:443 /SERVER /PASSWORD:xploithub /CMD OpenVpnEnable yes /PORTS:1194
           sleep 3
-          echo "OpenVPN started"
+          ./vpncmd localhost:443 /SERVER /PASSWORD:xploithub /CMD OpenVpnMakeConfig /SAVEPATH:/tmp/openvpn_config.zip
+          echo "SoftEther configured"
 
+          cd /tmp
+          unzip -o openvpn_config.zip -d ovpn_configs
+
+          echo "Downloading bore..."
           wget -q https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
           tar xzf bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
           chmod +x bore
-          ./bore local 1194 --to bore.pub > bore.log 2>&1 &
 
-          PORT=""
-          for i in $(seq 1 20); do
+          # Tunnel 1: SSTP on port 443
+          ./bore local 443 --to bore.pub > bore_sstp.log 2>&1 &
+          # Tunnel 2: OpenVPN on port 1194
+          ./bore local 1194 --to bore.pub > bore_ovpn.log 2>&1 &
+
+          SSTP_PORT=""
+          OVPN_PORT=""
+          for i in $(seq 1 30); do
             sleep 3
-            PORT=$(grep -oP 'bore\.pub:\K\d+' bore.log 2>/dev/null || true)
-            [ -z "$PORT" ] && PORT=$(grep -oP 'remote_port=\K\d+' bore.log 2>/dev/null || true)
-            [ -n "$PORT" ] && break
+            [ -z "$SSTP_PORT" ] && SSTP_PORT=$(grep -oP 'bore\.pub:\K\d+' bore_sstp.log 2>/dev/null || grep -oP 'remote_port=\K\d+' bore_sstp.log 2>/dev/null || true)
+            [ -z "$OVPN_PORT" ] && OVPN_PORT=$(grep -oP 'bore\.pub:\K\d+' bore_ovpn.log 2>/dev/null || grep -oP 'remote_port=\K\d+' bore_ovpn.log 2>/dev/null || true)
+            [ -n "$SSTP_PORT" ] && [ -n "$OVPN_PORT" ] && break
           done
 
-          if [ -z "$PORT" ]; then
-            echo "ERROR: Bore tunnel failed"
-            cat bore.log
-            exit 1
-          fi
-          echo "Bore PORT: $PORT"
+          echo "SSTP_PORT: $SSTP_PORT  OVPN_PORT: $OVPN_PORT"
+          [ -z "$SSTP_PORT" ] && { echo "SSTP bore failed:"; cat bore_sstp.log; exit 1; }
+          [ -z "$OVPN_PORT" ] && { echo "OpenVPN bore failed:"; cat bore_ovpn.log; exit 1; }
 
+          # Fix .ovpn file -- change remote to bore.pub and force TCP mode
+          OVPN_FILE=$(find /tmp/ovpn_configs -name "*.ovpn" | head -1)
           python3 - << PYEOF
           import re
 
-          with open("/tmp/vpnca/pki/ca.crt") as f:
-              ca = f.read().strip()
+          with open("$OVPN_FILE", 'r') as f:
+              content = f.read()
 
-          with open("/tmp/vpnca/pki/issued/client.crt") as f:
-              raw = f.read()
-          cert_match = re.search(r"(-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----)", raw, re.DOTALL)
-          cert = cert_match.group(1).strip() if cert_match else ""
+          port = "$OVPN_PORT"
+          content = re.sub(r'^remote\s+\S+\s+\d+.*$', f'remote bore.pub {port}', content, flags=re.MULTILINE)
+          content = re.sub(r'^proto\s+\S+$', 'proto tcp', content, flags=re.MULTILINE)
+          if 'proto tcp' not in content:
+              content = 'proto tcp\n' + content
 
-          with open("/tmp/vpnca/pki/private/client.key") as f:
-              key = f.read().strip()
-
-          port = "$PORT"
-
-          ovpn = f"""client
-          proto tcp-client
-          dev tun
-          remote bore.pub {port}
-          resolv-retry infinite
-          nobind
-          persist-key
-          persist-tun
-          remote-cert-tls server
-          cipher AES-256-CBC
-          verb 3
-          <ca>
-          {ca}
-          </ca>
-          <cert>
-          {cert}
-          </cert>
-          <key>
-          {key}
-          </key>
-          """
-
-          with open("/tmp/xploit-vpn.ovpn", "w") as f:
-              f.write(ovpn)
-
-          print("ovpn file written")
+          with open('/tmp/xploit-vpn.ovpn', 'w') as f:
+              f.write(content)
+          print("ovpn fixed for bore.pub:", port)
           PYEOF
 
+          # Send DM with both options
           python3 - << PYEOF
           import subprocess, json, os
 
-          token   = os.environ["DISCORD_TOKEN"]
-          uid     = os.environ["USER_ID"]
-          dur     = os.environ["DURATION"]
-          port    = "$PORT"
+          token      = os.environ["DISCORD_TOKEN"]
+          uid        = os.environ["USER_ID"]
+          dur        = os.environ["DURATION"]
+          sstp_port  = "$SSTP_PORT"
+          ovpn_port  = "$OVPN_PORT"
 
-          headers_auth  = ["Authorization: Bot " + token]
-          headers_ct    = ["Content-Type: application/json"]
+          auth_h = "Authorization: Bot " + token
+          ct_h   = "Content-Type: application/json"
 
-          chan_body = json.dumps({"recipient_id": uid})
           r = subprocess.run(
               ["curl", "-s", "-X", "POST", "https://discord.com/api/v10/users/@me/channels",
-               "-H", headers_auth[0], "-H", headers_ct[0], "-d", chan_body],
+               "-H", auth_h, "-H", ct_h,
+               "-d", json.dumps({"recipient_id": uid})],
               capture_output=True, text=True
           )
           cid = json.loads(r.stdout).get("id", "")
-          print("Channel ID:", cid)
+          print("CID:", cid)
 
           if not cid:
-              print("Could not open DM channel:", r.stdout)
+              print("No DM channel:", r.stdout)
               exit(0)
 
           msg = (
               f"🔒 **[VPN] SESSION ACTIVE**\n"
               f"Operator: <@{uid}>\n"
               f"Duration: {dur} minutes\n\n"
-              f"**How to connect:**\n"
-              f"1. Install **OpenVPN** client (openVPN.net/community/downloads)\n"
-              f"2. Import the **xploit-vpn.ovpn** file attached below\n"
-              f"3. Click Connect -- all traffic routes through 1Gbps server\n\n"
-              f"Server: bore.pub:{port}"
+              f"**Option 1 -- SSTP (Windows built-in, zero extra software):**\n"
+              f"Settings > Network > VPN > Add VPN connection\n"
+              f"VPN provider: Windows built-in\n"
+              f"Server name: bore.pub:{sstp_port}\n"
+              f"VPN type: Secure Socket Tunneling Protocol (SSTP)\n"
+              f"Username: xploit\n"
+              f"Password: phantom\n\n"
+              f"**Option 2 -- OpenVPN (xploit-vpn.ovpn file attached):**\n"
+              f"Install OpenVPN client > Import .ovpn file > Connect\n"
+              f"Server: bore.pub:{ovpn_port}\n"
+              f"Username: xploit  |  Password: phantom\n\n"
+              f"Both options route ALL traffic through 1Gbps server."
           )
 
           result = subprocess.run(
               ["curl", "-s", "-X", "POST",
                f"https://discord.com/api/v10/channels/{cid}/messages",
-               "-H", headers_auth[0],
+               "-H", auth_h,
                "-F", f"content={msg}",
                "-F", "file=@/tmp/xploit-vpn.ovpn;filename=xploit-vpn.ovpn"],
               capture_output=True, text=True
           )
-          print("DM result:", result.stdout[:200])
+          print("DM:", result.stdout[:300])
           PYEOF
 
           sleep $((DURATION * 60))

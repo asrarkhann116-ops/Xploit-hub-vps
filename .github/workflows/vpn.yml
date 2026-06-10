@@ -41,16 +41,43 @@ jobs:
           sleep 10
           echo "VPN server started"
 
-          ./vpncmd localhost:443 /SERVER /PASSWORD: /CMD ServerPasswordSet /PASSWORD:xploithub
-          ./vpncmd localhost:443 /SERVER /PASSWORD:xploithub /CMD HubCreate DEFAULT /PASSWORD:
-          ./vpncmd localhost:443 /SERVER /PASSWORD:xploithub /HUB:DEFAULT /CMD UserCreate xploit /GROUP:none /REALNAME:xploit /NOTE:none
-          ./vpncmd localhost:443 /SERVER /PASSWORD:xploithub /HUB:DEFAULT /CMD UserPasswordSet xploit /PASSWORD:phantom
+          # ---- Step 1: Set admin password via /IN: file (interactive, no /PASSWORD: inline) ----
+          cat > /tmp/s1.txt << 'CMDEOF'
+          ServerPasswordSet
+          xploithub
+          xploithub
+          exit
+          CMDEOF
+          sed -i 's/^[[:space:]]*//' /tmp/s1.txt
+          ./vpncmd localhost:443 /SERVER /PASSWORD: /IN:/tmp/s1.txt
+          echo "Admin password set"
+
+          # ---- Step 2: SoftEther default hub is called VPN -- create only if missing ----
+          ./vpncmd localhost:443 /SERVER /PASSWORD:xploithub /CMD HubCreate VPN /PASSWORD: 2>/dev/null || true
+          echo "Hub ready"
+
+          # ---- Step 3: Create user + set password in VPN hub ----
+          # UserCreate accepts inline params, UserPasswordSet needs interactive input
+          ./vpncmd localhost:443 /SERVER /PASSWORD:xploithub /HUB:VPN /CMD UserCreate xploit /GROUP:none /REALNAME:xploit /NOTE:none 2>/dev/null || true
+
+          cat > /tmp/s2.txt << 'CMDEOF'
+          UserPasswordSet xploit
+          phantom
+          phantom
+          exit
+          CMDEOF
+          sed -i 's/^[[:space:]]*//' /tmp/s2.txt
+          ./vpncmd localhost:443 /SERVER /PASSWORD:xploithub /HUB:VPN /IN:/tmp/s2.txt
+          echo "User xploit created"
+
+          # ---- Step 4: Enable SSTP + OpenVPN (TCP 1194) ----
           ./vpncmd localhost:443 /SERVER /PASSWORD:xploithub /CMD SstpEnable yes
           ./vpncmd localhost:443 /SERVER /PASSWORD:xploithub /CMD OpenVpnEnable yes /PORTS:1194
-          sleep 3
+          sleep 2
           ./vpncmd localhost:443 /SERVER /PASSWORD:xploithub /CMD OpenVpnMakeConfig /SAVEPATH:/tmp/openvpn_config.zip
           echo "SoftEther configured"
 
+          # ---- Step 5: Extract + fix .ovpn for bore.pub (force TCP) ----
           cd /tmp
           unzip -o openvpn_config.zip -d ovpn_configs
 
@@ -77,8 +104,10 @@ jobs:
           [ -z "$SSTP_PORT" ] && { echo "SSTP bore failed:"; cat bore_sstp.log; exit 1; }
           [ -z "$OVPN_PORT" ] && { echo "OpenVPN bore failed:"; cat bore_ovpn.log; exit 1; }
 
-          # Fix .ovpn file -- change remote to bore.pub and force TCP mode
+          # Fix .ovpn -- set bore.pub remote + force TCP (bore only does TCP)
           OVPN_FILE=$(find /tmp/ovpn_configs -name "*.ovpn" | head -1)
+          echo "Using ovpn: $OVPN_FILE"
+
           python3 - << PYEOF
           import re
 
@@ -88,15 +117,15 @@ jobs:
           port = "$OVPN_PORT"
           content = re.sub(r'^remote\s+\S+\s+\d+.*$', f'remote bore.pub {port}', content, flags=re.MULTILINE)
           content = re.sub(r'^proto\s+\S+$', 'proto tcp', content, flags=re.MULTILINE)
-          if 'proto tcp' not in content:
+          if '\nproto tcp' not in content and not content.startswith('proto tcp'):
               content = 'proto tcp\n' + content
 
           with open('/tmp/xploit-vpn.ovpn', 'w') as f:
               f.write(content)
-          print("ovpn fixed for bore.pub:", port)
+          print("ovpn fixed, bore port:", port)
           PYEOF
 
-          # Send DM with both options
+          # ---- Step 6: Send DM ----
           python3 - << PYEOF
           import subprocess, json, os
 

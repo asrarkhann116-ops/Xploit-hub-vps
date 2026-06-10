@@ -713,7 +713,7 @@ client.on("interactionCreate", async (interaction) => {
         const accessHint = {
             browser: "🌐 You'll get a **browser link** — open it and enter password `phantom`.",
             rdp:     "🖥️ You'll get a **bore.pub address** — open Remote Desktop Connection, User: `xploit`, Pass: `phantom`.",
-            vpn:     "🔒 You'll get an **OpenVPN config file** (`.ovpn`) in your DMs — import it in the OpenVPN client and connect. All traffic routes through the 1Gbps server.",
+            vpn:     "🔒 You'll get **2 options** in your DMs: **SSTP** (Windows built-in VPN, zero extra software) + **OpenVPN** `.ovpn` file. Both route all traffic through the 1Gbps server.",
             proxy:   "🌐 You'll get **SOCKS5 proxy credentials** in your DMs — works in any browser (FoxyProxy) or system proxy settings.",
         }[osInfo.access];
 

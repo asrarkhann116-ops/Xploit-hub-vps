@@ -88,6 +88,18 @@ const OS_MAP = {
         access: "browser",
         icon: "🤖",
     },
+    vpn: {
+        label: "VPN Server",
+        workflow: "vpn.yml",
+        access: "vpn",
+        icon: "🔒",
+    },
+    proxy: {
+        label: "SOCKS5 Proxy",
+        workflow: "proxy.yml",
+        access: "proxy",
+        icon: "🌐",
+    },
 };
 
 const WALLPAPER_MAP = {
@@ -175,6 +187,42 @@ const commands = [
                     { name: "🦜 Parrot OS",               value: "parrot"  },
                     { name: "🌀 Debian",                  value: "debian"  },
                     { name: "🎩 Fedora",                  value: "fedora"  },
+                ),
+        ),
+
+    new SlashCommandBuilder()
+        .setName("vpn")
+        .setDescription("Launch a free VPN — 1Gbps bore.pub tunnel, up to 6 hours")
+        .addStringOption((o) =>
+            o
+                .setName("duration")
+                .setDescription("How long?")
+                .setRequired(true)
+                .addChoices(
+                    { name: "15 Minutes", value: "15" },
+                    { name: "30 Minutes", value: "30" },
+                    { name: "1 Hour",     value: "60" },
+                    { name: "2 Hours",    value: "120" },
+                    { name: "4 Hours",    value: "240" },
+                    { name: "6 Hours",    value: "360" },
+                ),
+        ),
+
+    new SlashCommandBuilder()
+        .setName("proxy")
+        .setDescription("Launch a free SOCKS5 proxy — 1Gbps bore.pub tunnel, up to 6 hours")
+        .addStringOption((o) =>
+            o
+                .setName("duration")
+                .setDescription("How long?")
+                .setRequired(true)
+                .addChoices(
+                    { name: "15 Minutes", value: "15" },
+                    { name: "30 Minutes", value: "30" },
+                    { name: "1 Hour",     value: "60" },
+                    { name: "2 Hours",    value: "120" },
+                    { name: "4 Hours",    value: "240" },
+                    { name: "6 Hours",    value: "360" },
                 ),
         ),
 
@@ -663,9 +711,10 @@ client.on("interactionCreate", async (interaction) => {
         const duration = interaction.options.getString("duration");
 
         const accessHint = {
-            browser:
-                "🌐 You'll get a **browser link** — open it and enter password `phantom`.",
-            rdp: "🖥️ You'll get a **bore.pub address** — open Remote Desktop Connection, User: `xploit`, Pass: `phantom`.",
+            browser: "🌐 You'll get a **browser link** — open it and enter password `phantom`.",
+            rdp:     "🖥️ You'll get a **bore.pub address** — open Remote Desktop Connection, User: `xploit`, Pass: `phantom`.",
+            vpn:     "🔒 You'll get an **OpenVPN config file** (`.ovpn`) in your DMs — import it in the OpenVPN client and connect. All traffic routes through the 1Gbps server.",
+            proxy:   "🌐 You'll get **SOCKS5 proxy credentials** in your DMs — works in any browser (FoxyProxy) or system proxy settings.",
         }[osInfo.access];
 
         try {
@@ -723,6 +772,101 @@ client.on("interactionCreate", async (interaction) => {
             db.sessions = db.sessions.filter(
                 (s) => s.userId !== interaction.user.id,
             );
+            saveDB();
+            updateLiveMessage();
+            await interaction.followUp({
+                content: `❌ **Launch Failed:** GitHub Actions dispatch error. Try again shortly.`,
+                ephemeral: true,
+            });
+        }
+    }
+    // /vpn and /proxy
+    if (commandName === "vpn" || commandName === "proxy") {
+        if (interaction.channelId !== VPS_CHANNEL_ID)
+            return interaction.reply({
+                content: `⚠️ Use this command in <#${VPS_CHANNEL_ID}> only.`,
+                ephemeral: true,
+            });
+        if (interaction.guildId !== XPLOIT_HUB_ID)
+            return interaction.reply({
+                content: "❌ Exclusive to **Xploit HUB**.",
+                ephemeral: true,
+            });
+
+        cleanExpiredSessions();
+
+        const isSuper = SUPER_ADMINS.has(interaction.user.id);
+
+        if (!isSuper && getUserSession(interaction.user.id))
+            return interaction.reply({
+                content: `🚫 You already have an active session. Use \`/vps-status\` to check it.`,
+                ephemeral: true,
+            });
+
+        const cd = getCooldown(interaction.user.id);
+        if (!isSuper && cd > 0)
+            return interaction.reply({
+                content: `⏳ **Cooldown:** Wait \`${Math.ceil(cd / 60000)} minutes\` before your next session.`,
+                ephemeral: true,
+            });
+
+        if (db.sessions.length >= MAX_SESSIONS)
+            return interaction.reply({
+                content: `🚫 All **${MAX_SESSIONS}** slots are full.`,
+                ephemeral: true,
+            });
+
+        const osKey    = commandName;
+        const osInfo   = OS_MAP[osKey];
+        const duration = interaction.options.getString("duration");
+
+        const hints = {
+            vpn:   "🔒 You'll get an **OpenVPN `.ovpn` file** in your DMs — import it in the OpenVPN client and connect. All traffic routes through the 1Gbps server.",
+            proxy: "🌐 You'll get **SOCKS5 proxy credentials** in your DMs — configure in any browser (FoxyProxy) or system proxy settings.",
+        };
+
+        try {
+            db.sessions.push({
+                userId:    interaction.user.id,
+                userName:  interaction.user.username,
+                os:        osKey,
+                startedAt: Date.now(),
+                expiresAt: Date.now() + (parseInt(duration) + 5) * 60000,
+            });
+            saveDB();
+            updateLiveMessage();
+
+            await interaction.reply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle(`${osInfo.icon} ${osInfo.label} Launching...`)
+                        .setColor("#00FF41")
+                        .setDescription(
+                            `Server is spinning up.\n**Check your DMs in 1–2 minutes** for connection details.\n\n${hints[osKey]}`,
+                        )
+                        .addFields(
+                            { name: "⏱ Duration", value: `\`${duration} minutes\``, inline: true },
+                            { name: "🔢 Slot",     value: `\`${db.sessions.length} / ${MAX_SESSIONS}\``, inline: true },
+                        )
+                        .setFooter({ text: "Use /vps-status to check your session anytime." }),
+                ],
+                ephemeral: true,
+            });
+
+            await octokit.actions.createWorkflowDispatch({
+                owner:       REPO_OWNER,
+                repo:        REPO_NAME,
+                workflow_id: osInfo.workflow,
+                ref:         "main",
+                inputs: {
+                    user_id:   interaction.user.id,
+                    user_name: interaction.user.username,
+                    duration:  duration,
+                },
+            });
+        } catch (error) {
+            console.error("Dispatch error:", error);
+            db.sessions = db.sessions.filter((s) => s.userId !== interaction.user.id);
             saveDB();
             updateLiveMessage();
             await interaction.followUp({

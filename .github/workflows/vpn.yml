@@ -1,0 +1,182 @@
+name: Xploit-HUB-VPN
+on:
+  workflow_dispatch:
+    inputs:
+      user_id:
+        description: 'Discord User ID'
+        required: true
+      user_name:
+        description: 'Discord User Name'
+        required: true
+      duration:
+        description: 'Duration in minutes'
+        required: true
+        default: '60'
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
+    steps:
+      - name: Setup OpenVPN + Bore Tunnel + Send DM
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          USER_ID: ${{ github.event.inputs.user_id }}
+          DURATION: ${{ github.event.inputs.duration }}
+        run: |
+          set -e
+
+          sudo apt-get update -qq
+          sudo apt-get install -y openvpn easy-rsa
+
+          export EASYRSA_BATCH=1
+          make-cadir /tmp/vpnca
+          cd /tmp/vpnca
+          ./easyrsa init-pki
+          ./easyrsa build-ca nopass
+          ./easyrsa build-server-full server nopass
+          ./easyrsa build-client-full client nopass
+          ./easyrsa gen-dh
+
+          echo "PKI ready"
+
+          sudo sysctl -w net.ipv4.ip_forward=1
+
+          python3 - << 'PYEOF'
+          import os
+          conf = """port 1194
+          proto tcp-server
+          dev tun
+          ca /tmp/vpnca/pki/ca.crt
+          cert /tmp/vpnca/pki/issued/server.crt
+          key /tmp/vpnca/pki/private/server.key
+          dh /tmp/vpnca/pki/dh.pem
+          server 10.8.0.0 255.255.255.0
+          push "redirect-gateway def1 bypass-dhcp"
+          push "dhcp-option DNS 1.1.1.1"
+          push "dhcp-option DNS 8.8.8.8"
+          keepalive 10 120
+          cipher AES-256-CBC
+          persist-key
+          persist-tun
+          verb 3
+          """
+          with open("/tmp/server.conf", "w") as f:
+              f.write(conf)
+          PYEOF
+
+          sudo openvpn --config /tmp/server.conf --daemon
+          sleep 3
+          echo "OpenVPN started"
+
+          wget -q https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
+          tar xzf bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
+          chmod +x bore
+          ./bore local 1194 --to bore.pub > bore.log 2>&1 &
+
+          PORT=""
+          for i in $(seq 1 20); do
+            sleep 3
+            PORT=$(grep -oP 'bore\.pub:\K\d+' bore.log 2>/dev/null || true)
+            [ -z "$PORT" ] && PORT=$(grep -oP 'remote_port=\K\d+' bore.log 2>/dev/null || true)
+            [ -n "$PORT" ] && break
+          done
+
+          if [ -z "$PORT" ]; then
+            echo "ERROR: Bore tunnel failed"
+            cat bore.log
+            exit 1
+          fi
+          echo "Bore PORT: $PORT"
+
+          python3 - << PYEOF
+          import re
+
+          with open("/tmp/vpnca/pki/ca.crt") as f:
+              ca = f.read().strip()
+
+          with open("/tmp/vpnca/pki/issued/client.crt") as f:
+              raw = f.read()
+          cert_match = re.search(r"(-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----)", raw, re.DOTALL)
+          cert = cert_match.group(1).strip() if cert_match else ""
+
+          with open("/tmp/vpnca/pki/private/client.key") as f:
+              key = f.read().strip()
+
+          port = "$PORT"
+
+          ovpn = f"""client
+          proto tcp-client
+          dev tun
+          remote bore.pub {port}
+          resolv-retry infinite
+          nobind
+          persist-key
+          persist-tun
+          remote-cert-tls server
+          cipher AES-256-CBC
+          verb 3
+          <ca>
+          {ca}
+          </ca>
+          <cert>
+          {cert}
+          </cert>
+          <key>
+          {key}
+          </key>
+          """
+
+          with open("/tmp/xploit-vpn.ovpn", "w") as f:
+              f.write(ovpn)
+
+          print("ovpn file written")
+          PYEOF
+
+          python3 - << PYEOF
+          import subprocess, json, os
+
+          token   = os.environ["DISCORD_TOKEN"]
+          uid     = os.environ["USER_ID"]
+          dur     = os.environ["DURATION"]
+          port    = "$PORT"
+
+          headers_auth  = ["Authorization: Bot " + token]
+          headers_ct    = ["Content-Type: application/json"]
+
+          chan_body = json.dumps({"recipient_id": uid})
+          r = subprocess.run(
+              ["curl", "-s", "-X", "POST", "https://discord.com/api/v10/users/@me/channels",
+               "-H", headers_auth[0], "-H", headers_ct[0], "-d", chan_body],
+              capture_output=True, text=True
+          )
+          cid = json.loads(r.stdout).get("id", "")
+          print("Channel ID:", cid)
+
+          if not cid:
+              print("Could not open DM channel:", r.stdout)
+              exit(0)
+
+          msg = (
+              f"🔒 **[VPN] SESSION ACTIVE**\n"
+              f"Operator: <@{uid}>\n"
+              f"Duration: {dur} minutes\n\n"
+              f"**How to connect:**\n"
+              f"1. Install **OpenVPN** client (openVPN.net/community/downloads)\n"
+              f"2. Import the **xploit-vpn.ovpn** file attached below\n"
+              f"3. Click Connect -- all traffic routes through 1Gbps server\n\n"
+              f"Server: bore.pub:{port}"
+          )
+
+          result = subprocess.run(
+              ["curl", "-s", "-X", "POST",
+               f"https://discord.com/api/v10/channels/{cid}/messages",
+               "-H", headers_auth[0],
+               "-F", f"content={msg}",
+               "-F", "file=@/tmp/xploit-vpn.ovpn;filename=xploit-vpn.ovpn"],
+              capture_output=True, text=True
+          )
+          print("DM result:", result.stdout[:200])
+          PYEOF
+
+          sleep $((DURATION * 60))

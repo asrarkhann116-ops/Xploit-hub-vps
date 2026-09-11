@@ -103,6 +103,27 @@ jobs:
               except Exception as err:
                   print(f"[-] Tor reload warning: {err}")
 
+          def extract_path(obj):
+              """Recursively extract valid filepath from arbitrary Gradio result structures"""
+              if isinstance(obj, str) and os.path.exists(obj):
+                  return obj
+              if isinstance(obj, dict):
+                  for k in ("path", "image", "video", "url", "name"):
+                      if k in obj and obj[k]:
+                          res = extract_path(obj[k])
+                          if res:
+                              return res
+                  for val in obj.values():
+                      res = extract_path(val)
+                      if res:
+                          return res
+              if isinstance(obj, (list, tuple)):
+                  for item in obj:
+                      res = extract_path(item)
+                      if res:
+                          return res
+              return None
+
           if action == "zimage":
               # Multi-Space Mirror Pool with automatic fallback + Tor anti-ban proxy rotation
               spaces_pool = [
@@ -336,14 +357,14 @@ jobs:
                       api_name="/generate_video"
                   )
                   
-                  # result[0] or result[1] contains generated video filepath
-                  video_res = result[0] if isinstance(result, (tuple, list)) else result
-                  if isinstance(video_res, dict):
-                      video_res = video_res.get("video", {}).get("path", video_res.get("path"))
-                  if video_res and os.path.exists(video_res):
+                  # Extract generated video filepath
+                  vid_path = extract_path(result)
+                  if vid_path and os.path.exists(vid_path):
                       import shutil
-                      shutil.copyfile(video_res, video_output_path)
+                      shutil.copyfile(vid_path, video_output_path)
                       print("[+] Wan 2.2 Video Generation Complete!")
+                  else:
+                      print(f"[-] Wan-Video path not resolved from result: {result}")
               except Exception as err:
                   print(f"[-] Wan-Video generation error: {err}")
                   renew_tor_ip()
@@ -405,12 +426,12 @@ jobs:
                       api_name="/_generate_wrapper"
                   )
                   
-                  img_res = result[0] if isinstance(result, (tuple, list)) else result
-                  if isinstance(img_res, dict):
-                      img_res = img_res.get("path")
-                  if img_res and os.path.exists(img_res):
-                      Image.open(img_res).save(output_path, format="PNG")
+                  img_path = extract_path(result)
+                  if img_path and os.path.exists(img_path):
+                      Image.open(img_path).save(output_path, format="PNG")
                       print("[+] Krea-2 Ultra-Realistic Generation Complete!")
+                  else:
+                      print(f"[-] Krea-2 image path not resolved from result: {result}")
               except Exception as err:
                   print(f"[-] Krea-2 generation error: {err}")
                   renew_tor_ip()

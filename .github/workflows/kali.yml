@@ -22,6 +22,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
+      - name: 🚀 Turbocharge Virtual RAM (16GB NVMe Swapfile)
+        run: |
+          sudo swapoff -a || true
+          sudo fallocate -l 16G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=16384
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          echo "✅ 16GB NVMe Swap Active! Total Memory: ~23GB"
+          free -h
+
       - name: Pull Kali Linux + Install xRDP
         run: |
           docker pull kalilinux/kali-rolling

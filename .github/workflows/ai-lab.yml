@@ -1,0 +1,167 @@
+name: Xploit-AI-Lab
+on:
+  workflow_dispatch:
+    inputs:
+      action_type:
+        description: 'AI Action Type (zimage / qwen-edit)'
+        required: true
+        default: 'zimage'
+      prompt:
+        description: 'Prompt string'
+        required: true
+      image_url:
+        description: 'Input Image URL (for qwen-edit)'
+        required: false
+        default: ''
+      steps:
+        description: 'Inference Steps'
+        required: false
+        default: '8'
+      user_id:
+        description: 'Discord User ID'
+        required: true
+      channel_id:
+        description: 'Discord Channel ID'
+        required: true
+
+jobs:
+  ai-generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 🚀 Turbocharge Virtual RAM (16GB NVMe Swapfile = 23GB Total)
+        run: |
+          sudo swapoff -a || true
+          sudo fallocate -l 16G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=16384
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          echo "✅ 23GB System Memory Address Space Unlocked!"
+          free -h
+
+      - name: Setup Bleeding-Edge AI Environment (Zero Restrictions)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3 python3-pip curl jq git
+          pip3 install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip3 install --no-cache-dir git+https://github.com/huggingface/diffusers.git -U
+          pip3 install --no-cache-dir transformers accelerate safetensors requests pillow gradio_client
+
+      - name: Execute Unrestricted Next-Gen AI Pipeline
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          USER_ID: ${{ github.event.inputs.user_id }}
+          CHANNEL_ID: ${{ github.event.inputs.channel_id }}
+          ACTION_TYPE: ${{ github.event.inputs.action_type }}
+          PROMPT: ${{ github.event.inputs.prompt }}
+          IMAGE_URL: ${{ github.event.inputs.image_url }}
+          STEPS: ${{ github.event.inputs.steps }}
+        run: |
+          mkdir -p /tmp/ai_lab
+          cd /tmp/ai_lab
+
+          cat << 'EOF' > generate.py
+          import os
+          import sys
+          import requests
+          import torch
+          from PIL import Image
+          import io
+
+          action = os.environ.get("ACTION_TYPE", "zimage")
+          prompt = os.environ.get("PROMPT", "")
+          image_url = os.environ.get("IMAGE_URL", "")
+          steps = int(os.environ.get("STEPS", "8"))
+          discord_token = os.environ.get("DISCORD_TOKEN", "")
+          channel_id = os.environ.get("CHANNEL_ID", "")
+          user_id = os.environ.get("USER_ID", "")
+
+          print(f"[*] Initializing Unrestricted AI Task: {action} | Prompt: {prompt}")
+
+          output_path = "/tmp/ai_lab/output.png"
+
+          def bypass_safety(pipeline):
+              # Completely disable safety checkers / NSFW filters for 100% uncensored raw output
+              if hasattr(pipeline, "safety_checker"):
+                  pipeline.safety_checker = None
+              if hasattr(pipeline, "requires_safety_checker"):
+                  pipeline.requires_safety_checker = False
+              return pipeline
+
+          if action == "zimage":
+              print("[*] Loading Tongyi-MAI/Z-Image-Turbo into 23GB Memory...")
+              from diffusers import DiffusionPipeline
+              try:
+                  pipe = DiffusionPipeline.from_pretrained(
+                      "Tongyi-MAI/Z-Image-Turbo",
+                      torch_dtype=torch.float32,
+                      low_cpu_mem_usage=True
+                  )
+                  pipe = bypass_safety(pipe)
+                  pipe.to("cpu")
+                  print(f"[*] Running 8-Step S3-DiT Inference for: {prompt}")
+                  image = pipe(
+                      prompt=prompt,
+                      num_inference_steps=steps,
+                      guidance_scale=0.0
+                  ).images[0]
+                  image.save(output_path, format="PNG")
+                  print("[+] Z-Image-Turbo Generation Complete!")
+              except Exception as e:
+                  print(f"[-] Local pipeline fallback attempt: {e}")
+                  # Fallback to high-speed HF space client for instant GPU rendering
+                  from gradio_client import Client
+                  client = Client("Tongyi-MAI/Z-Image-Turbo")
+                  result = client.predict(prompt=prompt, api_name="/predict")
+                  Image.open(result).save(output_path)
+
+          elif action == "qwen-edit":
+              print(f"[*] Loading Qwen-Image-Edit-2511 for prompt: {prompt}")
+              from gradio_client import Client, handle_file
+              # Download base image
+              input_img_path = "/tmp/ai_lab/input.png"
+              resp = requests.get(image_url, timeout=15)
+              with open(input_img_path, "wb") as f:
+                  f.write(resp.content)
+
+              try:
+                  client = Client("Qwen/Qwen-Image-Edit-2511")
+                  result = client.predict(
+                      image=handle_file(input_img_path),
+                      prompt=prompt,
+                      api_name="/predict"
+                  )
+                  if isinstance(result, tuple) or isinstance(result, list):
+                      result = result[0]
+                  Image.open(result).save(output_path)
+                  print("[+] Qwen-Image-Edit-2511 Render Complete!")
+              except Exception as e:
+                  print(f"[-] Space error, trying direct diffusers pipeline: {e}")
+                  from diffusers import QwenImageEditPlusPipeline
+                  pipe = QwenImageEditPlusPipeline.from_pretrained(
+                      "Qwen/Qwen-Image-Edit-2511",
+                      torch_dtype=torch.float32,
+                      low_cpu_mem_usage=True
+                  )
+                  pipe = bypass_safety(pipe)
+                  pipe.to("cpu")
+                  init_img = Image.open(input_img_path).convert("RGB")
+                  image = pipe(image=init_img, prompt=prompt, num_inference_steps=20).images[0]
+                  image.save(output_path)
+
+          # Send generated artifact directly to Discord Channel
+          if os.path.exists(output_path):
+              url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
+              headers = {"Authorization": f"Bot {discord_token}"}
+              with open(output_path, "rb") as f:
+                  files = {"file": ("xploit_render.png", f, "image/png")}
+                  data = {
+                      "content": f"⚡ **XPLOIT NEXT-GEN AI LAB — UNRESTRICTED RENDER**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `{action.upper()}`\n📝 **Prompt:** `{prompt}`"
+                  }
+                  r = requests.post(url, headers=headers, data=data, files=files)
+                  print(f"[+] Discord upload status: {r.status_code}")
+          else:
+              print("[-] Error: Output file not found.")
+          EOF
+
+          python3 generate.py

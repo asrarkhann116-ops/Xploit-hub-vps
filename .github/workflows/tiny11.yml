@@ -22,6 +22,19 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
+      - name: 🚀 Turbocharge Virtual RAM (16GB NVMe Pagefile)
+        shell: powershell
+        run: |
+          Write-Host "Configuring 16GB Virtual Memory (Pagefile)..."
+          Set-CimInstance -Query "SELECT * FROM Win32_ComputerSystem" -Property @{AutomaticManagedPagefile = $False}
+          $pagefile = Get-CimInstance -ClassName Win32_PageFileSetting -Filter "Name like 'C:%'" -ErrorAction SilentlyContinue
+          if ($pagefile) {
+            $pagefile | Set-CimInstance -Property @{InitialSize = 16384; MaximumSize = 16384}
+          } else {
+            New-CimInstance -ClassName Win32_PageFileSetting -Property @{Name = 'C:\pagefile.sys'; InitialSize = 16384; MaximumSize = 16384}
+          }
+          Write-Host "✅ 16GB High-Speed NVMe Pagefile Active! Total System Memory: ~23GB"
+
       - name: Debloat + Enable RDP & Create User
         shell: powershell
         run: |

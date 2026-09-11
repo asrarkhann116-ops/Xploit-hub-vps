@@ -23,6 +23,14 @@ on:
       channel_id:
         description: 'Discord Channel ID'
         required: true
+      duration:
+        description: 'Duration (seconds for video or music)'
+        required: false
+        default: ''
+      seed:
+        description: 'Seed (-1 for random)'
+        required: false
+        default: '-1'
 
 jobs:
   ai-generate:
@@ -58,6 +66,8 @@ jobs:
           PROMPT: ${{ github.event.inputs.prompt }}
           IMAGE_URL: ${{ github.event.inputs.image_url }}
           STEPS: ${{ github.event.inputs.steps }}
+          DURATION: ${{ github.event.inputs.duration }}
+          SEED: ${{ github.event.inputs.seed }}
         run: |
           mkdir -p /tmp/ai_lab
           cd /tmp/ai_lab
@@ -74,11 +84,13 @@ jobs:
           prompt = os.environ.get("PROMPT", "")
           image_url = os.environ.get("IMAGE_URL", "")
           steps = int(os.environ.get("STEPS", "8"))
+          duration_val = os.environ.get("DURATION", "").strip()
+          seed_val = os.environ.get("SEED", "").strip()
           discord_token = os.environ.get("DISCORD_TOKEN", "")
           channel_id = os.environ.get("CHANNEL_ID", "")
           user_id = os.environ.get("USER_ID", "")
 
-          print(f"[*] Initializing Unrestricted AI Task: {action} | Prompt: {prompt}")
+          print(f"[*] Initializing Unrestricted AI Task: {action} | Prompt: {prompt} | Duration: {duration_val or 'default'} | Seed: {seed_val or 'random'}")
 
           output_path = "/tmp/ai_lab/output.png"
 
@@ -136,6 +148,26 @@ jobs:
               from gradio_client import Client
               success = False
 
+              # Parse aspect ratio and seed options
+              ratio = image_url.strip() if image_url else "1:1"
+              if ratio == "16:9":
+                  img_w, img_h = 1344, 768
+              elif ratio == "9:16":
+                  img_w, img_h = 768, 1344
+              else:
+                  img_w, img_h = 1024, 1024
+
+              if seed_val and seed_val != "-1":
+                  try:
+                      rand_seed = int(seed_val)
+                      is_random_seed = False
+                  except:
+                      rand_seed = random.randint(1, 9999999)
+                      is_random_seed = True
+              else:
+                  rand_seed = random.randint(1, 9999999)
+                  is_random_seed = True
+
               for space_name in spaces_pool:
                   # Vector 1: Randomize browser user-agent & session fingerprint
                   fake_chrome_ver = random.randint(115, 131)
@@ -144,18 +176,17 @@ jobs:
                   print(f"[*] Connecting to GPU Space Mirror: [{space_name}]...")
                   try:
                       client = Client(space_name)
-                      rand_seed = random.randint(1, 9999999)
-                      print(f"[*] Dispatching prompt to {space_name}: {prompt} | Steps: {steps}")
+                      print(f"[*] Dispatching prompt to {space_name}: {prompt} | Steps: {steps} | Ratio: {ratio} | Seed: {rand_seed}")
                       
                       # Try specific endpoint or generic predict
                       try:
                           result = client.predict(
                               prompt=prompt,
-                              height=1024,
-                              width=1024,
+                              height=img_h,
+                              width=img_w,
                               num_inference_steps=steps,
                               seed=rand_seed,
-                              randomize_seed=True,
+                              randomize_seed=is_random_seed,
                               num_images=1,
                               api_name="/generate_image"
                           )
@@ -469,11 +500,28 @@ jobs:
               import random
               try:
                   client = Client("ravenrose996688/Krea-2-Turbo_I2I")
-                  rand_seed = random.randint(1, 9999999)
+                  ratio = image_url.strip() if image_url else "1:1"
+                  if ratio == "16:9":
+                      krea_w, krea_h = 1280, 720
+                  elif ratio == "9:16":
+                      krea_w, krea_h = 720, 1280
+                  else:
+                      krea_w, krea_h = 1024, 1024
+
+                  if seed_val and seed_val != "-1":
+                      try:
+                          krea_seed = int(seed_val)
+                          krea_rand = False
+                      except:
+                          krea_seed = random.randint(1, 9999999)
+                          krea_rand = True
+                  else:
+                      krea_seed = random.randint(1, 9999999)
+                      krea_rand = True
                   
                   # Professional photorealism prompt tuning
                   tuned_prompt = f"{prompt}, raw photo, 8k uhd, dslr, soft natural lighting, high quality, film grain, Fujifilm XT4"
-                  print(f"[*] Dispatching tuned prompt: {tuned_prompt}")
+                  print(f"[*] Dispatching tuned prompt: {tuned_prompt} | Ratio: {ratio} | Seed: {krea_seed}")
                   
                   result = client.predict(
                       param_0="text2image",
@@ -481,8 +529,8 @@ jobs:
                       param_2=None,
                       param_3=None,
                       param_4=None,
-                      param_5=1024,
-                      param_6=1024,
+                      param_5=krea_w,
+                      param_6=krea_h,
                       param_7=1.4,
                       param_8=768,
                       param_9=1.0,
@@ -491,8 +539,8 @@ jobs:
                       param_12=1.0,
                       param_13="euler",
                       param_14="beta",
-                      param_15=rand_seed,
-                      param_16=True,
+                      param_15=krea_seed,
+                      param_16=krea_rand,
                       param_17=0,
                       param_18="pornmasterKrea2_v2TurboInt8.safetensors",
                       param_19=None,
@@ -536,21 +584,35 @@ jobs:
               import random
               video_output_path = "/tmp/ai_lab/output.mp4"
               output_path = video_output_path
-              rand_seed = random.randint(1, 999999)
+              
+              try:
+                  video_duration = float(duration_val) if duration_val else 3.5
+              except:
+                  video_duration = 3.5
+
+              if seed_val and seed_val != "-1":
+                  try:
+                      rand_seed = int(seed_val)
+                  except:
+                      rand_seed = random.randint(1, 999999)
+              else:
+                  rand_seed = random.randint(1, 999999)
+
+              print(f"[*] MiniMax-H3 Configuration: Duration={video_duration}s | Steps={steps} | Seed={rand_seed}")
               mm_success = False
 
               # Space 1: Pepe104 (Uncensored + Turbo LoRA)
               if not mm_success:
                   try:
-                      print("[*] Trying Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED...")
+                      print(f"[*] Trying Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED (Duration={video_duration}s, Steps={steps})...")
                       client = Client("Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED")
                       result = client.predict(
                           prompt=f"{prompt}, photorealistic 8k, cinematic lighting, high fidelity, ultra detailed",
                           image_path=None,
                           last_image_path=None,
                           canvas="960x544 \u00b7 16:9 fast",
-                          duration=3.5,
-                          steps=4,
+                          duration=video_duration,
+                          steps=steps if (4 <= steps <= 12) else 4,
                           seed=rand_seed,
                           upsample=False,
                           use_lora=True,
@@ -570,15 +632,15 @@ jobs:
               # Space 2: mrfakename (ultra-fast + Turbo LoRA hyper-fidelity)
               if not mm_success:
                   try:
-                      print("[*] Trying mrfakename/minimax-h3-ultra-fast (Turbo LoRA)...")
+                      print(f"[*] Trying mrfakename/minimax-h3-ultra-fast (Duration={video_duration}s, Turbo LoRA)...")
                       client = Client("mrfakename/minimax-h3-ultra-fast")
                       result = client.predict(
                           prompt=f"{prompt}, photorealistic 8k, cinematic lighting, high fidelity, ultra detailed",
                           image_path=None,
                           last_image_path=None,
                           canvas="960x544 \u00b7 16:9 fast",
-                          duration=3.5,
-                          steps=4,
+                          duration=video_duration,
+                          steps=steps if (4 <= steps <= 12) else 4,
                           seed=rand_seed,
                           upsample=False,
                           acceleration="Exact",
@@ -610,7 +672,7 @@ jobs:
                           image_path=None,
                           last_image_path=None,
                           canvas="960x544 \u00b7 16:9 fast",
-                          duration=5.0,
+                          duration=video_duration,
                           steps=28,
                           seed=rand_seed,
                           upsample=False,
@@ -630,7 +692,24 @@ jobs:
               audio_output_path = "/tmp/ai_lab/output.mp3"
               output_path = audio_output_path
               is_instrumental = image_url.lower() in ("true", "1", "yes") if image_url else False
-              rand_seed = random.randint(1, 9999999)
+              
+              try:
+                  music_duration = int(float(duration_val)) if duration_val else 60
+              except:
+                  music_duration = 60
+
+              if seed_val and seed_val != "-1":
+                  try:
+                      rand_seed = int(seed_val)
+                      is_rand_seed = False
+                  except:
+                      rand_seed = random.randint(1, 9999999)
+                      is_rand_seed = True
+              else:
+                  rand_seed = random.randint(1, 9999999)
+                  is_rand_seed = True
+
+              print(f"[*] MiniMax-Music3 Config: Duration={music_duration}s | Instrumental={is_instrumental} | Seed={rand_seed}")
               music_success = False
 
               try:
@@ -647,12 +726,12 @@ jobs:
                       "vocals": "",
                       "arrangement": ""
                   }
-                  print(f"[*] Generating song (instrumental={is_instrumental}): {prompt}...")
+                  print(f"[*] Generating song (duration={music_duration}s, instrumental={is_instrumental}): {prompt}...")
                   result = client.predict(
                       state=state_payload,
-                      duration=60,
+                      duration=music_duration,
                       seed=rand_seed,
-                      randomize_seed=True,
+                      randomize_seed=is_rand_seed,
                       headroom=0,
                       steps=30,
                       guidance=1.7,

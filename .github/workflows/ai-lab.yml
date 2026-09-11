@@ -286,7 +286,7 @@ jobs:
                       extras_condition_only=True,
                       pad_to_canvas=True,
                       vae_tiling=False,
-                      resolution_multiple="32",
+                      resolution_multiple=32,
                       vae_ref_megapixels=0.0,
                       decoder_vae="wan2x",
                       keep_decoder_2x=True,
@@ -1371,6 +1371,69 @@ jobs:
 
               seed_line = f"\n🎲 **Seed:** `{final_seed}`" if final_seed is not None else ""
 
+              def upload_external(file_path):
+                  """Upload large files (>8MB) to ultra-fast free file hosts with direct Discord embedding"""
+                  # 1. Catbox.moe (Up to 200MB, permanent, instant Discord image/video unfurl)
+                  try:
+                      with open(file_path, "rb") as f_up:
+                          r_cb = requests.post(
+                              "https://catbox.moe/user/api.php",
+                              data={"reqtype": "fileupload"},
+                              files={"fileToUpload": f_up},
+                              timeout=45
+                          )
+                          if r_cb.status_code == 200 and r_cb.text.strip().startswith("http"):
+                              direct_url = r_cb.text.strip()
+                              print(f"[+] Successfully hosted on Catbox: {direct_url}")
+                              return direct_url
+                  except Exception as e_cb:
+                      print(f"[-] Catbox host failed: {e_cb}")
+
+                  # 2. Litterbox (Up to 1GB, 72 hours retention)
+                  try:
+                      with open(file_path, "rb") as f_lb:
+                          r_lb = requests.post(
+                              "https://litterbox.catbox.moe/resources/internals/api.php",
+                              data={"reqtype": "fileupload", "time": "72h"},
+                              files={"fileToUpload": f_lb},
+                              timeout=45
+                          )
+                          if r_lb.status_code == 200 and r_lb.text.strip().startswith("http"):
+                              direct_url = r_lb.text.strip()
+                              print(f"[+] Successfully hosted on Litterbox: {direct_url}")
+                              return direct_url
+                  except Exception as e_lb:
+                      print(f"[-] Litterbox host failed: {e_lb}")
+
+                  # 3. Tmpfiles.org (Direct download link fallback)
+                  try:
+                      with open(file_path, "rb") as f_tmp:
+                          r_tmp = requests.post(
+                              "https://tmpfiles.org/api/v1/upload",
+                              files={"file": f_tmp},
+                              timeout=45
+                          )
+                          if r_tmp.status_code == 200:
+                              json_res = r_tmp.json()
+                              t_url = json_res.get("data", {}).get("url", "")
+                              if t_url:
+                                  direct_url = t_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
+                                  print(f"[+] Successfully hosted on Tmpfiles: {direct_url}")
+                                  return direct_url
+                  except Exception as e_tmp:
+                      print(f"[-] Tmpfiles host failed: {e_tmp}")
+
+                  return None
+
+              file_size = os.path.getsize(output_path)
+              file_size_mb = file_size / (1024 * 1024)
+              external_link = None
+
+              # Discord bot upload limit is 8MB (without Nitro/Server Boost level 2)
+              if file_size >= 8 * 1024 * 1024:
+                  print(f"[*] Output size ({file_size_mb:.2f}MB) exceeds Discord 8MB limit. Uploading to high-speed external mirror...")
+                  external_link = upload_external(output_path)
+
               with open(output_path, "rb") as f:
                   file_bytes = f.read()
 
@@ -1379,10 +1442,26 @@ jobs:
                       dm_warning = "\n⚠️ *Note: Your Direct Messages (DMs) are disabled in server privacy settings, so output was delivered here.*" if is_dm_fail else ""
                       content = f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()}**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `{action.upper()}`\n📝 **Input:** `{prompt}`{seed_line}{dm_warning}"
                       dest_url = f"https://discord.com/api/v10/channels/{dest_id}/messages"
-                      files = {"file": (filename, file_bytes, mimetype)}
-                      data = {"content": content}
-                      r = requests.post(dest_url, headers=headers, data=data, files=files, timeout=30)
-                      print(f"[+] Discord upload to {dest_name} ({dest_id}) status: {r.status_code}")
+
+                      if external_link:
+                          content += f"\n\n📦 **High-Resolution / 4K Direct Link ({file_size_mb:.2f}MB):**\n🔗 {external_link}"
+                          r = requests.post(dest_url, headers=headers, json={"content": content}, timeout=30)
+                          print(f"[+] Discord external link message to {dest_name} ({dest_id}) status: {r.status_code}")
+                      else:
+                          files = {"file": (filename, file_bytes, mimetype)}
+                          data = {"content": content}
+                          r = requests.post(dest_url, headers=headers, data=data, files=files, timeout=30)
+                          print(f"[+] Discord upload to {dest_name} ({dest_id}) status: {r.status_code}")
+
+                          # If Discord still rejected with 413 Payload Too Large, upload to external mirror and send link
+                          if r.status_code == 413:
+                              print(f"[-] Discord 413 Payload Too Large on {dest_name}. Triggering external upload fallback...")
+                              if not external_link:
+                                  external_link = upload_external(output_path)
+                              if external_link:
+                                  content += f"\n\n📦 **High-Resolution / 4K Direct Link ({file_size_mb:.2f}MB):**\n🔗 {external_link}"
+                                  r_retry = requests.post(dest_url, headers=headers, json={"content": content}, timeout=30)
+                                  print(f"[+] Discord retry link message to {dest_name} ({dest_id}) status: {r_retry.status_code}")
                   except Exception as e_dest:
                       print(f"[-] Error uploading to {dest_name} ({dest_id}): {e_dest}")
           else:

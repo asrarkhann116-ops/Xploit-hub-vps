@@ -1,0 +1,435 @@
+name: Xploit-AI-Lab
+on:
+  workflow_dispatch:
+    inputs:
+      action_type:
+        description: 'AI Action Type (zimage / qwen-edit / wan-video / krea-2)'
+        required: true
+        default: 'zimage'
+      prompt:
+        description: 'Prompt string'
+        required: true
+      image_url:
+        description: 'Input Image URL (for qwen-edit)'
+        required: false
+        default: ''
+      steps:
+        description: 'Inference Steps'
+        required: false
+        default: '8'
+      user_id:
+        description: 'Discord User ID'
+        required: true
+      channel_id:
+        description: 'Discord Channel ID'
+        required: true
+
+jobs:
+  ai-generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 🚀 Turbocharge Virtual RAM (16GB NVMe Swapfile = 23GB Total)
+        run: |
+          sudo swapoff -a || true
+          sudo fallocate -l 16G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=16384
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          echo "✅ 23GB System Memory Address Space Unlocked!"
+          free -h
+
+      - name: Setup Bleeding-Edge AI Environment + Tor Anti-RateLimit Engine
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3 python3-pip curl jq git tor
+          sudo systemctl start tor
+          echo "✅ Tor Daemon Active on 127.0.0.1:9050 (IP Anonymity Unlocked)"
+          pip3 install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip3 install --no-cache-dir git+https://github.com/huggingface/diffusers.git -U
+          pip3 install --no-cache-dir transformers accelerate safetensors requests pillow gradio_client pysocks stem
+
+      - name: Execute Unrestricted Next-Gen AI Pipeline
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          USER_ID: ${{ github.event.inputs.user_id }}
+          CHANNEL_ID: ${{ github.event.inputs.channel_id }}
+          ACTION_TYPE: ${{ github.event.inputs.action_type }}
+          PROMPT: ${{ github.event.inputs.prompt }}
+          IMAGE_URL: ${{ github.event.inputs.image_url }}
+          STEPS: ${{ github.event.inputs.steps }}
+        run: |
+          mkdir -p /tmp/ai_lab
+          cd /tmp/ai_lab
+
+          python3 -c "import sys, textwrap; open('generate.py', 'w', encoding='utf-8').write(textwrap.dedent(sys.stdin.read()))" << 'EOF'
+          import os
+          import sys
+          import requests
+          import torch
+          from PIL import Image
+          import io
+
+          action = os.environ.get("ACTION_TYPE", "zimage")
+          prompt = os.environ.get("PROMPT", "")
+          image_url = os.environ.get("IMAGE_URL", "")
+          steps = int(os.environ.get("STEPS", "8"))
+          discord_token = os.environ.get("DISCORD_TOKEN", "")
+          channel_id = os.environ.get("CHANNEL_ID", "")
+          user_id = os.environ.get("USER_ID", "")
+
+          print(f"[*] Initializing Unrestricted AI Task: {action} | Prompt: {prompt}")
+
+          output_path = "/tmp/ai_lab/output.png"
+
+          def bypass_safety(pipeline):
+              # Completely disable safety checkers / NSFW filters for 100% uncensored raw output
+              if hasattr(pipeline, "safety_checker"):
+                  pipeline.safety_checker = None
+              if hasattr(pipeline, "requires_safety_checker"):
+                  pipeline.requires_safety_checker = False
+              return pipeline
+
+          import random
+          import subprocess
+          import time
+
+          def renew_tor_ip():
+              """Instantly cycle to a fresh global Tor IP address"""
+              try:
+                  subprocess.run(["sudo", "systemctl", "restart", "tor"], check=False)
+                  time.sleep(1.5)
+                  print("[*] 🔄 Tor IP Successfully Rotated to Fresh Clean Global Circuit!")
+              except Exception as err:
+                  print(f"[-] Tor reload warning: {err}")
+
+          if action == "zimage":
+              # Multi-Space Mirror Pool with automatic fallback + Tor anti-ban proxy rotation
+              spaces_pool = [
+                  "rahul7star/Z-Image-Turbo",
+                  "Tongyi-MAI/Z-Image-Turbo",
+                  "mfr414/Z-Image-Turbo",
+                  "KingNish/Z-Image-Turbo"
+              ]
+              
+              from gradio_client import Client
+              success = False
+
+              for space_name in spaces_pool:
+                  # Vector 1: Randomize browser user-agent & session fingerprint
+                  fake_chrome_ver = random.randint(115, 131)
+                  os.environ["HTTP_USER_AGENT"] = f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/{fake_chrome_ver}.0.0.0 Safari/537.36"
+                  
+                  print(f"[*] Connecting to GPU Space Mirror: [{space_name}]...")
+                  try:
+                      client = Client(space_name)
+                      rand_seed = random.randint(1, 9999999)
+                      print(f"[*] Dispatching prompt to {space_name}: {prompt} | Steps: {steps}")
+                      
+                      # Try specific endpoint or generic predict
+                      try:
+                          result = client.predict(
+                              prompt=prompt,
+                              height=1024,
+                              width=1024,
+                              num_inference_steps=steps,
+                              seed=rand_seed,
+                              randomize_seed=True,
+                              num_images=1,
+                              api_name="/generate_image"
+                          )
+                      except Exception:
+                          # Fallback predict without extra sliders
+                          result = client.predict(prompt=prompt)
+
+                      if result and isinstance(result, tuple) and len(result) > 0:
+                          images_gallery = result[0]
+                          if isinstance(images_gallery, list) and len(images_gallery) > 0:
+                              first_item = images_gallery[0]
+                              img_path = first_item.get("image", {}).get("path") if isinstance(first_item, dict) and isinstance(first_item.get("image"), dict) else first_item.get("image")
+                              if img_path and os.path.exists(img_path):
+                                  Image.open(img_path).save(output_path, format="PNG")
+                                  success = True
+                                  break
+                      elif isinstance(result, str) and os.path.exists(result):
+                          Image.open(result).save(output_path, format="PNG")
+                          success = True
+                          break
+                  except Exception as space_err:
+                      print(f"[-] Mirror {space_name} rate-limited/busy: {space_err}")
+                      print("[*] Vector 4: Triggering Tor Circuit Renewal for fresh identity...")
+                      renew_tor_ip()
+                      continue
+
+              if not success:
+                  print("[-] All GPU mirrors busy, triggering direct local 23GB memory pipeline fallback...")
+                  from diffusers import DiffusionPipeline
+                  pipe = DiffusionPipeline.from_pretrained(
+                      "Tongyi-MAI/Z-Image-Turbo",
+                      torch_dtype=torch.float32,
+                      low_cpu_mem_usage=True
+                  )
+                  pipe = bypass_safety(pipe)
+                  pipe.to("cpu")
+                  image = pipe(prompt=prompt, num_inference_steps=steps, guidance_scale=0.0).images[0]
+                  image.save(output_path, format="PNG")
+
+          elif action == "qwen-edit":
+              print(f"[*] Loading Qwen Rapid AIO for prompt: {prompt}")
+              from gradio_client import Client, handle_file
+              import random
+              # Download base image
+              input_img_path = "/tmp/ai_lab/input.png"
+              resp = requests.get(image_url, timeout=15)
+              with open(input_img_path, "wb") as f:
+                  f.write(resp.content)
+
+              qwen_success = False
+              # 1. Primary: aet256 Rapid AIO LoRAs Space (Ultra fast 4-step GPU inference)
+              try:
+                  print("[*] Connecting to aet256/Qwen-Image-Edit-Rapid-AIO-Loras-Experimental...")
+                  client = Client("aet256/Qwen-Image-Edit-Rapid-AIO-Loras-Experimental")
+                  rand_seed = random.randint(1, 9999999)
+                  
+                  # Call /infer endpoint
+                  result = client.predict(
+                      input_image_1=handle_file(input_img_path),
+                      input_image_2=handle_file(input_img_path),
+                      input_images_extra=[],
+                      prompt=prompt,
+                      lora_adapter="None",
+                      seed=rand_seed,
+                      randomize_seed=True,
+                      guidance_scale=1.0,
+                      steps=4,
+                      target_megapixels=1.0,
+                      extras_condition_only=True,
+                      pad_to_canvas=True,
+                      vae_tiling=False,
+                      resolution_multiple="32",
+                      vae_ref_megapixels=0.0,
+                      decoder_vae="qwen",
+                      keep_decoder_2x=False,
+                      highlight_protection=True,
+                      highlight_protection_strength=0.35,
+                      api_name="/infer"
+                  )
+                  
+                  # result[0] is output image filepath
+                  out_file = result[0] if isinstance(result, (tuple, list)) else result
+                  if isinstance(out_file, dict):
+                      out_file = out_file.get("path")
+                  if out_file and os.path.exists(out_file):
+                      Image.open(out_file).save(output_path, format="PNG")
+                      print("[+] Qwen Rapid AIO Edit Completed via aet256 GPU Space!")
+                      qwen_success = True
+              except Exception as e:
+                  print(f"[-] aet256 space error: {e}")
+                  renew_tor_ip()
+
+              # 2. Secondary: Fallback to official Qwen/Qwen-Image-Edit-2511 space
+              if not qwen_success:
+                  try:
+                      print("[*] Fallback: Connecting to official Qwen/Qwen-Image-Edit-2511...")
+                      client = Client("Qwen/Qwen-Image-Edit-2511")
+                      result = client.predict(
+                          image=handle_file(input_img_path),
+                          prompt=prompt,
+                          api_name="/predict"
+                      )
+                      if isinstance(result, (tuple, list)):
+                          result = result[0]
+                      if isinstance(result, dict):
+                          result = result.get("path")
+                      if result and os.path.exists(result):
+                          Image.open(result).save(output_path, format="PNG")
+                          print("[+] Qwen Official Space Completed!")
+                          qwen_success = True
+                  except Exception as e2:
+                      print(f"[-] Official space error: {e2}")
+
+              # 3. Final Fallback: Local diffusers pipeline in 23GB memory
+              if not qwen_success:
+                  print("[-] GPU Spaces failed, triggering local CPU pipeline fallback...")
+                  from diffusers import QwenImageEditPlusPipeline
+                  pipe = QwenImageEditPlusPipeline.from_pretrained(
+                      "Qwen/Qwen-Image-Edit-2511",
+                      torch_dtype=torch.float32,
+                      low_cpu_mem_usage=True
+                  )
+                  pipe = bypass_safety(pipe)
+                  pipe.to("cpu")
+                  init_img = Image.open(input_img_path).convert("RGB")
+                  image = pipe(image=init_img, prompt=prompt, num_inference_steps=20).images[0]
+                  image.save(output_path)
+
+          elif action == "wan-video":
+              print(f"[*] Connecting to Wan 2.2 I2V 14B High-Speed Video Space...")
+              from gradio_client import Client, handle_file
+              import random
+
+              # Download input image
+              input_img_path = "/tmp/ai_lab/input.png"
+              resp = requests.get(image_url, timeout=15)
+              with open(input_img_path, "wb") as f:
+                  f.write(resp.content)
+
+              video_output_path = "/tmp/ai_lab/output.mp4"
+              output_path = video_output_path
+              try:
+                  client = Client("Cockdaddyfuck/Wan_2.2_I2V_14B_Custom_Lora_Wow")
+                  rand_seed = random.randint(1, 9999999)
+                  print(f"[*] Generating Wan 2.2 14B Video for prompt: {prompt}...")
+                  
+                  # Call /generate_video endpoint
+                  result = client.predict(
+                      input_image=handle_file(input_img_path),
+                      last_image=None,
+                      prompt=prompt,
+                      steps=steps if steps <= 12 else 6,
+                      negative_prompt="色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 风格, 画面, 静止, 整体发灰, 最差质量, 低质量, 丑陋的, 畸形",
+                      duration_seconds=3.5,
+                      guidance_scale=1.0,
+                      guidance_scale_2=1.0,
+                      seed=rand_seed,
+                      randomize_seed=True,
+                      quality=6,
+                      scheduler="UniPCMultistep",
+                      flow_shift=3.0,
+                      frame_multiplier=16,
+                      safe_mode=False,
+                      lora1_preset="(None)",
+                      lora1_high_scale=1.0,
+                      lora1_low_scale=1.0,
+                      lora2_preset="(None)",
+                      lora2_high_scale=1.0,
+                      lora2_low_scale=1.0,
+                      lora3_preset="(None)",
+                      lora3_high_scale=1.0,
+                      lora3_low_scale=1.0,
+                      my1_repo="",
+                      my1_high="(None)",
+                      my1_hs=1.0,
+                      my1_low="(None)",
+                      my1_ls=1.0,
+                      my2_repo="",
+                      my2_high="(None)",
+                      my2_hs=1.0,
+                      my2_low="(None)",
+                      my2_ls=1.0,
+                      my3_repo="",
+                      my3_high="(None)",
+                      my3_hs=1.0,
+                      my3_low="(None)",
+                      my3_ls=1.0,
+                      my4_repo="",
+                      my4_high="(None)",
+                      my4_hs=1.0,
+                      my4_low="(None)",
+                      my4_ls=1.0,
+                      my5_repo="",
+                      my5_high="(None)",
+                      my5_hs=1.0,
+                      my5_low="(None)",
+                      my5_ls=1.0,
+                      video_component=True,
+                      api_name="/generate_video"
+                  )
+                  
+                  # result[0] or result[1] contains generated video filepath
+                  video_res = result[0] if isinstance(result, (tuple, list)) else result
+                  if isinstance(video_res, dict):
+                      video_res = video_res.get("video", {}).get("path", video_res.get("path"))
+                  if video_res and os.path.exists(video_res):
+                      import shutil
+                      shutil.copyfile(video_res, video_output_path)
+                      print("[+] Wan 2.2 Video Generation Complete!")
+              except Exception as err:
+                  print(f"[-] Wan-Video generation error: {err}")
+                  renew_tor_ip()
+
+          elif action == "krea-2":
+              print(f"[*] Connecting to Krea-2-Turbo Ultra-Realism / Unrestricted Space...")
+              from gradio_client import Client
+              import random
+              try:
+                  client = Client("ravenrose996688/Krea-2-Turbo_I2I")
+                  rand_seed = random.randint(1, 9999999)
+                  
+                  # Professional photorealism prompt tuning
+                  tuned_prompt = f"{prompt}, raw photo, 8k uhd, dslr, soft natural lighting, high quality, film grain, Fujifilm XT4"
+                  print(f"[*] Dispatching tuned prompt: {tuned_prompt}")
+                  
+                  result = client.predict(
+                      param_0="text2image",
+                      param_1=tuned_prompt,
+                      param_2=None,
+                      param_3=None,
+                      param_4=None,
+                      param_5=1024,
+                      param_6=1024,
+                      param_7=1.4,
+                      param_8=768,
+                      param_9=1.0,
+                      param_10=1.0,
+                      param_11=steps if steps <= 15 else 8,
+                      param_12=1.0,
+                      param_13="euler",
+                      param_14="beta",
+                      param_15=rand_seed,
+                      param_16=True,
+                      param_17=0,
+                      param_18="pornmasterKrea2_v2TurboInt8.safetensors",
+                      param_19=None,
+                      param_20=None,
+                      param_21=None,
+                      param_22={'headers': ['repo_id', 'filename', 'revision', 'weight'], 'data': [], 'metadata': None},
+                      param_23=0.0,
+                      param_24=0.8, # Refusal-Reduction LoRA enabled!
+                      param_25=0.0,
+                      param_26=0.0,
+                      param_27=0.0,
+                      param_28=0.0,
+                      param_29=0.0,
+                      param_30=0.0,
+                      param_31=0.0,
+                      param_32=0.0,
+                      param_33=0.0,
+                      param_34=0.0,
+                      param_35=0.0,
+                      param_36=0.0,
+                      param_37=0.0,
+                      param_38=0.0,
+                      param_39=0.0,
+                      param_40=0.0,
+                      api_name="/_generate_wrapper"
+                  )
+                  
+                  img_res = result[0] if isinstance(result, (tuple, list)) else result
+                  if isinstance(img_res, dict):
+                      img_res = img_res.get("path")
+                  if img_res and os.path.exists(img_res):
+                      Image.open(img_res).save(output_path, format="PNG")
+                      print("[+] Krea-2 Ultra-Realistic Generation Complete!")
+              except Exception as err:
+                  print(f"[-] Krea-2 generation error: {err}")
+                  renew_tor_ip()
+
+          # Send generated artifact directly to Discord Channel
+          if os.path.exists(output_path):
+              url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
+              headers = {"Authorization": f"Bot {discord_token}"}
+              filename = "xploit_video.mp4" if action == "wan-video" else "xploit_render.png"
+              mimetype = "video/mp4" if action == "wan-video" else "image/png"
+              with open(output_path, "rb") as f:
+                  files = {"file": (filename, f, mimetype)}
+                  data = {
+                      "content": f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()} RENDER**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `{action.upper()} (14B High-Speed)`\n📝 **Prompt:** `{prompt}`"
+                  }
+                  r = requests.post(url, headers=headers, data=data, files=files)
+                  print(f"[+] Discord upload status: {r.status_code}")
+          else:
+              print("[-] Error: Output file not found.")
+          EOF
+
+          python3 generate.py

@@ -284,6 +284,40 @@ const commands = [
                 .setDescription("Edit instruction (e.g. 'add cyberpunk neon visor and glowing red katana')")
                 .setRequired(true),
         ),
+
+    new SlashCommandBuilder()
+        .setName("wan-video")
+        .setDescription("🎬 Wan 2.2 I2V 14B High-Speed AI Video Generation (Image-to-Video)")
+        .addAttachmentOption((o) =>
+            o
+                .setName("image")
+                .setDescription("Base image to bring to life into an animated video")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("prompt")
+                .setDescription("Motion prompt (e.g. 'cinematic camera pan, hair blowing in wind, 4k ultra quality')")
+                .setRequired(false),
+        ),
+
+    new SlashCommandBuilder()
+        .setName("krea")
+        .setDescription("🔞 Krea-2-Turbo Ultra-Realistic Photorealism & LoRA Engine (Zero Restrictions)")
+        .addStringOption((o) =>
+            o
+                .setName("prompt")
+                .setDescription("What to generate? (e.g. 'portrait of a cybernetic warrior in neon rain')")
+                .setRequired(true),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("steps")
+                .setDescription("Inference steps (default: 8)")
+                .setRequired(false)
+                .setMinValue(4)
+                .setMaxValue(15),
+        ),
 ].map((c) => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(
@@ -719,6 +753,101 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
             console.error("Qwen-Edit error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /wan-video
+    if (commandName === "wan-video") {
+        const attachment = interaction.options.getAttachment("image");
+        const prompt = interaction.options.getString("prompt") || "make this image come alive, cinematic motion, smooth animation, 4k ultra realistic";
+
+        if (!attachment || !attachment.url) {
+            return interaction.reply({ content: "❌ Please attach a source image to animate.", ephemeral: true });
+        }
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "wan-video",
+                    prompt: prompt,
+                    image_url: attachment.url,
+                    steps: "6",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🎬 Xploit AI Lab — Wan 2.2 I2V 14B Video Engine")
+                .setColor("#FF4500")
+                .setDescription("Dispatching to **Wan 2.2 14B Image-to-Video Cloud Cluster** with **Custom LoRA Support**!")
+                .addFields(
+                    { name: "🎥 Motion Prompt", value: `\`${prompt}\``, inline: false },
+                    { name: "🖼️ Base Frame", value: `[View Original](${attachment.url})`, inline: true },
+                    { name: "🧬 Model Size", value: "`Wan 2.2 14B High-Speed`", inline: true },
+                    { name: "⏱️ Format", value: "`MP4 Video (16 FPS HD)`", inline: true },
+                )
+                .setThumbnail(attachment.url)
+                .setFooter({ text: "Animated MP4 will be rendered and dropped in this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("Wan-Video error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /krea
+    if (commandName === "krea") {
+        const prompt = interaction.options.getString("prompt");
+        const steps = interaction.options.getInteger("steps") || 8;
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "krea-2",
+                    prompt: prompt,
+                    image_url: "",
+                    steps: String(steps),
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🔞 Xploit AI Lab — Krea-2-Turbo Ultra-Photorealism")
+                .setColor("#00FFFF")
+                .setDescription("Dispatching to **Krea-2-Turbo Multi-LoRA Engine** with **Refusal-Reduction & 8K DSLR Tuning**!")
+                .addFields(
+                    { name: "📝 Prompt", value: `\`${prompt}\``, inline: false },
+                    { name: "⚡ Inference Steps", value: `\`${steps} Steps\``, inline: true },
+                    { name: "🧬 Base Checkpoint", value: "`Krea2-v2Turbo Int8`", inline: true },
+                    { name: "🔓 Safety Level", value: "`Zero Censorship (LoRA Enabled)`", inline: true },
+                )
+                .setFooter({ text: "Ultra-realistic render will be dropped in this channel upon completion." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("Krea error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

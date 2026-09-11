@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'AI Action Type (zimage / qwen-edit / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice)'
+        description: 'AI Action Type (zimage / qwen-edit / wan-video / krea-2 / minimax-h3 / ltx-video / kokoro-tts / qwen-voice)'
         required: true
         default: 'zimage'
       prompt:
@@ -571,6 +571,77 @@ jobs:
                       print(f"[-] multimodalart error: {err}")
                       renew_tor_ip()
 
+          elif action == "ltx-video":
+              print(f"[*] Connecting to LTX 2.3 Studio Generative Video Space...")
+              from gradio_client import Client, handle_file
+              import random
+              video_output_path = "/tmp/ai_lab/output.mp4"
+              output_path = video_output_path
+              rand_seed = random.randint(1, 9999999)
+              ltx_success = False
+
+              try:
+                  client = Client("techfreakworm/LTX2.3-Studio")
+                  has_image = bool(image_url and image_url.startswith("http"))
+
+                  if has_image:
+                      print(f"[*] Dispatching LTX 2.3 Image-to-Video (I2V) for prompt: {prompt}...")
+                      input_img_path = "/tmp/ai_lab/input.png"
+                      resp = requests.get(image_url, timeout=15)
+                      with open(input_img_path, "wb") as f:
+                          f.write(resp.content)
+
+                      result = client.predict(
+                          param_0=prompt,
+                          param_1="Fast",
+                          param_2=768,
+                          param_3=512,
+                          param_4=4,
+                          param_5=24,
+                          param_6=rand_seed,
+                          param_7=True,
+                          param_8=handle_file(input_img_path),
+                          param_9="worst quality, low quality, blurry, distorted, watermark",
+                          param_10="none",
+                          param_11=1.0,
+                          param_12=True,
+                          param_13=0.8,
+                          param_14="none",
+                          param_15=0.8,
+                          param_16=False,
+                          api_name="/handler_1"
+                      )
+                  else:
+                      print(f"[*] Dispatching LTX 2.3 Text-to-Video (T2V) for prompt: {prompt}...")
+                      result = client.predict(
+                          param_0=prompt,
+                          param_1="Fast",
+                          param_2=768,
+                          param_3=512,
+                          param_4=4,
+                          param_5=24,
+                          param_6=rand_seed,
+                          param_7=True,
+                          param_8="worst quality, low quality, blurry, distorted, watermark",
+                          param_9="none",
+                          param_10=1.0,
+                          param_11=True,
+                          param_12=0.8,
+                          api_name="/handler"
+                      )
+
+                  vid_path = extract_path(result)
+                  if vid_path and os.path.exists(vid_path):
+                      import shutil
+                      shutil.copyfile(vid_path, video_output_path)
+                      print("[+] LTX 2.3 Studio Video Complete!")
+                      ltx_success = True
+                  else:
+                      print(f"[-] LTX path not resolved from result: {result}")
+              except Exception as e:
+                  print(f"[-] LTX 2.3 Studio error: {e}")
+                  renew_tor_ip()
+
           elif action == "kokoro-tts":
               print(f"[*] Generating Kokoro-TTS Hyper-Realistic Voice...")
               audio_output_path = "/tmp/ai_lab/output.mp3"
@@ -686,7 +757,7 @@ jobs:
           if os.path.exists(output_path):
               url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
               headers = {"Authorization": f"Bot {discord_token}"}
-              if action in ("wan-video", "minimax-h3"):
+              if action in ("wan-video", "minimax-h3", "ltx-video"):
                   filename = "xploit_video.mp4"
                   mimetype = "video/mp4"
               elif action in ("kokoro-tts", "qwen-voice"):

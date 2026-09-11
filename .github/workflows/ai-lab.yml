@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'AI Action Type (zimage / qwen-edit / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music)'
+        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music)'
         required: true
         default: 'zimage'
       prompt:
@@ -31,6 +31,10 @@ on:
         description: 'Seed (-1 for random)'
         required: false
         default: '-1'
+      style:
+        description: 'LoRA Style Adapter for Qwen Edit'
+        required: false
+        default: 'Ultrarealistic-Portrait'
 
 jobs:
   ai-generate:
@@ -68,6 +72,7 @@ jobs:
           STEPS: ${{ github.event.inputs.steps }}
           DURATION: ${{ github.event.inputs.duration }}
           SEED: ${{ github.event.inputs.seed }}
+          STYLE: ${{ github.event.inputs.style }}
         run: |
           mkdir -p /tmp/ai_lab
           cd /tmp/ai_lab
@@ -86,6 +91,7 @@ jobs:
           steps = int(os.environ.get("STEPS", "8"))
           duration_val = os.environ.get("DURATION", "").strip()
           seed_val = os.environ.get("SEED", "").strip()
+          style_val = os.environ.get("STYLE", "").strip()
           discord_token = os.environ.get("DISCORD_TOKEN", "")
           channel_id = os.environ.get("CHANNEL_ID", "")
           user_id = os.environ.get("USER_ID", "")
@@ -250,10 +256,19 @@ jobs:
                   is_rand_seed = True
               final_seed = edit_seed
 
+              # Determine LoRA style (defaults to Ultrarealistic-Portrait for clear 4K quality)
+              active_lora = style_val if style_val else "Ultrarealistic-Portrait"
+              prompt_lower = prompt.lower()
+              if any(k in prompt_lower for k in ["upscale", "4k", "clear", "unblur", "enhance", "hd"]):
+                  if not style_val or style_val == "Ultrarealistic-Portrait":
+                      active_lora = "Upscale2K"
+
+              print(f"[*] Qwen Edit Configuration: LoRA={active_lora} | Seed={final_seed} | 4K/2K High-Res Pipeline Enabled")
+
               qwen_success = False
-              # 1. Primary: aet256 Rapid AIO LoRAs Space (Ultra fast 4-step GPU inference)
+              # 1. Primary: aet256 Rapid AIO LoRAs Space (Ultra fast 4K/2K GPU inference)
               try:
-                  print("[*] Connecting to aet256/Qwen-Image-Edit-Rapid-AIO-Loras-Experimental...")
+                  print(f"[*] Connecting to aet256/Qwen-Image-Edit-Rapid-AIO-Loras-Experimental (LoRA: {active_lora})...")
                   client = Client("aet256/Qwen-Image-Edit-Rapid-AIO-Loras-Experimental")
                   
                   # Call /infer endpoint (resolution_multiple expects choice: '32', '56', '112')
@@ -262,21 +277,21 @@ jobs:
                       input_image_2=handle_file(input_img_path),
                       input_images_extra=[],
                       prompt=prompt,
-                      lora_adapter="None",
+                      lora_adapter=active_lora,
                       seed=edit_seed,
                       randomize_seed=is_rand_seed,
-                      guidance_scale=1.0,
-                      steps=4,
-                      target_megapixels=1.0,
+                      guidance_scale=1.5,
+                      steps=steps if steps else 6,
+                      target_megapixels=2.25,
                       extras_condition_only=True,
                       pad_to_canvas=True,
                       vae_tiling=False,
                       resolution_multiple="32",
                       vae_ref_megapixels=0.0,
-                      decoder_vae="qwen",
-                      keep_decoder_2x=False,
+                      decoder_vae="wan2x",
+                      keep_decoder_2x=True,
                       highlight_protection=True,
-                      highlight_protection_strength=0.35,
+                      highlight_protection_strength=0.30,
                       api_name="/infer"
                   )
                   
@@ -297,20 +312,20 @@ jobs:
                   print(f"[-] aet256 space error: {e}")
                   renew_tor_ip()
 
-              # 2. Secondary (Tried before Tertiary): Gameyguy/Qwen-Image-Edit-2511-Turbo-Lightning (Ultra-Fast 4-Step Turbo)
+              # 2. Secondary: Gameyguy/Qwen-Image-Edit-2511-Turbo-Lightning (Ultra-Fast 1280p Turbo)
               if not qwen_success:
                   try:
-                      print("[*] Trying Secondary (before Tertiary): Gameyguy/Qwen-Image-Edit-2511-Turbo-Lightning...")
+                      print("[*] Trying Secondary: Gameyguy/Qwen-Image-Edit-2511-Turbo-Lightning...")
                       client = Client("Gameyguy/Qwen-Image-Edit-2511-Turbo-Lightning")
                       result = client.predict(
                           images=[{"image": handle_file(input_img_path)}],
                           prompt=prompt,
                           seed=edit_seed,
                           randomize_seed=is_rand_seed,
-                          true_guidance_scale=1.0,
-                          num_inference_steps=4,
-                          height=1024,
-                          width=1024,
+                          true_guidance_scale=1.5,
+                          num_inference_steps=steps if steps else 6,
+                          height=1280,
+                          width=1280,
                           rewrite_prompt=False,
                           num_images_per_prompt=1,
                           api_name="/infer"
@@ -334,24 +349,25 @@ jobs:
                       print(f"[-] Gameyguy Turbo-Lightning error: {e_gameyguy}")
                       renew_tor_ip()
 
-              # 3. Tertiary: kulkas2pintu/QWEN_EDIT_IMAGE Space
+              # 3. Tertiary: kulkas2pintu/QWEN_EDIT_IMAGE Space (Ultra-Realistic 1920p LoRA)
               if not qwen_success:
                   try:
                       print("[*] Trying Tertiary: kulkas2pintu/QWEN_EDIT_IMAGE...")
+                      kulkas_lora = "Ultra-Realistic-Portrait" if active_lora in ["Ultrarealistic-Portrait", "Hyperrealistic-Portrait"] else ("Upscaler" if "upscale" in active_lora.lower() else "")
                       client = Client("kulkas2pintu/QWEN_EDIT_IMAGE")
                       result = client.predict(
                           image=handle_file(input_img_path),
                           prompt=prompt,
-                          lora_adapter="",
+                          lora_adapter=kulkas_lora,
                           image2=None,
                           seed=edit_seed,
                           randomize_seed=is_rand_seed,
-                          guidance_scale=1.0,
-                          steps=4,
+                          guidance_scale=1.5,
+                          steps=steps if steps else 6,
                           preserve_identity=True,
-                          identity_strength=65,
-                          output_size=1280,
-                          fix_hands=False,
+                          identity_strength=75,
+                          output_size=1920,
+                          fix_hands=True,
                           api_name="/edit"
                       )
                       out_file = result[0] if isinstance(result, (tuple, list)) else result
@@ -381,9 +397,9 @@ jobs:
                           seed=edit_seed,
                           randomize_seed=is_rand_seed,
                           true_guidance_scale=4.0,
-                          num_inference_steps=steps if steps else 30,
-                          height=768,
-                          width=768,
+                          num_inference_steps=30,
+                          height=1024,
+                          width=1024,
                           rewrite_prompt=False,
                           api_name="/infer"
                       )
@@ -420,6 +436,172 @@ jobs:
                   image = pipe(image=init_img, prompt=prompt, num_inference_steps=20).images[0]
                   image.save(output_path)
                   final_seed = edit_seed
+
+              # Auto-Chain with FLUX.2-Klein-Multi-LoRA for 4K Super-Upscaling if requested
+              if qwen_success and (duration_val == "flux_upscale" or "flux" in str(style_val).lower()):
+                  print("[*] Chaining Qwen Edit output into FLUX.2-Klein-Multi-LoRA for 4K UltraSharp & Depth Realism...")
+                  try:
+                      client_flux = Client("M3st3rJ4k3l/FLUX.2-Klein-Multi-LoRA")
+                      klein_res = client_flux.predict(
+                          base_image=handle_file(output_path),
+                          reference_images=[],
+                          prompt=prompt,
+                          lora_prompt_text="",
+                          custom_prompt_text="",
+                          selected_titles=['Ultimate Upscaler Klein-9b', 'High Resolution', 'Klein-Delight-Style'],
+                          seed=final_seed or edit_seed,
+                          randomize_seed=False,
+                          guidance_scale=1.0,
+                          steps=4,
+                          upscale_factor="4× — UltraSharp (crisp)",
+                          canvas_mode="Auto (from base image)",
+                          custom_width=1024,
+                          custom_height=1024,
+                          canvas_fit_mode="Stretch",
+                          pad_color="#000000",
+                          batch_count=1,
+                          batch_vary="Random seed each run",
+                          sweep_min=0.4,
+                          sweep_max=1.4,
+                          param_21=1.0,
+                          param_22=1.0,
+                          param_23=1.0,
+                          param_24=1.0,
+                          param_25=1.0,
+                          param_26=1.0,
+                          api_name="/infer"
+                      )
+                      klein_gallery = klein_res[0] if isinstance(klein_res, (tuple, list)) else klein_res
+                      if isinstance(klein_gallery, list) and klein_gallery:
+                          k_first = klein_gallery[0]
+                          k_path = k_first.get("image", {}).get("path") if isinstance(k_first, dict) and isinstance(k_first.get("image"), dict) else (k_first.get("image") if isinstance(k_first, dict) else k_first)
+                          if k_path and os.path.exists(k_path):
+                              import shutil
+                              shutil.copyfile(k_path, output_path)
+                              print("[+] FLUX.2 Klein 4K UltraSharp Super-Upscale Complete!")
+                  except Exception as e_flux:
+                      print(f"[-] FLUX.2 Klein chaining error: {e_flux}")
+
+
+          elif action == "flux-klein":
+              print(f"[*] Connecting to FLUX.2-Klein-Multi-LoRA Studio for prompt: {prompt}...")
+              from gradio_client import Client, handle_file
+              import random
+              image_output_path = "/tmp/ai_lab/output.png"
+              output_path = image_output_path
+              input_img_path = "/tmp/ai_lab/input.png"
+
+              # Download image if provided
+              has_image = bool(image_url and image_url.startswith("http"))
+              if has_image:
+                  try:
+                      resp = requests.get(image_url, timeout=15)
+                      with open(input_img_path, "wb") as f:
+                          f.write(resp.content)
+                  except Exception as e:
+                      print(f"[-] Image download error: {e}")
+                      has_image = False
+
+              # If no image provided, generate an initial base image via Krea-2 for text-to-image
+              if not has_image or not os.path.exists(input_img_path):
+                  try:
+                      print(f"[*] Generating initial base image via Krea-2 for text-to-image...")
+                      krea_client = Client("ravenrose996688/Krea-2-Turbo_I2I")
+                      krea_res = krea_client.predict(
+                          param_0="text2image", param_1=prompt, param_2=None, param_3=None, param_4=None,
+                          param_5=1024, param_6=1024, param_7=1.4, param_8=768, param_9=1.0, param_10=1.0,
+                          param_11=6, param_12=1.0, param_13="euler", param_14="beta", param_15=random.randint(1, 999999),
+                          param_16=True, param_17=0, param_18="pornmasterKrea2_v2TurboInt8.safetensors",
+                          param_19=None, param_20=None, param_21=None,
+                          param_22={'headers': ['repo_id', 'filename', 'revision', 'weight'], 'data': [], 'metadata': None},
+                          param_23=0.0, param_24=0.8, param_25=0.0, param_26=0.0, param_27=0.0,
+                          param_28=0.0, param_29=0.0, param_30=0.0, param_31=0.0, param_32=0.0,
+                          param_33=0.0, param_34=0.0, param_35=0.0, param_36=0.0, param_37=0.0,
+                          param_38=0.0, param_39=0.0, param_40=0.0, api_name="/_generate_wrapper"
+                      )
+                      base_img = extract_path(krea_res)
+                      if base_img and os.path.exists(base_img):
+                          import shutil
+                          shutil.copyfile(base_img, input_img_path)
+                          has_image = True
+                  except Exception as err:
+                      print(f"[-] Base frame gen error: {err}")
+
+              if seed_val and seed_val != "-1":
+                  try:
+                      klein_seed = int(seed_val)
+                  except:
+                      klein_seed = random.randint(1, 9999999)
+              else:
+                  klein_seed = random.randint(1, 9999999)
+              final_seed = klein_seed
+
+              # Determine LoRA list based on style_val
+              if style_val == "instapic":
+                  selected_loras = ['InstaPic', 'High Resolution', 'Klein-Delight-Style']
+              elif style_val == "delight":
+                  selected_loras = ['Klein-Delight-Style', 'Controllight', 'High Resolution']
+              elif style_val == "face_swap":
+                  selected_loras = ['Best-Face-Swap', 'Klein-Consistency', 'High Resolution']
+              elif style_val == "none":
+                  selected_loras = []
+              else:
+                  # Default: Ultimate Upscaler + High Resolution + Klein Delight for maximum depth & clarity
+                  selected_loras = ['Ultimate Upscaler Klein-9b', 'High Resolution', 'Klein-Delight-Style']
+
+              # Determine upscale factor from duration_val
+              valid_factors = [
+                  '4× — UltraSharp (crisp)', '4× — Nomos2 HQ DAT2 (Photography)',
+                  '4× — Remacri (natural)', '2× — RealESRGAN (balanced)', 'None'
+              ]
+              upscale_choice = duration_val if duration_val in valid_factors else '4× — UltraSharp (crisp)'
+
+              klein_steps = steps if (steps and 2 <= steps <= 15) else 4
+              print(f"[*] Dispatching to FLUX.2 Klein: LoRAs={selected_loras} | Upscaler={upscale_choice} | Steps={klein_steps} | Seed={final_seed}")
+
+              try:
+                  client_flux = Client("M3st3rJ4k3l/FLUX.2-Klein-Multi-LoRA")
+                  klein_res = client_flux.predict(
+                      base_image=handle_file(input_img_path) if (has_image and os.path.exists(input_img_path)) else None,
+                      reference_images=[],
+                      prompt=prompt,
+                      lora_prompt_text="",
+                      custom_prompt_text="",
+                      selected_titles=selected_loras,
+                      seed=final_seed,
+                      randomize_seed=False,
+                      guidance_scale=1.0,
+                      steps=klein_steps,
+                      upscale_factor=upscale_choice,
+                      canvas_mode="Auto (from base image)" if (has_image and os.path.exists(input_img_path)) else "Custom",
+                      custom_width=1024,
+                      custom_height=1024,
+                      canvas_fit_mode="Stretch",
+                      pad_color="#000000",
+                      batch_count=1,
+                      batch_vary="Random seed each run",
+                      sweep_min=0.4,
+                      sweep_max=1.4,
+                      param_21=1.0,
+                      param_22=1.0,
+                      param_23=1.0,
+                      param_24=1.0,
+                      param_25=1.0,
+                      param_26=1.0,
+                      api_name="/infer"
+                  )
+                  klein_gallery = klein_res[0] if isinstance(klein_res, (tuple, list)) else klein_res
+                  if isinstance(klein_gallery, list) and klein_gallery:
+                      k_first = klein_gallery[0]
+                      k_path = k_first.get("image", {}).get("path") if isinstance(k_first, dict) and isinstance(k_first.get("image"), dict) else (k_first.get("image") if isinstance(k_first, dict) else k_first)
+                      if k_path and os.path.exists(k_path):
+                          import shutil
+                          shutil.copyfile(k_path, output_path)
+                          print("[+] FLUX.2 Klein Generation & 4K Upscale Complete!")
+              except Exception as err:
+                  print(f"[-] FLUX.2 Klein error: {err}")
+                  renew_tor_ip()
+
           elif action == "wan-video":
               print(f"[*] Connecting to Wan 2.2 Uncensored Video Space (STCM Missionary AOTI)...")
               from gradio_client import Client, handle_file
@@ -428,6 +610,17 @@ jobs:
               video_output_path = "/tmp/ai_lab/output.mp4"
               output_path = video_output_path
               input_img_path = "/tmp/ai_lab/input.png"
+              
+              # Parse dynamic duration (up to 10s supported)
+              try:
+                  video_duration = float(duration_val) if duration_val else 5.0
+                  if video_duration < 1.0:
+                      video_duration = 1.0
+                  elif video_duration > 10.0:
+                      video_duration = 10.0
+              except Exception:
+                  video_duration = 5.0
+
               if seed_val and seed_val != "-1":
                   try:
                       rand_seed = int(seed_val)
@@ -437,6 +630,8 @@ jobs:
                   rand_seed = random.randint(1, 9999999)
               final_seed = rand_seed
               wan_success = False
+
+              print(f"[*] Wan 2.2 Configuration: Duration={video_duration}s | Steps={steps} | Seed={rand_seed}")
 
               # Check or prepare input image
               has_image = bool(image_url and image_url.startswith("http"))
@@ -476,7 +671,7 @@ jobs:
 
               # Space 1: STCM/wan2-2-fp8da-aoti-preview-2c-missionary (Unrestricted FP8DA AOTI)
               try:
-                  print("[*] Connecting to STCM/wan2-2-fp8da-aoti-preview-2c-missionary...")
+                  print(f"[*] Connecting to STCM/wan2-2-fp8da-aoti-preview-2c-missionary (Duration={video_duration}s)...")
                   client = Client("STCM/wan2-2-fp8da-aoti-preview-2c-missionary")
                   result = client.predict(
                       input_image=handle_file(input_img_path) if os.path.exists(input_img_path) else None,
@@ -484,7 +679,7 @@ jobs:
                       prompt=prompt,
                       steps=steps if steps <= 12 else 6,
                       negative_prompt="blurry, distorted, low quality, static, artifacts",
-                      duration_seconds=3.0,
+                      duration_seconds=video_duration,
                       guidance_scale=1.0,
                       guidance_scale_2=1.0,
                       seed=rand_seed,
@@ -510,10 +705,45 @@ jobs:
                   print(f"[-] STCM Missionary error: {e}")
                   renew_tor_ip()
 
-              # Space 2: kulkas2pintu/edit-video-wan fallback
+              # Space 2: r3gm/wan2-2-fp8da-aoti-preview (Official High-Speed AOTI + Uncensored switches)
               if not wan_success:
                   try:
-                      print("[*] Trying Fallback 2: kulkas2pintu/edit-video-wan...")
+                      print(f"[*] Trying Fallback 2: r3gm/wan2-2-fp8da-aoti-preview (Duration={video_duration}s)...")
+                      client = Client("r3gm/wan2-2-fp8da-aoti-preview")
+                      result = client.predict(
+                          input_image=handle_file(input_img_path) if os.path.exists(input_img_path) else None,
+                          last_image=None,
+                          prompt=prompt,
+                          steps=steps if steps <= 12 else 6,
+                          negative_prompt="blurry, distorted, low quality, static, artifacts",
+                          duration_seconds=video_duration,
+                          guidance_scale=1.0,
+                          guidance_scale_2=1.0,
+                          seed=rand_seed,
+                          randomize_seed=True,
+                          quality=6,
+                          scheduler="UniPCMultistep",
+                          flow_shift=3.0,
+                          frame_multiplier=16,
+                          video_component=True,
+                          safe_mode=False,
+                          enable_safety_checker=False,
+                          api_name="/generate_video"
+                      )
+                      vid_path = extract_path(result)
+                      if vid_path and os.path.exists(vid_path):
+                          import shutil
+                          shutil.copyfile(vid_path, video_output_path)
+                          print("[+] Wan 2.2 r3gm Video Complete!")
+                          wan_success = True
+                  except Exception as e_r3gm:
+                      print(f"[-] r3gm error: {e_r3gm}")
+                      renew_tor_ip()
+
+              # Space 3: kulkas2pintu/edit-video-wan fallback
+              if not wan_success:
+                  try:
+                      print(f"[*] Trying Fallback 3: kulkas2pintu/edit-video-wan (Duration={video_duration}s)...")
                       client = Client("kulkas2pintu/edit-video-wan")
                       result = client.predict(
                           input_image=handle_file(input_img_path) if os.path.exists(input_img_path) else None,
@@ -521,7 +751,7 @@ jobs:
                           prompt=prompt,
                           steps=steps if steps <= 12 else 6,
                           negative_prompt="blurry, distorted, low quality, static",
-                          duration_seconds=3.0,
+                          duration_seconds=video_duration,
                           guidance_scale=1.0,
                           guidance_scale_2=1.0,
                           seed=rand_seed,
@@ -544,17 +774,17 @@ jobs:
                       print(f"[-] kulkas2pintu space error: {e2}")
                       renew_tor_ip()
 
-              # Space 3: Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED (100% Unrestricted Text/Image to Video)
+              # Space 4: Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED (100% Unrestricted Text/Image to Video)
               if not wan_success:
                   try:
-                      print("[*] Trying Fallback 3: Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED...")
+                      print(f"[*] Trying Fallback 4: Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED (Duration={video_duration}s)...")
                       client = Client("Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED")
                       result = client.predict(
                           prompt=prompt,
                           image_path=handle_file(input_img_path) if os.path.exists(input_img_path) else None,
                           last_image_path=None,
-                          canvas="960x544 \u00b7 16:9 fast",
-                          duration=3.5,
+                          canvas="960x544 · 16:9 fast",
+                          duration=video_duration,
                           steps=4,
                           seed=rand_seed,
                           upsample=False,
@@ -571,17 +801,18 @@ jobs:
                   except Exception as e3:
                       print(f"[-] Pepe104 error: {e3}")
                       renew_tor_ip()
-              # Space 4: mrfakename/minimax-h3-ultra-fast fallback
+
+              # Space 5: mrfakename/minimax-h3-ultra-fast fallback
               if not wan_success:
                   try:
-                      print("[*] Trying Fallback 4: mrfakename/minimax-h3-ultra-fast...")
+                      print(f"[*] Trying Fallback 5: mrfakename/minimax-h3-ultra-fast (Duration={video_duration}s)...")
                       client = Client("mrfakename/minimax-h3-ultra-fast")
                       result = client.predict(
                           prompt=prompt,
                           image_path=handle_file(input_img_path) if os.path.exists(input_img_path) else None,
                           last_image_path=None,
-                          canvas="960x544 \u00b7 16:9 fast",
-                          duration=4.0,
+                          canvas="960x544 · 16:9 fast",
+                          duration=video_duration,
                           steps=4,
                           seed=rand_seed,
                           upsample=False,
@@ -590,7 +821,7 @@ jobs:
                           lora_repo="",
                           lora_filename="",
                           lora_strength=1.0,
-                          generation_preset="Balanced \u00b7 best overall (recommended)",
+                          generation_preset="Balanced · best overall (recommended)",
                           references=None,
                           api_name="/generate"
                       )
@@ -603,8 +834,6 @@ jobs:
                   except Exception as e4:
                       print(f"[-] mrfakename fallback error: {e4}")
                       renew_tor_ip()
-
-
 
 
           elif action == "krea-2":
@@ -700,9 +929,13 @@ jobs:
               output_path = video_output_path
               
               try:
-                  video_duration = float(duration_val) if duration_val else 3.5
+                  video_duration = float(duration_val) if duration_val else 5.0
+                  if video_duration < 1.0:
+                      video_duration = 1.0
+                  elif video_duration > 10.0:
+                      video_duration = 10.0
               except:
-                  video_duration = 3.5
+                  video_duration = 5.0
 
               if seed_val and seed_val != "-1":
                   try:
@@ -1098,9 +1331,8 @@ jobs:
                       print(f"[-] Voice fallback error: {fallback_err}")
 
 
-          # Send generated artifact directly to Discord Channel
+                    # Send generated artifact to user's DM & server audit log channel (1506768429107908719)
           if os.path.exists(output_path):
-              url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
               headers = {"Authorization": f"Bot {discord_token}"}
               if action in ("wan-video", "minimax-h3"):
                   filename = "xploit_video.mp4"
@@ -1111,14 +1343,48 @@ jobs:
               else:
                   filename = "xploit_render.png"
                   mimetype = "image/png"
+
+              # 1. Open User DM Channel
+              dm_channel_id = None
+              try:
+                  create_dm_url = "https://discord.com/api/v10/users/@me/channels"
+                  dm_resp = requests.post(create_dm_url, headers=headers, json={"recipient_id": str(user_id)}, timeout=10)
+                  if dm_resp.status_code in (200, 201):
+                      dm_channel_id = dm_resp.json().get("id")
+                      print(f"[+] Created user DM channel: {dm_channel_id}")
+                  else:
+                      print(f"[-] Could not open DM channel (status {dm_resp.status_code}): {dm_resp.text}")
+              except Exception as e_dm:
+                  print(f"[-] Exception opening DM channel: {e_dm}")
+
+              # Target destinations:
+              # Destination 1: User's DM (or fallback to original channel if DM is closed)
+              # Destination 2: Server Audit Log private channel: 1506768429107908719
+              AUDIT_CHANNEL_ID = "1506768429107908719"
+              destinations = []
+              if dm_channel_id:
+                  destinations.append(("User DM", dm_channel_id, False))
+              else:
+                  destinations.append(("Origin Channel (DM Closed)", channel_id, True))
+
+              destinations.append(("Audit Log Channel", AUDIT_CHANNEL_ID, False))
+
+              seed_line = f"\n🎲 **Seed:** `{final_seed}`" if final_seed is not None else ""
+
               with open(output_path, "rb") as f:
-                  files = {"file": (filename, f, mimetype)}
-                  seed_line = f"\n🎲 **Seed:** `{final_seed}`" if final_seed is not None else ""
-                  data = {
-                      "content": f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()}**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `{action.upper()}`\n📝 **Input:** `{prompt}`{seed_line}"
-                  }
-                  r = requests.post(url, headers=headers, data=data, files=files)
-                  print(f"[+] Discord upload status: {r.status_code}")
+                  file_bytes = f.read()
+
+              for dest_name, dest_id, is_dm_fail in destinations:
+                  try:
+                      dm_warning = "\n⚠️ *Note: Your Direct Messages (DMs) are disabled in server privacy settings, so output was delivered here.*" if is_dm_fail else ""
+                      content = f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()}**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `{action.upper()}`\n📝 **Input:** `{prompt}`{seed_line}{dm_warning}"
+                      dest_url = f"https://discord.com/api/v10/channels/{dest_id}/messages"
+                      files = {"file": (filename, file_bytes, mimetype)}
+                      data = {"content": content}
+                      r = requests.post(dest_url, headers=headers, data=data, files=files, timeout=30)
+                      print(f"[+] Discord upload to {dest_name} ({dest_id}) status: {r.status_code}")
+                  except Exception as e_dest:
+                      print(f"[-] Error uploading to {dest_name} ({dest_id}): {e_dest}")
           else:
               print("[-] Error: Output file not found.")
           EOF

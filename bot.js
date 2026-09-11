@@ -318,6 +318,49 @@ const commands = [
                 .setMinValue(4)
                 .setMaxValue(15),
         ),
+
+    new SlashCommandBuilder()
+        .setName("minimax")
+        .setDescription("🎬 MiniMax-H3 Uncensored AI Video + Synced Audio Engine (Hailuo 3 T2VA)")
+        .addStringOption((o) =>
+            o
+                .setName("prompt")
+                .setDescription("Video scene to generate with synced audio (e.g. 'Sports car drifting in neon rain')")
+                .setRequired(true),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("steps")
+                .setDescription("Inference steps (default: 6)")
+                .setRequired(false)
+                .setMinValue(4)
+                .setMaxValue(12),
+        ),
+
+    new SlashCommandBuilder()
+        .setName("kokoro")
+        .setDescription("🎙️ Kokoro-TTS Ultra-Realistic Natural Voice Synthesis (Zero-Shot)")
+        .addStringOption((o) =>
+            o
+                .setName("text")
+                .setDescription("What should the voice say?")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("voice")
+                .setDescription("Voice preset")
+                .setRequired(false)
+                .addChoices(
+                    { name: "Heart (Female - Sweet & Warm)", value: "af_heart" },
+                    { name: "Bella (Female - Expressive)", value: "af_bella" },
+                    { name: "Nicole (Female - Soft Whisper)", value: "af_nicole" },
+                    { name: "Adam (Male - Deep & Confident)", value: "am_adam" },
+                    { name: "Michael (Male - Narrator)", value: "am_michael" },
+                    { name: "Emma (British Female - Posh)", value: "bf_emma" },
+                    { name: "George (British Male - Classic)", value: "bm_george" },
+                ),
+        ),
 ].map((c) => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(
@@ -848,6 +891,95 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
             console.error("Krea error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /minimax
+    if (commandName === "minimax") {
+        const prompt = interaction.options.getString("prompt");
+        const steps = interaction.options.getInteger("steps") || 6;
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "minimax-h3",
+                    prompt: prompt,
+                    image_url: "",
+                    steps: String(steps),
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🎬 Xploit AI Lab — MiniMax-H3 Uncensored Video+Audio")
+                .setColor("#FF1493")
+                .setDescription("Dispatching to **MiniMax-H3 (Hailuo 3) Turbo LoRA T2VA Cluster** with **Synced Audio Generation**!")
+                .addFields(
+                    { name: "🎥 Scene Prompt", value: `\`${prompt}\``, inline: false },
+                    { name: "⚡ Turbo Steps", value: `\`${steps} Steps (Larry LoRA)\``, inline: true },
+                    { name: "🔊 Soundtrack", value: "`Auto-Synchronized SFX`", inline: true },
+                    { name: "🔓 Moderation", value: "`Uncensored / Zero-Refusal`", inline: true },
+                )
+                .setFooter({ text: "MP4 Video with audio will be rendered and dropped in this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("MiniMax error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /kokoro
+    if (commandName === "kokoro") {
+        const text = interaction.options.getString("text");
+        const voice = interaction.options.getString("voice") || "af_heart";
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "kokoro-tts",
+                    prompt: text,
+                    image_url: voice,
+                    steps: "1",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🎙️ Xploit AI Lab — Kokoro-TTS Hyper-Realistic Voice")
+                .setColor("#32CD32")
+                .setDescription("Dispatching to **Kokoro-TTS Zero-Shot Neural Voice Engine**!")
+                .addFields(
+                    { name: "🗣️ Text", value: `\`${text}\``, inline: false },
+                    { name: "🎭 Voice Preset", value: `\`${voice}\``, inline: true },
+                    { name: "⚡ Quality", value: "`24kHz Studio Quality`", inline: true },
+                )
+                .setFooter({ text: "Voice audio file (.mp3) will be delivered shortly." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("Kokoro error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

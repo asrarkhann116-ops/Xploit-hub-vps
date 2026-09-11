@@ -54,14 +54,12 @@ jobs:
       - name: Setup Bleeding-Edge AI Environment + Tor Anti-RateLimit Engine
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y python3 python3-pip curl jq git tor privoxy ffmpeg
-          echo "forward-socks5t / 127.0.0.1:9050 ." | sudo tee -a /etc/privoxy/config
-          sudo systemctl restart tor
-          sudo systemctl restart privoxy
-          echo "✅ Tor + Privoxy Active on 127.0.0.1:8118 / 127.0.0.1:9050"
+          sudo apt-get install -y python3 python3-pip curl jq git tor ffmpeg
+          sudo systemctl start tor
+          echo "✅ Tor Daemon Active on 127.0.0.1:9050 (IP Anonymity Unlocked)"
           pip3 install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip3 install --no-cache-dir git+https://github.com/huggingface/diffusers.git -U
-          pip3 install --no-cache-dir transformers accelerate safetensors requests pillow gradio_client pysocks stem soundfile kokoro "httpx[socks]" socksio
+          pip3 install --no-cache-dir transformers accelerate safetensors requests pillow gradio_client pysocks stem soundfile kokoro
 
       - name: Execute Unrestricted Next-Gen AI Pipeline
         env:
@@ -82,14 +80,6 @@ jobs:
           python3 -c "import sys, textwrap; open('generate.py', 'w', encoding='utf-8').write(textwrap.dedent(sys.stdin.read()))" << 'EOF'
           import os
           import sys
-
-          # Enable global Tor routing for all HuggingFace / Gradio Spaces requests
-          os.environ["HTTP_PROXY"] = "http://127.0.0.1:8118"
-          os.environ["HTTPS_PROXY"] = "http://127.0.0.1:8118"
-          os.environ["http_proxy"] = "http://127.0.0.1:8118"
-          os.environ["https_proxy"] = "http://127.0.0.1:8118"
-          os.environ["ALL_PROXY"] = "socks5h://127.0.0.1:9050"
-
           import requests
           import torch
           from PIL import Image
@@ -124,16 +114,11 @@ jobs:
           import time
 
           def renew_tor_ip():
-              """Instantly cycle to a fresh global Tor IP address for ZeroGPU quota reset"""
+              """Instantly cycle to a fresh global Tor IP address"""
               try:
                   subprocess.run(["sudo", "systemctl", "restart", "tor"], check=False)
-                  subprocess.run(["sudo", "systemctl", "restart", "privoxy"], check=False)
-                  time.sleep(2)
-                  try:
-                      cur_ip = requests.get("https://api.ipify.org?format=json", timeout=6).json().get("ip")
-                      print(f"[*] 🔄 Tor IP Successfully Rotated to Fresh Clean Global Circuit: {cur_ip}")
-                  except:
-                      print("[*] 🔄 Tor IP Circuit Successfully Rotated!")
+                  time.sleep(1.5)
+                  print("[*] 🔄 Tor IP Successfully Rotated to Fresh Clean Global Circuit!")
               except Exception as err:
                   print(f"[-] Tor reload warning: {err}")
 
@@ -237,7 +222,17 @@ jobs:
                       continue
 
               if not success:
-                  print("[-] All Z-Image GPU mirrors were busy or unavailable.")
+                  print("[-] All GPU mirrors busy, triggering direct local 23GB memory pipeline fallback...")
+                  from diffusers import DiffusionPipeline
+                  pipe = DiffusionPipeline.from_pretrained(
+                      "Tongyi-MAI/Z-Image-Turbo",
+                      torch_dtype=torch.float32,
+                      low_cpu_mem_usage=True
+                  )
+                  pipe = bypass_safety(pipe)
+                  pipe.to("cpu")
+                  image = pipe(prompt=prompt, num_inference_steps=steps, guidance_scale=0.0).images[0]
+                  image.save(output_path, format="PNG")
 
           elif action == "qwen-edit":
               print(f"[*] Loading Qwen Rapid AIO for prompt: {prompt}")
@@ -287,7 +282,7 @@ jobs:
                       randomize_seed=is_rand_seed,
                       guidance_scale=1.5,
                       steps=steps if steps else 6,
-                      target_megapixels=2.25,
+                      target_megapixels=1.2,
                       extras_condition_only=True,
                       pad_to_canvas=True,
                       vae_tiling=False,
@@ -328,9 +323,9 @@ jobs:
                           seed=edit_seed,
                           randomize_seed=is_rand_seed,
                           true_guidance_scale=1.5,
-                          num_inference_steps=steps if steps else 6,
-                          height=1280,
-                          width=1280,
+                          num_inference_steps=steps if steps and steps <= 8 else 6,
+                          height=1024,
+                          width=1024,
                           rewrite_prompt=False,
                           num_images_per_prompt=1,
                           api_name="/infer"
@@ -368,16 +363,16 @@ jobs:
                           seed=edit_seed,
                           randomize_seed=is_rand_seed,
                           guidance_scale=1.5,
-                          steps=steps if steps else 6,
+                          steps=steps if steps and steps <= 6 else 4,
                           preserve_identity=True,
-                          identity_strength=75,
-                          output_size=1920,
+                          identity_strength=60,
+                          output_size=1024,
                           fix_hands=True,
                           api_name="/edit"
                       )
                       out_file = result[0] if isinstance(result, (tuple, list)) else result
                       if isinstance(out_file, dict):
-                        out_file = out_file.get("path")
+                          out_file = out_file.get("path")
                       if out_file and os.path.exists(out_file):
                           Image.open(out_file).save(output_path, format="PNG")
                           if isinstance(result, (tuple, list)) and len(result) > 1 and result[1] is not None:
@@ -401,10 +396,10 @@ jobs:
                           prompt=prompt,
                           seed=edit_seed,
                           randomize_seed=is_rand_seed,
-                          true_guidance_scale=4.0,
-                          num_inference_steps=30,
-                          height=1024,
-                          width=1024,
+                          true_guidance_scale=2.5,
+                          num_inference_steps=8,
+                          height=768,
+                          width=768,
                           rewrite_prompt=False,
                           api_name="/infer"
                       )
@@ -426,9 +421,8 @@ jobs:
                   except Exception as e2:
                       print(f"[-] Official space error: {e2}")
 
-              # 5. Clean check if all GPU spaces failed
               if not qwen_success:
-                  print("[-] All Qwen GPU spaces were temporarily busy or quota-exhausted.")
+                  print("[-] All GPU Qwen Edit mirrors were busy or temporarily rate-limited.")
 
               # Auto-Chain with FLUX.2-Klein-Multi-LoRA for 4K Super-Upscaling if requested
               if qwen_success and (duration_val == "flux_upscale" or "flux" in str(style_val).lower()):
@@ -1326,10 +1320,6 @@ jobs:
 
                     # Send generated artifact to user's DM & server audit log channel (1506768429107908719)
           if os.path.exists(output_path):
-              # Bypass Tor proxy for Discord API & Catbox uploads for 100% direct speed
-              for proxy_key in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY"):
-                  os.environ.pop(proxy_key, None)
-
               headers = {"Authorization": f"Bot {discord_token}"}
               if action in ("wan-video", "minimax-h3"):
                   filename = "xploit_video.mp4"

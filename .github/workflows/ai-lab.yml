@@ -348,7 +348,7 @@ jobs:
                       quality=6,
                       scheduler="UniPCMultistep",
                       flow_shift=3.0,
-                      frame_multiplier="16",
+                      frame_multiplier=16,
                       safe_mode=False,
                       video_component=True,
                       api_name="/generate_video"
@@ -385,7 +385,7 @@ jobs:
                           quality=6,
                           scheduler="UniPCMultistep",
                           flow_shift=3.0,
-                          frame_multiplier="16",
+                          frame_multiplier=16,
                           video_component=True,
                           safe_mode=False,
                           api_name="/generate_video"
@@ -410,8 +410,8 @@ jobs:
                           image_path=handle_file(input_img_path) if os.path.exists(input_img_path) else None,
                           last_image_path=None,
                           canvas="960x544 \u00b7 16:9 fast",
-                          duration=5.0,
-                          steps=6,
+                          duration=3.5,
+                          steps=4,
                           seed=rand_seed,
                           upsample=False,
                           use_lora=True,
@@ -427,6 +427,39 @@ jobs:
                   except Exception as e3:
                       print(f"[-] Pepe104 error: {e3}")
                       renew_tor_ip()
+              # Space 4: mrfakename/minimax-h3-ultra-fast fallback
+              if not wan_success:
+                  try:
+                      print("[*] Trying Fallback 4: mrfakename/minimax-h3-ultra-fast...")
+                      client = Client("mrfakename/minimax-h3-ultra-fast")
+                      result = client.predict(
+                          prompt=prompt,
+                          image_path=handle_file(input_img_path) if os.path.exists(input_img_path) else None,
+                          last_image_path=None,
+                          canvas="960x544 \u00b7 16:9 fast",
+                          duration=4.0,
+                          steps=4,
+                          seed=rand_seed,
+                          upsample=False,
+                          acceleration="Balanced",
+                          lora_preset="None",
+                          lora_repo="",
+                          lora_filename="",
+                          lora_strength=1.0,
+                          generation_preset="Balanced \u00b7 best overall (recommended)",
+                          references=None,
+                          api_name="/generate"
+                      )
+                      vid_path = extract_path(result)
+                      if vid_path and os.path.exists(vid_path):
+                          import shutil
+                          shutil.copyfile(vid_path, video_output_path)
+                          print("[+] Video Complete via mrfakename Fallback!")
+                          wan_success = True
+                  except Exception as e4:
+                      print(f"[-] mrfakename fallback error: {e4}")
+                      renew_tor_ip()
+
 
 
 
@@ -516,8 +549,8 @@ jobs:
                           image_path=None,
                           last_image_path=None,
                           canvas="960x544 \u00b7 16:9 fast",
-                          duration=5.0,
-                          steps=steps if steps <= 8 else 6,
+                          duration=3.5,
+                          steps=4,
                           seed=rand_seed,
                           upsample=False,
                           use_lora=True,
@@ -544,8 +577,8 @@ jobs:
                           image_path=None,
                           last_image_path=None,
                           canvas="960x544 \u00b7 16:9 fast",
-                          duration=5.0,
-                          steps=steps if steps <= 8 else 6,
+                          duration=3.5,
+                          steps=4,
                           seed=rand_seed,
                           upsample=False,
                           acceleration="Balanced",

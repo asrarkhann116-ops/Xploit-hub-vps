@@ -58,12 +58,6 @@ const OS_MAP = {
         access: "rdp",
         icon: "🌀",
     },
-    fedora: {
-        label: "Fedora 40",
-        workflow: "fedora.yml",
-        access: "rdp",
-        icon: "🎩",
-    },
     windows10: {
         label: "Windows 10",
         workflow: "rdp.yml",
@@ -128,7 +122,6 @@ const commands = [
                     { name: "🪶  Tiny10        (RDP)", value: "tiny10" },
                     { name: "🪶  Tiny11        (RDP)", value: "tiny11" },
                     { name: "🌀  Debian 12     (RDP)", value: "debian" },
-                    { name: "🎩  Fedora 40     (RDP)", value: "fedora" },
                     { name: "🦜  Parrot OS     (RDP)", value: "parrot" },
                     { name: "🪟  Windows 10    (RDP)", value: "windows10" },
                     { name: "🪟  Windows 11    (RDP)", value: "windows11" },
@@ -186,7 +179,6 @@ const commands = [
                     { name: "🐧 Ubuntu",                  value: "ubuntu"  },
                     { name: "🦜 Parrot OS",               value: "parrot"  },
                     { name: "🌀 Debian",                  value: "debian"  },
-                    { name: "🎩 Fedora",                  value: "fedora"  },
                 ),
         ),
 
@@ -257,6 +249,40 @@ const commands = [
                         .setDescription("Message to broadcast")
                         .setRequired(true),
                 ),
+        ),
+
+    new SlashCommandBuilder()
+        .setName("zimage")
+        .setDescription("⚡ Unrestricted S3-DiT 8-Step Fast AI Image Gen (Tongyi-MAI Z-Image-Turbo)")
+        .addStringOption((o) =>
+            o
+                .setName("prompt")
+                .setDescription("What image do you want to generate? (Unrestricted)")
+                .setRequired(true),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("steps")
+                .setDescription("Inference steps (default: 8)")
+                .setRequired(false)
+                .setMinValue(4)
+                .setMaxValue(20),
+        ),
+
+    new SlashCommandBuilder()
+        .setName("qwen-edit")
+        .setDescription("🧠 Unrestricted 20B AI Image Inpainting & Instruction Editing (Qwen-Image-Edit-2511)")
+        .addAttachmentOption((o) =>
+            o
+                .setName("image")
+                .setDescription("Source image to modify/edit")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("prompt")
+                .setDescription("Edit instruction (e.g. 'add cyberpunk neon visor and glowing red katana')")
+                .setRequired(true),
         ),
 ].map((c) => c.toJSON());
 
@@ -604,6 +630,101 @@ client.on("interactionCreate", async (interaction) => {
         });
     }
 
+    // /zimage
+    if (commandName === "zimage") {
+        const prompt = interaction.options.getString("prompt");
+        const steps = interaction.options.getInteger("steps") || 8;
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "zimage",
+                    prompt: prompt,
+                    image_url: "",
+                    steps: String(steps),
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("⚡ Xploit AI Lab — Z-Image-Turbo (Unrestricted)")
+                .setColor("#FF0055")
+                .setDescription("Dispatching to **S3-DiT Single-Stream Diffusion Transformer Engine** with **Zero Censorship / No Filters**!")
+                .addFields(
+                    { name: "📝 Prompt", value: `\`${prompt}\``, inline: false },
+                    { name: "⚡ Inference Steps", value: `\`${steps} NFEs\``, inline: true },
+                    { name: "🧠 Model Architecture", value: "`Tongyi-MAI Z-Image-Turbo`", inline: true },
+                    { name: "💾 Allocation", value: "`23GB High-Capacity Memory`", inline: true },
+                )
+                .setFooter({ text: "Image will be dropped in this channel upon completion." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("Z-Image error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /qwen-edit
+    if (commandName === "qwen-edit") {
+        const prompt = interaction.options.getString("prompt");
+        const attachment = interaction.options.getAttachment("image");
+
+        if (!attachment || !attachment.url) {
+            return interaction.reply({ content: "❌ Please provide a valid source image.", ephemeral: true });
+        }
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "qwen-edit",
+                    prompt: prompt,
+                    image_url: attachment.url,
+                    steps: "20",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🧠 Xploit AI Lab — Qwen-Image-Edit-2511 (Unrestricted)")
+                .setColor("#8A2BE2")
+                .setDescription("Dispatching to **Qwen 20B Inpainting & Instruction Editing Engine** with **Character Consistency Protection**!")
+                .addFields(
+                    { name: "🎯 Instruction", value: `\`${prompt}\``, inline: false },
+                    { name: "🖼️ Source Image", value: `[View Original](${attachment.url})`, inline: true },
+                    { name: "🧠 Model Architecture", value: "`Qwen-Image-Edit-2511 (20B)`", inline: true },
+                    { name: "🔓 Safety Mode", value: "`Unrestricted / Raw Mode`", inline: true },
+                )
+                .setThumbnail(attachment.url)
+                .setFooter({ text: "Edited render will be posted directly in this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("Qwen-Edit error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
     // /tools
     if (commandName === "tools") {
         const os = interaction.options.getString("os");
@@ -640,12 +761,6 @@ client.on("interactionCreate", async (interaction) => {
                 icon: "🌀",
                 label: "Debian 12 — Tools",
                 fields: [{ name: "🛠️ Installed", value: "`nmap` `net-tools` `python3` `git` `curl` `wget`" }],
-            },
-            fedora: {
-                color: "#294172",
-                icon: "🎩",
-                label: "Fedora 40 — Tools",
-                fields: [{ name: "🛠️ Installed", value: "`nmap` `net-tools` `python3` `git` `curl` `htop`" }],
             },
         };
 

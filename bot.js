@@ -363,7 +363,7 @@ const commands = [
         ),
     new SlashCommandBuilder()
         .setName("qwen-voice")
-        .setDescription("🎙️ Qwen Voice Studio — Advanced Multilingual Neural Voice Studio")
+        .setDescription("🎙️ Qwen3-TTS Studio — Advanced Multilingual Neural Voice (1.7B Model)")
         .addStringOption((o) =>
             o
                 .setName("text")
@@ -1051,13 +1051,13 @@ client.on("interactionCreate", async (interaction) => {
             });
 
             const embed = new EmbedBuilder()
-                .setTitle("🎙️ Xploit AI Lab — Qwen Voice Studio")
+                .setTitle("🎙️ Xploit AI Lab — Qwen3-TTS Neural Studio")
                 .setColor("#8A2BE2")
-                .setDescription("Synthesizing speech via **Qwen-Voice Neural Engine**!")
+                .setDescription("Synthesizing speech via **Qwen3-TTS 1.7B Neural Engine**!")
                 .addFields(
                     { name: "🗣️ Text", value: `\`${text}\``, inline: false },
                     { name: "🎭 Speaker", value: `\`${speaker}\``, inline: true },
-                    { name: "🌐 Language", value: "`Auto (Detect & Adapt)`", inline: true },
+                    { name: "🌐 Model", value: "`Qwen3-TTS 1.7B (Zero-Shot)`", inline: true },
                 )
                 .setFooter({ text: "High-fidelity audio will be delivered directly to this channel." })
                 .setTimestamp();

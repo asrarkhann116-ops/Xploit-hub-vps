@@ -256,14 +256,49 @@ jobs:
                   is_rand_seed = True
               final_seed = edit_seed
 
+              # Parse quality mode sent as "fast__StyleName" or "ultra__StyleName" from bot
+              quality_mode = "fast"
+              raw_style = style_val if style_val else "Ultrarealistic-Portrait"
+              if "__" in raw_style:
+                  parts = raw_style.split("__", 1)
+                  quality_mode = parts[0].strip().lower()  # "fast" or "ultra"
+                  raw_style = parts[1].strip()
+
               # Determine LoRA style (defaults to Ultrarealistic-Portrait for clear 4K quality)
-              active_lora = style_val if style_val else "Ultrarealistic-Portrait"
+              active_lora = raw_style if raw_style else "Ultrarealistic-Portrait"
               prompt_lower = prompt.lower()
               if any(k in prompt_lower for k in ["upscale", "4k", "clear", "unblur", "enhance", "hd"]):
-                  if not style_val or style_val == "Ultrarealistic-Portrait":
+                  if not raw_style or raw_style == "Ultrarealistic-Portrait":
                       active_lora = "Upscale2K"
 
-              print(f"[*] Qwen Edit Configuration: LoRA={active_lora} | Seed={final_seed} | 4K/2K High-Res Pipeline Enabled")
+              # Quality-dependent parameters: Ultra = original high-res, Fast = ZeroGPU-safe
+              if quality_mode == "ultra":
+                  q_target_mp   = 2.25   # aet256: target megapixels (original)
+                  q_steps_cap   = 50     # aet256/Gameyguy: uncapped steps
+                  q_g_height    = 1280   # Gameyguy: resolution
+                  q_g_width     = 1280
+                  q_k_steps_cap = 6      # kulkas2pintu: steps cap
+                  q_k_size      = 1920   # kulkas2pintu: output size
+                  q_k_identity  = 75
+                  q_off_steps   = 30     # Official Qwen: inference steps
+                  q_off_gs      = 4.0    # Official Qwen: guidance scale
+                  q_off_h       = 1024   # Official Qwen: resolution
+                  q_off_w       = 1024
+              else:
+                  # Fast / ZeroGPU-safe defaults
+                  q_target_mp   = 1.2
+                  q_steps_cap   = 8
+                  q_g_height    = 1024
+                  q_g_width     = 1024
+                  q_k_steps_cap = 4
+                  q_k_size      = 1024
+                  q_k_identity  = 60
+                  q_off_steps   = 8
+                  q_off_gs      = 2.5
+                  q_off_h       = 768
+                  q_off_w       = 768
+
+              print(f"[*] Qwen Edit Configuration: LoRA={active_lora} | Quality={quality_mode.upper()} | Seed={final_seed} | 4K/2K High-Res Pipeline Enabled")
 
               qwen_success = False
               # 1. Primary: aet256 Rapid AIO LoRAs Space (Ultra fast 4K/2K GPU inference)
@@ -281,8 +316,8 @@ jobs:
                       seed=edit_seed,
                       randomize_seed=is_rand_seed,
                       guidance_scale=1.5,
-                      steps=steps if steps else 6,
-                      target_megapixels=1.2,
+                      steps=steps if steps and steps <= q_steps_cap else 6,
+                      target_megapixels=q_target_mp,
                       extras_condition_only=True,
                       pad_to_canvas=True,
                       vae_tiling=False,
@@ -323,9 +358,9 @@ jobs:
                           seed=edit_seed,
                           randomize_seed=is_rand_seed,
                           true_guidance_scale=1.5,
-                          num_inference_steps=steps if steps and steps <= 8 else 6,
-                          height=1024,
-                          width=1024,
+                          num_inference_steps=steps if steps and steps <= q_steps_cap else 6,
+                          height=q_g_height,
+                          width=q_g_width,
                           rewrite_prompt=False,
                           num_images_per_prompt=1,
                           api_name="/infer"
@@ -363,10 +398,10 @@ jobs:
                           seed=edit_seed,
                           randomize_seed=is_rand_seed,
                           guidance_scale=1.5,
-                          steps=steps if steps and steps <= 6 else 4,
+                          steps=steps if steps and steps <= q_k_steps_cap else q_k_steps_cap,
                           preserve_identity=True,
-                          identity_strength=60,
-                          output_size=1024,
+                          identity_strength=q_k_identity,
+                          output_size=q_k_size,
                           fix_hands=True,
                           api_name="/edit"
                       )
@@ -396,10 +431,10 @@ jobs:
                           prompt=prompt,
                           seed=edit_seed,
                           randomize_seed=is_rand_seed,
-                          true_guidance_scale=2.5,
-                          num_inference_steps=8,
-                          height=768,
-                          width=768,
+                          true_guidance_scale=q_off_gs,
+                          num_inference_steps=q_off_steps,
+                          height=q_off_h,
+                          width=q_off_w,
                           rewrite_prompt=False,
                           api_name="/infer"
                       )

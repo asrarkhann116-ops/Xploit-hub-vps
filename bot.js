@@ -253,12 +253,23 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("zimage")
-        .setDescription("⚡ Unrestricted S3-DiT 8-Step Fast AI Image Gen (Tongyi-MAI Z-Image-Turbo)")
+        .setDescription("⚡ Unrestricted S3-DiT Fast AI Image Gen (Tongyi-MAI Z-Image-Turbo)")
         .addStringOption((o) =>
             o
                 .setName("prompt")
                 .setDescription("What image do you want to generate? (Unrestricted)")
                 .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("ratio")
+                .setDescription("Aspect Ratio / Canvas shape")
+                .setRequired(false)
+                .addChoices(
+                    { name: "1:1 (Square - 1024x1024)", value: "1:1" },
+                    { name: "16:9 (Landscape - 1344x768)", value: "16:9" },
+                    { name: "9:16 (Portrait - 768x1344)", value: "9:16" },
+                ),
         )
         .addIntegerOption((o) =>
             o
@@ -267,6 +278,12 @@ const commands = [
                 .setRequired(false)
                 .setMinValue(4)
                 .setMaxValue(20),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Seed number (default: random)")
+                .setRequired(false),
         ),
 
     new SlashCommandBuilder()
@@ -299,6 +316,31 @@ const commands = [
                 .setName("prompt")
                 .setDescription("Motion prompt (e.g. 'cinematic camera pan, hair blowing in wind, 4k ultra quality')")
                 .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("duration")
+                .setDescription("Video duration in seconds")
+                .setRequired(false)
+                .addChoices(
+                    { name: "3.5s (Turbo Fast)", value: "3.5" },
+                    { name: "5.0s (Standard HD)", value: "5" },
+                    { name: "6.0s (Extended)", value: "6" },
+                ),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("steps")
+                .setDescription("Inference steps (default: 6)")
+                .setRequired(false)
+                .setMinValue(4)
+                .setMaxValue(12),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Seed number (default: random)")
+                .setRequired(false),
         ),
 
     new SlashCommandBuilder()
@@ -310,6 +352,17 @@ const commands = [
                 .setDescription("What to generate? (e.g. 'portrait of a cybernetic warrior in neon rain')")
                 .setRequired(true),
         )
+        .addStringOption((o) =>
+            o
+                .setName("ratio")
+                .setDescription("Aspect Ratio / Canvas shape")
+                .setRequired(false)
+                .addChoices(
+                    { name: "1:1 (Square - 1024x1024)", value: "1:1" },
+                    { name: "16:9 (Landscape - 1280x720)", value: "16:9" },
+                    { name: "9:16 (Portrait - 720x1280)", value: "9:16" },
+                ),
+        )
         .addIntegerOption((o) =>
             o
                 .setName("steps")
@@ -317,6 +370,12 @@ const commands = [
                 .setRequired(false)
                 .setMinValue(4)
                 .setMaxValue(15),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Seed number (default: random)")
+                .setRequired(false),
         ),
 
     new SlashCommandBuilder()
@@ -328,13 +387,30 @@ const commands = [
                 .setDescription("Video scene to generate with synced audio (e.g. 'Sports car drifting in neon rain')")
                 .setRequired(true),
         )
+        .addStringOption((o) =>
+            o
+                .setName("duration")
+                .setDescription("Video duration in seconds")
+                .setRequired(false)
+                .addChoices(
+                    { name: "3.5s (Fast Turbo - Recommended)", value: "3.5" },
+                    { name: "5.0s (Standard Cinematic)", value: "5" },
+                    { name: "6.0s (Extended)", value: "6" },
+                ),
+        )
         .addIntegerOption((o) =>
             o
                 .setName("steps")
-                .setDescription("Inference steps (default: 6)")
+                .setDescription("Inference steps (default: 4)")
                 .setRequired(false)
                 .setMinValue(4)
                 .setMaxValue(12),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Seed number (default: random)")
+                .setRequired(false),
         ),
 
     new SlashCommandBuilder()
@@ -396,10 +472,29 @@ const commands = [
                 .setDescription("Song description or style (e.g. 'romantic acoustic guitar ballad, warm female vocals')")
                 .setRequired(true),
         )
+        .addStringOption((o) =>
+            o
+                .setName("duration")
+                .setDescription("Song duration")
+                .setRequired(false)
+                .addChoices(
+                    { name: "30s (Sample Preview)", value: "30" },
+                    { name: "60s (Standard 1 Min)", value: "60" },
+                    { name: "120s (2 Minutes Full Track)", value: "120" },
+                    { name: "180s (3 Minutes Extended)", value: "180" },
+                    { name: "240s (4 Minutes Full Album Track)", value: "240" },
+                ),
+        )
         .addBooleanOption((o) =>
             o
                 .setName("instrumental")
                 .setDescription("Instrumental only (no vocals)?")
+                .setRequired(false),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Seed number (default: random)")
                 .setRequired(false),
         ),
 ].map((c) => c.toJSON());
@@ -751,7 +846,9 @@ client.on("interactionCreate", async (interaction) => {
     // /zimage
     if (commandName === "zimage") {
         const prompt = interaction.options.getString("prompt");
+        const ratio = interaction.options.getString("ratio") || "1:1";
         const steps = interaction.options.getInteger("steps") || 8;
+        const seed = interaction.options.getInteger("seed");
 
         await interaction.deferReply({ ephemeral: false });
 
@@ -764,8 +861,10 @@ client.on("interactionCreate", async (interaction) => {
                 inputs: {
                     action_type: "zimage",
                     prompt: prompt,
-                    image_url: "",
+                    image_url: ratio,
                     steps: String(steps),
+                    duration: "",
+                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
                     user_id: interaction.user.id,
                     channel_id: interaction.channelId,
                 },
@@ -777,7 +876,9 @@ client.on("interactionCreate", async (interaction) => {
                 .setDescription("Dispatching to **S3-DiT Single-Stream Diffusion Transformer Engine** with **Zero Censorship / No Filters**!")
                 .addFields(
                     { name: "📝 Prompt", value: `\`${prompt}\``, inline: false },
+                    { name: "📐 Aspect Ratio", value: `\`${ratio}\``, inline: true },
                     { name: "⚡ Inference Steps", value: `\`${steps} NFEs\``, inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
                     { name: "🧠 Model Architecture", value: "`Tongyi-MAI Z-Image-Turbo`", inline: true },
                     { name: "💾 Allocation", value: "`23GB High-Capacity Memory`", inline: true },
                 )
@@ -847,6 +948,9 @@ client.on("interactionCreate", async (interaction) => {
     if (commandName === "wan-video") {
         const attachment = interaction.options.getAttachment("image");
         const prompt = interaction.options.getString("prompt") || "make this image come alive, cinematic motion, smooth animation, 4k ultra realistic";
+        const duration = interaction.options.getString("duration") || "3.5";
+        const steps = interaction.options.getInteger("steps") || 6;
+        const seed = interaction.options.getInteger("seed");
 
         if (!attachment || !attachment.url) {
             return interaction.reply({ content: "❌ Please attach a source image to animate.", ephemeral: true });
@@ -864,7 +968,9 @@ client.on("interactionCreate", async (interaction) => {
                     action_type: "wan-video",
                     prompt: prompt,
                     image_url: attachment.url,
-                    steps: "6",
+                    steps: String(steps),
+                    duration: duration,
+                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
                     user_id: interaction.user.id,
                     channel_id: interaction.channelId,
                 },
@@ -877,8 +983,10 @@ client.on("interactionCreate", async (interaction) => {
                 .addFields(
                     { name: "🎥 Motion Prompt", value: `\`${prompt}\``, inline: false },
                     { name: "🖼️ Base Frame", value: `[View Original](${attachment.url})`, inline: true },
+                    { name: "⏱️ Duration", value: `\`${duration} Seconds\``, inline: true },
+                    { name: "⚡ Steps", value: `\`${steps} Steps\``, inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
                     { name: "🧬 Model Size", value: "`Wan 2.2 14B High-Speed`", inline: true },
-                    { name: "⏱️ Format", value: "`MP4 Video (16 FPS HD)`", inline: true },
                 )
                 .setThumbnail(attachment.url)
                 .setFooter({ text: "Animated MP4 will be rendered and dropped in this channel." })
@@ -896,7 +1004,9 @@ client.on("interactionCreate", async (interaction) => {
     // /krea
     if (commandName === "krea") {
         const prompt = interaction.options.getString("prompt");
+        const ratio = interaction.options.getString("ratio") || "1:1";
         const steps = interaction.options.getInteger("steps") || 8;
+        const seed = interaction.options.getInteger("seed");
 
         await interaction.deferReply({ ephemeral: false });
 
@@ -909,8 +1019,10 @@ client.on("interactionCreate", async (interaction) => {
                 inputs: {
                     action_type: "krea-2",
                     prompt: prompt,
-                    image_url: "",
+                    image_url: ratio,
                     steps: String(steps),
+                    duration: "",
+                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
                     user_id: interaction.user.id,
                     channel_id: interaction.channelId,
                 },
@@ -922,7 +1034,9 @@ client.on("interactionCreate", async (interaction) => {
                 .setDescription("Dispatching to **Krea-2-Turbo Multi-LoRA Engine** with **Refusal-Reduction & 8K DSLR Tuning**!")
                 .addFields(
                     { name: "📝 Prompt", value: `\`${prompt}\``, inline: false },
+                    { name: "📐 Aspect Ratio", value: `\`${ratio}\``, inline: true },
                     { name: "⚡ Inference Steps", value: `\`${steps} Steps\``, inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
                     { name: "🧬 Base Checkpoint", value: "`Krea2-v2Turbo Int8`", inline: true },
                     { name: "🔓 Safety Level", value: "`Zero Censorship (LoRA Enabled)`", inline: true },
                 )
@@ -941,7 +1055,9 @@ client.on("interactionCreate", async (interaction) => {
     // /minimax
     if (commandName === "minimax") {
         const prompt = interaction.options.getString("prompt");
-        const steps = interaction.options.getInteger("steps") || 6;
+        const duration = interaction.options.getString("duration") || "3.5";
+        const steps = interaction.options.getInteger("steps") || 4;
+        const seed = interaction.options.getInteger("seed");
 
         await interaction.deferReply({ ephemeral: false });
 
@@ -956,6 +1072,8 @@ client.on("interactionCreate", async (interaction) => {
                     prompt: prompt,
                     image_url: "",
                     steps: String(steps),
+                    duration: duration,
+                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
                     user_id: interaction.user.id,
                     channel_id: interaction.channelId,
                 },
@@ -967,7 +1085,9 @@ client.on("interactionCreate", async (interaction) => {
                 .setDescription("Dispatching to **MiniMax-H3 (Hailuo 3) Turbo LoRA T2VA Cluster** with **Synced Audio Generation**!")
                 .addFields(
                     { name: "🎥 Scene Prompt", value: `\`${prompt}\``, inline: false },
-                    { name: "⚡ Turbo Steps", value: `\`${steps} Steps (Larry LoRA)\``, inline: true },
+                    { name: "⏱️ Duration", value: `\`${duration} Seconds\``, inline: true },
+                    { name: "⚡ Turbo Steps", value: `\`${steps} Steps (LoRA)\``, inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
                     { name: "🔊 Soundtrack", value: "`Auto-Synchronized SFX`", inline: true },
                     { name: "🔓 Moderation", value: "`Uncensored / Zero-Refusal`", inline: true },
                 )
@@ -1073,7 +1193,9 @@ client.on("interactionCreate", async (interaction) => {
     // /music
     if (commandName === "music") {
         const prompt = interaction.options.getString("prompt");
+        const duration = interaction.options.getString("duration") || "60";
         const instrumental = interaction.options.getBoolean("instrumental") || false;
+        const seed = interaction.options.getInteger("seed");
 
         await interaction.deferReply({ ephemeral: false });
 
@@ -1088,6 +1210,8 @@ client.on("interactionCreate", async (interaction) => {
                     prompt: prompt,
                     image_url: instrumental ? "true" : "false",
                     steps: "30",
+                    duration: duration,
+                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
                     user_id: interaction.user.id,
                     channel_id: interaction.channelId,
                 },
@@ -1099,7 +1223,9 @@ client.on("interactionCreate", async (interaction) => {
                 .setDescription("Composing full song via **MiniMax Music 3 Neural Model**!")
                 .addFields(
                     { name: "🎼 Description / Style", value: `\`${prompt}\``, inline: false },
+                    { name: "⏱️ Duration", value: `\`${duration} Seconds\``, inline: true },
                     { name: "🎤 Mode", value: instrumental ? "`Instrumental Only`" : "`Full Vocals + Lyrics`", inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
                     { name: "⚡ Quality", value: "`44.1kHz Studio Master`", inline: true },
                 )
                 .setFooter({ text: "Composed song (.mp3) will be delivered directly to this channel." })

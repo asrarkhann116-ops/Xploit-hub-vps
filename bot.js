@@ -300,6 +300,12 @@ const commands = [
                 .setName("prompt")
                 .setDescription("Edit instruction (e.g. 'add cyberpunk neon visor and glowing red katana')")
                 .setRequired(true),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Seed number (default: random)")
+                .setRequired(false),
         ),
 
     new SlashCommandBuilder()
@@ -898,6 +904,7 @@ client.on("interactionCreate", async (interaction) => {
     if (commandName === "qwen-edit") {
         const prompt = interaction.options.getString("prompt");
         const attachment = interaction.options.getAttachment("image");
+        const seed = interaction.options.getInteger("seed");
 
         if (!attachment || !attachment.url) {
             return interaction.reply({ content: "❌ Please provide a valid source image.", ephemeral: true });
@@ -916,6 +923,7 @@ client.on("interactionCreate", async (interaction) => {
                     prompt: prompt,
                     image_url: attachment.url,
                     steps: "20",
+                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
                     user_id: interaction.user.id,
                     channel_id: interaction.channelId,
                 },
@@ -929,6 +937,7 @@ client.on("interactionCreate", async (interaction) => {
                     { name: "🎯 Instruction", value: `\`${prompt}\``, inline: false },
                     { name: "🖼️ Source Image", value: `[View Original](${attachment.url})`, inline: true },
                     { name: "🧠 Model Architecture", value: "`Qwen-Image-Edit-2511 (20B)`", inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Random / Auto`", inline: true },
                     { name: "🔓 Safety Mode", value: "`Unrestricted / Raw Mode`", inline: true },
                 )
                 .setThumbnail(attachment.url)

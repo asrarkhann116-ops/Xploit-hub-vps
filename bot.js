@@ -22,6 +22,21 @@ const COOLDOWN_MS = 15 * 60 * 1000;
 // Admins who can run multiple VPS slots simultaneously with no cooldown
 const SUPER_ADMINS = new Set(["1104652354655113268"]);
 
+// AI Lab Cooldown: 1:30 min (90s) for regular users, 0 cooldown for Admin
+const AI_LAB_COOLDOWN_MS = 90 * 1000;
+const aiLabCooldowns = new Map();
+const AI_LAB_COMMANDS = new Set([
+    "zimage",
+    "qwen-edit",
+    "flux-klein",
+    "wan-video",
+    "krea-2",
+    "minimax",
+    "kokoro-tts",
+    "qwen-voice",
+    "minimax-music",
+]);
+
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
 });
@@ -301,6 +316,90 @@ const commands = [
                 .setDescription("Edit instruction (e.g. 'add cyberpunk neon visor and glowing red katana')")
                 .setRequired(true),
         )
+        .addBooleanOption((o) =>
+            o
+                .setName("flux_upscale")
+                .setDescription("⚡ Auto-chain with FLUX.2 Klein for 4K UltraSharp Depth & Realism Upscaling")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("style")
+                .setDescription("LoRA / Quality style (default: Ultra-Realistic 4K)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "📸 Ultra-Realistic 4K (Default)", value: "Ultrarealistic-Portrait" },
+                    { name: "🔍 Super 2K/4K Upscale", value: "Upscale2K" },
+                    { name: "🌟 Semi-Realistic Photo Detailer", value: "Semirealistic-photo-detailer" },
+                    { name: "💡 Relight & Studio Lighting", value: "Relight" },
+                    { name: "🎭 Face & Identity Swap", value: "BFS-Best-FaceSwap" },
+                    { name: "🎨 Raw / Natural (No LoRA)", value: "None" },
+                ),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("steps")
+                .setDescription("Inference steps (default: 6, range: 4-30)")
+                .setRequired(false)
+                .setMinValue(4)
+                .setMaxValue(50),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Seed number (default: random)")
+                .setRequired(false),
+        ),
+
+    new SlashCommandBuilder()
+        .setName("flux-klein")
+        .setDescription("⚡ FLUX.2 Klein Multi-LoRA 4K UltraSharp Depth & Photorealism Engine")
+        .addStringOption((o) =>
+            o
+                .setName("prompt")
+                .setDescription("Image description or upscale enhancement prompt")
+                .setRequired(true),
+        )
+        .addAttachmentOption((o) =>
+            o
+                .setName("image")
+                .setDescription("Base image to upscale / enhance (optional for text-to-image)")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("upscale_factor")
+                .setDescription("Super-resolution upscale model (default: 4x UltraSharp)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "⚡ 4× UltraSharp (Crisp 4K)", value: "4× — UltraSharp (crisp)" },
+                    { name: "📸 4× Nomos2 HQ (Photography 4K)", value: "4× — Nomos2 HQ DAT2 (Photography)" },
+                    { name: "🌿 4× Remacri (Natural Photo 4K)", value: "4× — Remacri (natural)" },
+                    { name: "⚖️ 2× RealESRGAN (Balanced HD)", value: "2× — RealESRGAN (balanced)" },
+                    { name: "🎨 Native 1× (No External Upscale)", value: "None" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("style")
+                .setDescription("LoRA Multi-Stack Preset (default: Ultimate Upscaler + High-Res)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "💎 Ultimate Upscaler + High-Res (Default)", value: "upscaler_hi_res" },
+                    { name: "📸 InstaPic Photorealism", value: "instapic" },
+                    { name: "💡 Klein Delight + Studio Lighting", value: "delight" },
+                    { name: "🎭 Best Face Swap & Identity Consistency", value: "face_swap" },
+                    { name: "🎨 Raw / Natural (No LoRA)", value: "none" },
+                ),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("steps")
+                .setDescription("Inference steps (default: 4, range: 2-15)")
+                .setRequired(false)
+                .setMinValue(2)
+                .setMaxValue(15),
+        )
         .addIntegerOption((o) =>
             o
                 .setName("seed")
@@ -329,9 +428,11 @@ const commands = [
                 .setDescription("Video duration in seconds")
                 .setRequired(false)
                 .addChoices(
-                    { name: "3.5s (Turbo Fast)", value: "3.5" },
+                    { name: "3.5s (Fast Turbo)", value: "3.5" },
                     { name: "5.0s (Standard HD)", value: "5" },
                     { name: "6.0s (Extended)", value: "6" },
+                    { name: "8.0s (Long Play)", value: "8" },
+                    { name: "10.0s (Maximum Studio)", value: "10" },
                 ),
         )
         .addIntegerOption((o) =>
@@ -402,6 +503,8 @@ const commands = [
                     { name: "3.5s (Fast Turbo - Recommended)", value: "3.5" },
                     { name: "5.0s (Standard Cinematic)", value: "5" },
                     { name: "6.0s (Extended)", value: "6" },
+                    { name: "8.0s (Long Play)", value: "8" },
+                    { name: "10.0s (Maximum Studio)", value: "10" },
                 ),
         )
         .addIntegerOption((o) =>
@@ -725,6 +828,27 @@ client.on("interactionCreate", async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
     const { commandName } = interaction;
 
+    // AI Lab Cooldown Enforcement (1:30 min for users, Admin exempt)
+    if (AI_LAB_COMMANDS.has(commandName)) {
+        const uid = interaction.user.id;
+        const isSuper = SUPER_ADMINS.has(uid);
+        if (!isSuper) {
+            const now = Date.now();
+            const expiresAt = aiLabCooldowns.get(uid) || 0;
+            if (expiresAt > now) {
+                const remainingSec = Math.ceil((expiresAt - now) / 1000);
+                const minutes = Math.floor(remainingSec / 60);
+                const seconds = remainingSec % 60;
+                const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+                return interaction.reply({
+                    content: `⏳ **Cooldown Active:** Please wait \`${timeStr}\` before generating another AI media!\n*(1:30 minute cooldown between generations — Admin has no cooldown)*`,
+                    ephemeral: true,
+                });
+            }
+            aiLabCooldowns.set(uid, now + AI_LAB_COOLDOWN_MS);
+        }
+    }
+
     // /vps-status
     if (commandName === "vps-status") {
         cleanExpiredSessions();
@@ -967,6 +1091,9 @@ client.on("interactionCreate", async (interaction) => {
     if (commandName === "qwen-edit") {
         const prompt = interaction.options.getString("prompt");
         const attachment = interaction.options.getAttachment("image");
+        const fluxUpscale = interaction.options.getBoolean("flux_upscale") || false;
+        const style = interaction.options.getString("style") || "Ultrarealistic-Portrait";
+        const steps = interaction.options.getInteger("steps") || 6;
         const seed = interaction.options.getInteger("seed");
 
         if (!attachment || !attachment.url) {
@@ -985,7 +1112,9 @@ client.on("interactionCreate", async (interaction) => {
                     action_type: "qwen-edit",
                     prompt: prompt,
                     image_url: attachment.url,
-                    steps: "20",
+                    steps: String(steps),
+                    style: style,
+                    duration: fluxUpscale ? "flux_upscale" : "",
                     seed: seed !== null && seed !== undefined ? String(seed) : "-1",
                     user_id: interaction.user.id,
                     channel_id: interaction.channelId,
@@ -1000,6 +1129,7 @@ client.on("interactionCreate", async (interaction) => {
                     { name: "🎯 Instruction", value: `\`${prompt}\``, inline: false },
                     { name: "🖼️ Source Image", value: `[View Original](${attachment.url})`, inline: true },
                     { name: "🧠 Model Architecture", value: "`Qwen-Image-Edit-2511 (20B)`", inline: true },
+                    { name: "⚡ FLUX.2 Klein 4K", value: fluxUpscale ? "`Auto-Chain 4K UltraSharp`" : "`Disabled`", inline: true },
                     { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Random / Auto`", inline: true },
                     { name: "🔓 Safety Mode", value: "`Unrestricted / Raw Mode`", inline: true },
                 )
@@ -1010,6 +1140,59 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
             console.error("Qwen-Edit error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /flux-klein (FLUX.2 Klein Multi-LoRA 4K Studio)
+    if (commandName === "flux-klein") {
+        const prompt = interaction.options.getString("prompt");
+        const attachment = interaction.options.getAttachment("image");
+        const upscaleFactor = interaction.options.getString("upscale_factor") || "4× — UltraSharp (crisp)";
+        const style = interaction.options.getString("style") || "upscaler_hi_res";
+        const steps = interaction.options.getInteger("steps") || 4;
+        const seed = interaction.options.getInteger("seed");
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "flux-klein",
+                    prompt: prompt,
+                    image_url: attachment ? attachment.url : "",
+                    steps: String(steps),
+                    style: style,
+                    duration: upscaleFactor,
+                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("⚡ Xploit AI Lab — FLUX.2 Klein Multi-LoRA 4K Studio")
+                .setDescription("Dispatching to **FLUX.2 Klein Multi-LoRA Studio** with high-resolution depth and super-resolution upscaler!")
+                .addFields(
+                    { name: "📝 Prompt", value: `\`${prompt}\``, inline: false },
+                    { name: "🔍 Upscaler", value: `\`${upscaleFactor}\``, inline: true },
+                    { name: "🧬 Style LoRA", value: `\`${style}\``, inline: true },
+                    { name: "⚡ Steps", value: `\`${steps}\``, inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Random / Auto`", inline: true },
+                )
+                .setColor(0x00ffcc)
+                .setFooter({ text: "Upscaled render will be posted directly in this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("FLUX-Klein error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

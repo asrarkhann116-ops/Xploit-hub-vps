@@ -923,46 +923,106 @@ jobs:
               print(f"[*] Generating speech via Qwen3-TTS Neural Studio...")
               audio_output_path = "/tmp/ai_lab/output.mp3"
               output_path = audio_output_path
-              speaker_raw = os.environ.get("IMAGE_URL", "Vivian")
+              
+              # Parse parameters from IMAGE_URL (supports JSON or raw string)
+              voice_payload_raw = os.environ.get("IMAGE_URL", "Vivian")
+              voice_params = {}
+              try:
+                  voice_params = json.loads(voice_payload_raw)
+              except Exception:
+                  voice_params = {"mode": "preset", "speaker": voice_payload_raw or "Vivian"}
+
+              mode = voice_params.get("mode", "preset")
+              speaker_raw = voice_params.get("speaker", "Vivian")
+              ref_audio_url = voice_params.get("ref_audio_url", "")
+              ref_text = voice_params.get("ref_text", "")
+              voice_description = voice_params.get("voice_description", "")
+              instruct = voice_params.get("instruct", "Natural, expressive, clear studio quality voice.")
+              language = voice_params.get("language", "Auto")
+              model_size = voice_params.get("model_size", "1.7B")
+
               speaker_map = {
                   "vivian": "Vivian",
                   "serena": "Serena",
                   "uncle_fu": "Uncle_fu",
+                  "uncle fu": "Uncle_fu",
                   "dylan": "Dylan",
                   "eric": "Eric",
                   "ryan": "Ryan",
                   "aiden": "Aiden",
                   "ono_anna": "Ono_anna",
+                  "ono anna": "Ono_anna",
                   "sohee": "Sohee"
               }
               speaker = speaker_map.get(str(speaker_raw).lower().replace(" ", "_"), "Vivian")
               qwen_voice_success = False
 
-              # Attempt 1: Official Qwen3-TTS Space (1.7B Model)
+              # Download ref audio if in clone mode
+              local_ref_audio = None
+              if mode == "clone" and ref_audio_url:
+                  try:
+                      local_ref_audio = "/tmp/ai_lab/ref_audio.mp3"
+                      print(f"[*] Downloading reference audio for clone: {ref_audio_url}")
+                      r_audio = requests.get(ref_audio_url, timeout=30)
+                      if r_audio.status_code == 200:
+                          with open(local_ref_audio, "wb") as af:
+                              af.write(r_audio.content)
+                          print(f"[+] Downloaded ref audio ({len(r_audio.content)} bytes)")
+                      else:
+                          print(f"[-] Ref audio download returned status {r_audio.status_code}")
+                          local_ref_audio = None
+                  except Exception as ref_err:
+                      print(f"[-] Failed downloading ref audio: {ref_err}")
+                      local_ref_audio = None
+
+              # Attempt 1: Official Qwen/Qwen3-TTS (Preset, Clone, or Design mode)
               try:
-                  from gradio_client import Client
-                  print(f"[*] Connecting to Qwen/Qwen3-TTS (speaker: {speaker}, model: 1.7B)...")
+                  from gradio_client import Client, handle_file
+                  print(f"[*] Connecting to Qwen/Qwen3-TTS (mode: {mode}, model: {model_size})...")
                   client = Client("Qwen/Qwen3-TTS")
-                  result = client.predict(
-                      text=prompt,
-                      language="Auto",
-                      speaker=speaker,
-                      instruct="Natural, expressive, clear studio quality voice.",
-                      model_size="1.7B",
-                      api_name="/generate_custom_voice"
-                  )
+
+                  if mode == "clone" and local_ref_audio and os.path.exists(local_ref_audio):
+                      print(f"[*] Calling /generate_voice_clone...")
+                      result = client.predict(
+                          ref_audio=handle_file(local_ref_audio),
+                          ref_text=ref_text,
+                          target_text=prompt,
+                          language=language,
+                          use_xvector_only=False,
+                          model_size=model_size,
+                          api_name="/generate_voice_clone"
+                      )
+                  elif mode == "design" and voice_description:
+                      print(f"[*] Calling /generate_voice_design (description: {voice_description})...")
+                      result = client.predict(
+                          text=prompt,
+                          language=language,
+                          voice_description=voice_description,
+                          api_name="/generate_voice_design"
+                      )
+                  else:
+                      print(f"[*] Calling /generate_custom_voice (speaker: {speaker})...")
+                      result = client.predict(
+                          text=prompt,
+                          language=language,
+                          speaker=speaker,
+                          instruct=instruct,
+                          model_size=model_size,
+                          api_name="/generate_custom_voice"
+                      )
+
                   audio_path = extract_path(result)
                   if audio_path and os.path.exists(audio_path):
                       import shutil
                       shutil.copyfile(audio_path, audio_output_path)
-                      print("[+] Official Qwen3-TTS generation complete!")
+                      print(f"[+] Official Qwen3-TTS generation complete! (mode: {mode})")
                       qwen_voice_success = True
               except Exception as e:
                   print(f"[-] Qwen3-TTS Space error: {e}")
                   renew_tor_ip()
 
-              # Attempt 2: Fallback to techfreakworm/qwen-voice-studio
-              if not qwen_voice_success:
+              # Attempt 2: Fallback to techfreakworm/qwen-voice-studio (Preset mode)
+              if not qwen_voice_success and mode == "preset":
                   try:
                       from gradio_client import Client
                       print(f"[*] Fallback: Connecting to techfreakworm/qwen-voice-studio (speaker: {speaker})...")
@@ -970,7 +1030,7 @@ jobs:
                       result = client.predict(
                           text=prompt,
                           speaker=speaker,
-                          instruct="",
+                          instruct=instruct or "",
                           language="Auto (detect)",
                           longform=False,
                           param_5=0.7,
@@ -995,7 +1055,30 @@ jobs:
                       print(f"[-] techfreakworm Qwen Voice error: {e}")
                       renew_tor_ip()
 
-              # Fallback: Kokoro-TTS if ZeroGPU rate-limited
+              # Attempt 3: F5-TTS Fallback for voice clone if Qwen clone fails
+              if not qwen_voice_success and mode == "clone" and local_ref_audio and os.path.exists(local_ref_audio):
+                  try:
+                      from gradio_client import Client, handle_file
+                      print(f"[*] Voice Clone Fallback: Connecting to mrfakename/E2-F5-TTS...")
+                      client = Client("mrfakename/E2-F5-TTS")
+                      result = client.predict(
+                          ref_audio=handle_file(local_ref_audio),
+                          ref_text=ref_text,
+                          gen_text=prompt,
+                          remove_silence=False,
+                          api_name="/predict"
+                      )
+                      audio_path = extract_path(result)
+                      if audio_path and os.path.exists(audio_path):
+                          import shutil
+                          shutil.copyfile(audio_path, audio_output_path)
+                          print("[+] E2-F5-TTS clone fallback generation complete!")
+                          qwen_voice_success = True
+                  except Exception as e:
+                      print(f"[-] E2-F5-TTS fallback error: {e}")
+                      renew_tor_ip()
+
+              # Attempt 4: Fallback to Kokoro-TTS if all else fails
               if not qwen_voice_success:
                   try:
                       print("[*] Quota/Space fallback: Generating via Kokoro-TTS...")
@@ -1013,6 +1096,7 @@ jobs:
                           print("[+] Fallback Kokoro generation complete!")
                   except Exception as fallback_err:
                       print(f"[-] Voice fallback error: {fallback_err}")
+
 
           # Send generated artifact directly to Discord Channel
           if os.path.exists(output_path):

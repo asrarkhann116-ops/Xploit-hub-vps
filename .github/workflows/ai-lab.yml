@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'AI Action Type (zimage / qwen-edit / wan-video / krea-2)'
+        description: 'AI Action Type (zimage / qwen-edit / wan-video / krea-2 / minimax-h3 / kokoro-tts)'
         required: true
         default: 'zimage'
       prompt:
@@ -42,12 +42,12 @@ jobs:
       - name: Setup Bleeding-Edge AI Environment + Tor Anti-RateLimit Engine
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y python3 python3-pip curl jq git tor
+          sudo apt-get install -y python3 python3-pip curl jq git tor ffmpeg
           sudo systemctl start tor
           echo "✅ Tor Daemon Active on 127.0.0.1:9050 (IP Anonymity Unlocked)"
           pip3 install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip3 install --no-cache-dir git+https://github.com/huggingface/diffusers.git -U
-          pip3 install --no-cache-dir transformers accelerate safetensors requests pillow gradio_client pysocks stem
+          pip3 install --no-cache-dir transformers accelerate safetensors requests pillow gradio_client pysocks stem soundfile kokoro
 
       - name: Execute Unrestricted Next-Gen AI Pipeline
         env:
@@ -436,16 +436,112 @@ jobs:
                   print(f"[-] Krea-2 generation error: {err}")
                   renew_tor_ip()
 
+          elif action == "minimax-h3":
+              print(f"[*] Connecting to MiniMax-H3 Uncensored Video+Audio Space...")
+              from gradio_client import Client
+              import random
+              video_output_path = "/tmp/ai_lab/output.mp4"
+              output_path = video_output_path
+              minimax_spaces = [
+                  "Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED",
+                  "mrfakename/minimax-h3-ultra-fast",
+                  "multimodalart/minimax-h3"
+              ]
+              for m_space in minimax_spaces:
+                  try:
+                      print(f"[*] Dispatching MiniMax-H3 request to space: {m_space}...")
+                      client = Client(m_space)
+                      rand_seed = random.randint(1, 999999)
+                      result = client.predict(
+                          prompt=prompt,
+                          image_path=None,
+                          last_image_path=None,
+                          canvas="960x544 — 16:9 fast",
+                          duration=5.0,
+                          steps=steps if steps <= 8 else 6,
+                          seed=rand_seed,
+                          upsample=False,
+                          use_lora=True,
+                          lora="larry",
+                          api_name="/generate"
+                      )
+                      print(f"[*] Raw MiniMax-H3 result: {result}")
+                      vid_path = extract_path(result)
+                      if vid_path and os.path.exists(vid_path):
+                          import shutil
+                          shutil.copyfile(vid_path, video_output_path)
+                          print(f"[+] MiniMax-H3 Video+Audio Complete from {m_space}!")
+                          break
+                  except Exception as err:
+                      print(f"[-] MiniMax-H3 error on {m_space}: {err}")
+                      renew_tor_ip()
+
+          elif action == "kokoro-tts":
+              print(f"[*] Generating Kokoro-TTS Hyper-Realistic Voice...")
+              audio_output_path = "/tmp/ai_lab/output.mp3"
+              output_path = audio_output_path
+              voice = os.environ.get("IMAGE_URL", "af_heart")
+              if not voice or voice.startswith("http"):
+                  voice = "af_heart"
+              tts_success = False
+
+              # Attempt 1: Fast Gradio Space
+              try:
+                  from gradio_client import Client
+                  client = Client("remsky/Kokoro-TTS-Zero")
+                  print(f"[*] Generating speech via Space (voice: {voice}): {prompt[:80]}...")
+                  result = client.predict(
+                      text=prompt,
+                      voice_names=[voice],
+                      speed=1.0,
+                      api_name="/generate_speech_from_ui"
+                  )
+                  audio_path = extract_path(result)
+                  if audio_path and os.path.exists(audio_path):
+                      import shutil
+                      shutil.copyfile(audio_path, audio_output_path)
+                      print("[+] Kokoro Space generation complete!")
+                      tts_success = True
+              except Exception as e:
+                  print(f"[-] Kokoro Space error: {e}")
+                  renew_tor_ip()
+
+              # Attempt 2: Local pipeline fallback in 23GB memory
+              if not tts_success:
+                  try:
+                      print("[*] Running local Kokoro synthesis fallback...")
+                      from kokoro import KPipeline
+                      import soundfile as sf
+                      import numpy as np
+                      pipeline = KPipeline(lang_code='a')
+                      generator = pipeline(prompt, voice=voice, speed=1, split_pattern=r'\n+')
+                      audio_pieces = []
+                      for i, (gs, ps, audio) in enumerate(generator):
+                          audio_pieces.append(audio)
+                      if audio_pieces:
+                          full_audio = np.concatenate(audio_pieces)
+                          sf.write(audio_output_path, full_audio, 24000)
+                          print("[+] Local Kokoro generation complete!")
+                  except Exception as err2:
+                      print(f"[-] Local Kokoro error: {err2}")
+
           # Send generated artifact directly to Discord Channel
           if os.path.exists(output_path):
               url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
               headers = {"Authorization": f"Bot {discord_token}"}
-              filename = "xploit_video.mp4" if action == "wan-video" else "xploit_render.png"
-              mimetype = "video/mp4" if action == "wan-video" else "image/png"
+              if action in ("wan-video", "minimax-h3"):
+                  filename = "xploit_video.mp4"
+                  mimetype = "video/mp4"
+              elif action == "kokoro-tts":
+                  filename = "xploit_voice.mp3"
+                  mimetype = "audio/mpeg"
+              else:
+                  filename = "xploit_render.png"
+                  mimetype = "image/png"
               with open(output_path, "rb") as f:
                   files = {"file": (filename, f, mimetype)}
                   data = {
-                      "content": f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()} RENDER**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `{action.upper()} (14B High-Speed)`\n📝 **Prompt:** `{prompt}`"
+                      "content": f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()}**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `{action.upper()}`\n📝 **Input:** `{prompt}`"
                   }
                   r = requests.post(url, headers=headers, data=data, files=files)
                   print(f"[+] Discord upload status: {r.status_code}")

@@ -324,6 +324,16 @@ const commands = [
         )
         .addStringOption((o) =>
             o
+                .setName("quality")
+                .setDescription("Output quality mode (default: Fast — ZeroGPU safe)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "⚡ Fast — ZeroGPU Safe (Default)", value: "fast" },
+                    { name: "💎 Ultra — Max Resolution & Steps (may queue longer)", value: "ultra" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
                 .setName("style")
                 .setDescription("LoRA / Quality style (default: Ultra-Realistic 4K)")
                 .setRequired(false)
@@ -1092,6 +1102,7 @@ client.on("interactionCreate", async (interaction) => {
         const prompt = interaction.options.getString("prompt");
         const attachment = interaction.options.getAttachment("image");
         const fluxUpscale = interaction.options.getBoolean("flux_upscale") || false;
+        const quality = interaction.options.getString("quality") || "fast";
         const style = interaction.options.getString("style") || "Ultrarealistic-Portrait";
         const steps = interaction.options.getInteger("steps") || 6;
         const seed = interaction.options.getInteger("seed");
@@ -1113,7 +1124,7 @@ client.on("interactionCreate", async (interaction) => {
                     prompt: prompt,
                     image_url: attachment.url,
                     steps: String(steps),
-                    style: style,
+                    style: `${quality}__${style}`,
                     duration: fluxUpscale ? "flux_upscale" : "",
                     seed: seed !== null && seed !== undefined ? String(seed) : "-1",
                     user_id: interaction.user.id,
@@ -1130,6 +1141,7 @@ client.on("interactionCreate", async (interaction) => {
                     { name: "🖼️ Source Image", value: `[View Original](${attachment.url})`, inline: true },
                     { name: "🧠 Model Architecture", value: "`Qwen-Image-Edit-2511 (20B)`", inline: true },
                     { name: "⚡ FLUX.2 Klein 4K", value: fluxUpscale ? "`Auto-Chain 4K UltraSharp`" : "`Disabled`", inline: true },
+                    { name: "🔧 Quality Mode", value: quality === "ultra" ? "`Ultra — Max Res & Steps`" : "`Fast — ZeroGPU Safe`", inline: true },
                     { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Random / Auto`", inline: true },
                     { name: "🔓 Safety Mode", value: "`Unrestricted / Raw Mode`", inline: true },
                 )

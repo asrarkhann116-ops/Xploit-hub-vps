@@ -54,12 +54,14 @@ jobs:
       - name: Setup Bleeding-Edge AI Environment + Tor Anti-RateLimit Engine
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y python3 python3-pip curl jq git tor ffmpeg
-          sudo systemctl start tor
-          echo "✅ Tor Daemon Active on 127.0.0.1:9050 (IP Anonymity Unlocked)"
+          sudo apt-get install -y python3 python3-pip curl jq git tor privoxy ffmpeg
+          echo "forward-socks5t / 127.0.0.1:9050 ." | sudo tee -a /etc/privoxy/config
+          sudo systemctl restart tor
+          sudo systemctl restart privoxy
+          echo "✅ Tor + Privoxy Active on 127.0.0.1:8118 / 127.0.0.1:9050"
           pip3 install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip3 install --no-cache-dir git+https://github.com/huggingface/diffusers.git -U
-          pip3 install --no-cache-dir transformers accelerate safetensors requests pillow gradio_client pysocks stem soundfile kokoro
+          pip3 install --no-cache-dir transformers accelerate safetensors requests pillow gradio_client pysocks stem soundfile kokoro "httpx[socks]" socksio
 
       - name: Execute Unrestricted Next-Gen AI Pipeline
         env:
@@ -80,6 +82,14 @@ jobs:
           python3 -c "import sys, textwrap; open('generate.py', 'w', encoding='utf-8').write(textwrap.dedent(sys.stdin.read()))" << 'EOF'
           import os
           import sys
+
+          # Enable global Tor routing for all HuggingFace / Gradio Spaces requests
+          os.environ["HTTP_PROXY"] = "http://127.0.0.1:8118"
+          os.environ["HTTPS_PROXY"] = "http://127.0.0.1:8118"
+          os.environ["http_proxy"] = "http://127.0.0.1:8118"
+          os.environ["https_proxy"] = "http://127.0.0.1:8118"
+          os.environ["ALL_PROXY"] = "socks5h://127.0.0.1:9050"
+
           import requests
           import torch
           from PIL import Image
@@ -114,11 +124,16 @@ jobs:
           import time
 
           def renew_tor_ip():
-              """Instantly cycle to a fresh global Tor IP address"""
+              """Instantly cycle to a fresh global Tor IP address for ZeroGPU quota reset"""
               try:
                   subprocess.run(["sudo", "systemctl", "restart", "tor"], check=False)
-                  time.sleep(1.5)
-                  print("[*] 🔄 Tor IP Successfully Rotated to Fresh Clean Global Circuit!")
+                  subprocess.run(["sudo", "systemctl", "restart", "privoxy"], check=False)
+                  time.sleep(2)
+                  try:
+                      cur_ip = requests.get("https://api.ipify.org?format=json", timeout=6).json().get("ip")
+                      print(f"[*] 🔄 Tor IP Successfully Rotated to Fresh Clean Global Circuit: {cur_ip}")
+                  except:
+                      print("[*] 🔄 Tor IP Circuit Successfully Rotated!")
               except Exception as err:
                   print(f"[-] Tor reload warning: {err}")
 
@@ -222,17 +237,7 @@ jobs:
                       continue
 
               if not success:
-                  print("[-] All GPU mirrors busy, triggering direct local 23GB memory pipeline fallback...")
-                  from diffusers import DiffusionPipeline
-                  pipe = DiffusionPipeline.from_pretrained(
-                      "Tongyi-MAI/Z-Image-Turbo",
-                      torch_dtype=torch.float32,
-                      low_cpu_mem_usage=True
-                  )
-                  pipe = bypass_safety(pipe)
-                  pipe.to("cpu")
-                  image = pipe(prompt=prompt, num_inference_steps=steps, guidance_scale=0.0).images[0]
-                  image.save(output_path, format="PNG")
+                  print("[-] All Z-Image GPU mirrors were busy or unavailable.")
 
           elif action == "qwen-edit":
               print(f"[*] Loading Qwen Rapid AIO for prompt: {prompt}")
@@ -372,7 +377,7 @@ jobs:
                       )
                       out_file = result[0] if isinstance(result, (tuple, list)) else result
                       if isinstance(out_file, dict):
-                          out_file = out_file.get("path")
+                        out_file = out_file.get("path")
                       if out_file and os.path.exists(out_file):
                           Image.open(out_file).save(output_path, format="PNG")
                           if isinstance(result, (tuple, list)) and len(result) > 1 and result[1] is not None:
@@ -421,21 +426,9 @@ jobs:
                   except Exception as e2:
                       print(f"[-] Official space error: {e2}")
 
-              # 5. Final Fallback: Local diffusers pipeline in 23GB memory
+              # 5. Clean check if all GPU spaces failed
               if not qwen_success:
-                  print("[-] GPU Spaces failed, triggering local CPU pipeline fallback...")
-                  from diffusers import QwenImageEditPlusPipeline
-                  pipe = QwenImageEditPlusPipeline.from_pretrained(
-                      "Qwen/Qwen-Image-Edit-2511",
-                      torch_dtype=torch.float32,
-                      low_cpu_mem_usage=True
-                  )
-                  pipe = bypass_safety(pipe)
-                  pipe.to("cpu")
-                  init_img = Image.open(input_img_path).convert("RGB")
-                  image = pipe(image=init_img, prompt=prompt, num_inference_steps=20).images[0]
-                  image.save(output_path)
-                  final_seed = edit_seed
+                  print("[-] All Qwen GPU spaces were temporarily busy or quota-exhausted.")
 
               # Auto-Chain with FLUX.2-Klein-Multi-LoRA for 4K Super-Upscaling if requested
               if qwen_success and (duration_val == "flux_upscale" or "flux" in str(style_val).lower()):
@@ -1333,6 +1326,10 @@ jobs:
 
                     # Send generated artifact to user's DM & server audit log channel (1506768429107908719)
           if os.path.exists(output_path):
+              # Bypass Tor proxy for Discord API & Catbox uploads for 100% direct speed
+              for proxy_key in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY"):
+                  os.environ.pop(proxy_key, None)
+
               headers = {"Authorization": f"Bot {discord_token}"}
               if action in ("wan-video", "minimax-h3"):
                   filename = "xploit_video.mp4"

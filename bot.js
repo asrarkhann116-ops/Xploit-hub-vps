@@ -445,17 +445,28 @@ const commands = [
         ),
     new SlashCommandBuilder()
         .setName("qwen-voice")
-        .setDescription("🎙️ Qwen3-TTS Studio — Advanced Multilingual Neural Voice (1.7B Model)")
+        .setDescription("🎙️ Qwen3-TTS Studio — Preset Speakers | Voice Clone | Voice Design (1.7B)")
         .addStringOption((o) =>
             o
                 .setName("text")
-                .setDescription("What should the voice speak?")
+                .setDescription("Text to synthesize into speech")
                 .setRequired(true),
         )
         .addStringOption((o) =>
             o
+                .setName("mode")
+                .setDescription("TTS mode (default: preset speaker)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "🎭 Preset Speaker (built-in voices)", value: "preset" },
+                    { name: "🧬 Voice Clone (upload reference audio)", value: "clone" },
+                    { name: "🎨 Voice Design (describe a voice)", value: "design" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
                 .setName("speaker")
-                .setDescription("Speaker character")
+                .setDescription("Preset speaker (for Preset mode)")
                 .setRequired(false)
                 .addChoices(
                     { name: "Vivian (Natural Female)", value: "Vivian" },
@@ -467,6 +478,58 @@ const commands = [
                     { name: "Aiden (Clear Male)", value: "Aiden" },
                     { name: "Ono Anna (Japanese Voice)", value: "Ono_Anna" },
                     { name: "Sohee (Korean Voice)", value: "Sohee" },
+                ),
+        )
+        .addAttachmentOption((o) =>
+            o
+                .setName("ref_audio")
+                .setDescription("Reference audio file for voice cloning (for Clone mode, .mp3/.wav)")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("ref_text")
+                .setDescription("Transcript of the reference audio (for Clone mode — improves accuracy)")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("voice_description")
+                .setDescription("Describe the voice you want (for Design mode, e.g. 'deep, calm male voice')")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("instruct")
+                .setDescription("Emotion/style instruction (e.g. 'speak with excitement', 'whisper softly')")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("language")
+                .setDescription("Target language (default: Auto-detect)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "🌐 Auto Detect", value: "Auto" },
+                    { name: "🇬🇧 English", value: "English" },
+                    { name: "🇨🇳 Chinese", value: "Chinese" },
+                    { name: "🇯🇵 Japanese", value: "Japanese" },
+                    { name: "🇰🇷 Korean", value: "Korean" },
+                    { name: "🇫🇷 French", value: "French" },
+                    { name: "🇩🇪 German", value: "German" },
+                    { name: "🇪🇸 Spanish", value: "Spanish" },
+                    { name: "🇧🇷 Portuguese", value: "Portuguese" },
+                    { name: "🇷🇺 Russian", value: "Russian" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("model_size")
+                .setDescription("Model size (default: 1.7B — best quality)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "1.7B (Best Quality)", value: "1.7B" },
+                    { name: "0.6B (Faster)", value: "0.6B" },
                 ),
         ),
     new SlashCommandBuilder()
@@ -1159,7 +1222,23 @@ client.on("interactionCreate", async (interaction) => {
     // /qwen-voice
     if (commandName === "qwen-voice") {
         const text = interaction.options.getString("text");
+        const mode = interaction.options.getString("mode") || "preset";
         const speaker = interaction.options.getString("speaker") || "Vivian";
+        const refAudio = interaction.options.getAttachment("ref_audio");
+        const refText = interaction.options.getString("ref_text") || "";
+        const voiceDescription = interaction.options.getString("voice_description") || "";
+        const instruct = interaction.options.getString("instruct") || "Natural, expressive, clear studio quality voice.";
+        const language = interaction.options.getString("language") || "Auto";
+        const modelSize = interaction.options.getString("model_size") || "1.7B";
+
+        // Clone mode needs a ref audio
+        if (mode === "clone" && (!refAudio || !refAudio.url)) {
+            return interaction.reply({ content: "❌ **Clone mode** requires a `ref_audio` attachment (.mp3 or .wav)!", ephemeral: true });
+        }
+        // Design mode needs a description
+        if (mode === "design" && !voiceDescription) {
+            return interaction.reply({ content: "❌ **Design mode** requires a `voice_description` (e.g. 'deep, calm male narrator')!", ephemeral: true });
+        }
 
         await interaction.deferReply({ ephemeral: false });
 
@@ -1172,21 +1251,38 @@ client.on("interactionCreate", async (interaction) => {
                 inputs: {
                     action_type: "qwen-voice",
                     prompt: text,
-                    image_url: speaker,
+                    // Pack all extra params into image_url as JSON string
+                    image_url: JSON.stringify({
+                        mode,
+                        speaker,
+                        ref_audio_url: refAudio ? refAudio.url : "",
+                        ref_text: refText,
+                        voice_description: voiceDescription,
+                        instruct,
+                        language,
+                        model_size: modelSize,
+                    }),
                     steps: "1",
                     user_id: interaction.user.id,
                     channel_id: interaction.channelId,
                 },
             });
 
+            const modeLabel = mode === "clone" ? "🧬 Voice Clone" : mode === "design" ? "🎨 Voice Design" : "🎭 Preset Speaker";
             const embed = new EmbedBuilder()
                 .setTitle("🎙️ Xploit AI Lab — Qwen3-TTS Neural Studio")
                 .setColor("#8A2BE2")
-                .setDescription("Synthesizing speech via **Qwen3-TTS 1.7B Neural Engine**!")
+                .setDescription(`Synthesizing speech via **Qwen3-TTS ${modelSize} Neural Engine** — **${modeLabel}** mode!`)
                 .addFields(
-                    { name: "🗣️ Text", value: `\`${text}\``, inline: false },
-                    { name: "🎭 Speaker", value: `\`${speaker}\``, inline: true },
-                    { name: "🌐 Model", value: "`Qwen3-TTS 1.7B (Zero-Shot)`", inline: true },
+                    { name: "🗣️ Text", value: `\`${text.slice(0, 200)}\``, inline: false },
+                    { name: "⚙️ Mode", value: `\`${modeLabel}\``, inline: true },
+                    { name: "🌐 Language", value: `\`${language}\``, inline: true },
+                    { name: "🔬 Model", value: `\`Qwen3-TTS ${modelSize}\``, inline: true },
+                    ...(mode === "preset" ? [{ name: "🎭 Speaker", value: `\`${speaker}\``, inline: true }] : []),
+                    ...(mode === "preset" && instruct ? [{ name: "🎬 Instruct", value: `\`${instruct}\``, inline: false }] : []),
+                    ...(mode === "clone" ? [{ name: "🎤 Ref Audio", value: `[Listen](${refAudio.url})`, inline: true }] : []),
+                    ...(mode === "clone" && refText ? [{ name: "📝 Ref Transcript", value: `\`${refText.slice(0, 100)}\``, inline: false }] : []),
+                    ...(mode === "design" ? [{ name: "🎨 Voice Description", value: `\`${voiceDescription}\``, inline: false }] : []),
                 )
                 .setFooter({ text: "High-fidelity audio will be delivered directly to this channel." })
                 .setTimestamp();

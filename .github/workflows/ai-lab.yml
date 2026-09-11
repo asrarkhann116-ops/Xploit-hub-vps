@@ -570,7 +570,6 @@ jobs:
                   except Exception as err:
                       print(f"[-] multimodalart error: {err}")
                       renew_tor_ip()
-
           elif action == "ltx-video":
               print(f"[*] Connecting to LTX 2.3 Studio Generative Video Space...")
               from gradio_client import Client, handle_file
@@ -579,18 +578,25 @@ jobs:
               output_path = video_output_path
               rand_seed = random.randint(1, 9999999)
               ltx_success = False
+              has_image = bool(image_url and image_url.startswith("http"))
+              input_img_path = "/tmp/ai_lab/input.png"
 
-              try:
-                  client = Client("techfreakworm/LTX2.3-Studio")
-                  has_image = bool(image_url and image_url.startswith("http"))
-
-                  if has_image:
-                      print(f"[*] Dispatching LTX 2.3 Image-to-Video (I2V) for prompt: {prompt}...")
-                      input_img_path = "/tmp/ai_lab/input.png"
+              if has_image:
+                  try:
                       resp = requests.get(image_url, timeout=15)
                       with open(input_img_path, "wb") as f:
                           f.write(resp.content)
+                  except Exception as e:
+                      print(f"[-] Image download error: {e}")
+                      has_image = False
 
+              # Tier 1: techfreakworm/LTX2.3-Studio
+              try:
+                  print("[*] Trying Space 1: techfreakworm/LTX2.3-Studio...")
+                  client = Client("techfreakworm/LTX2.3-Studio")
+
+                  if has_image:
+                      print(f"[*] Dispatching LTX 2.3 Image-to-Video (I2V) for prompt: {prompt}...")
                       result = client.predict(
                           param_0=prompt,
                           param_1="Fast",
@@ -637,10 +643,123 @@ jobs:
                       print("[+] LTX 2.3 Studio Video Complete!")
                       ltx_success = True
                   else:
-                      print(f"[-] LTX path not resolved from result: {result}")
+                      print(f"[-] LTX Studio path not resolved from result: {result}")
+                      renew_tor_ip()
               except Exception as e:
                   print(f"[-] LTX 2.3 Studio error: {e}")
                   renew_tor_ip()
+
+              # Tier 2: Lightricks Official Distilled LTX Space
+              if not ltx_success:
+                  try:
+                      print("[*] Trying Space 2: Lightricks/ltx-video-distilled...")
+                      client = Client("Lightricks/ltx-video-distilled")
+                      if has_image:
+                          result = client.predict(
+                              prompt=prompt,
+                              negative_prompt="worst quality, low quality, blurry",
+                              input_image_filepath=handle_file(input_img_path),
+                              input_video_filepath=None,
+                              height_ui=480,
+                              width_ui=704,
+                              mode="image-to-video",
+                              duration_ui=3.0,
+                              ui_frames_to_use=73,
+                              seed_ui=rand_seed,
+                              randomize_seed=True,
+                              ui_guidance_scale=3.0,
+                              improve_texture_flag=True,
+                              api_name="/image_to_video"
+                          )
+                      else:
+                          result = client.predict(
+                              prompt=prompt,
+                              negative_prompt="worst quality, low quality, blurry",
+                              input_image_filepath=None,
+                              input_video_filepath=None,
+                              height_ui=480,
+                              width_ui=704,
+                              mode="text-to-video",
+                              duration_ui=3.0,
+                              ui_frames_to_use=73,
+                              seed_ui=rand_seed,
+                              randomize_seed=True,
+                              ui_guidance_scale=3.0,
+                              improve_texture_flag=True,
+                              api_name="/text_to_video"
+                          )
+                      vid_path = extract_path(result)
+                      if vid_path and os.path.exists(vid_path):
+                          import shutil
+                          shutil.copyfile(vid_path, video_output_path)
+                          print("[+] Lightricks LTX Video Complete!")
+                          ltx_success = True
+                  except Exception as e2:
+                      print(f"[-] Lightricks distilled error: {e2}")
+                      renew_tor_ip()
+
+              # Tier 3: Uncensored Video Fallback (MiniMax-H3 Uncensored + LoRA)
+              if not ltx_success:
+                  try:
+                      print("[*] Unrestricted Fallback: Connecting to Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED...")
+                      client = Client("Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED")
+                      result = client.predict(
+                          prompt=prompt,
+                          image_path=handle_file(input_img_path) if has_image else None,
+                          last_image_path=None,
+                          canvas="960x544 \u00b7 16:9 fast",
+                          duration=5.0,
+                          steps=6,
+                          seed=rand_seed,
+                          upsample=False,
+                          use_lora=True,
+                          lora="larry",
+                          api_name="/generate"
+                      )
+                      vid_path = extract_path(result)
+                      if vid_path and os.path.exists(vid_path):
+                          import shutil
+                          shutil.copyfile(vid_path, video_output_path)
+                          print("[+] Unrestricted Video Complete via MiniMax-H3!")
+                          ltx_success = True
+                  except Exception as e3:
+                      print(f"[-] MiniMax fallback error: {e3}")
+                      renew_tor_ip()
+
+              # Tier 4: High-Speed Video Fallback (mrfakename)
+              if not ltx_success:
+                  try:
+                      print("[*] High-Speed Fallback: Connecting to mrfakename/minimax-h3-ultra-fast...")
+                      client = Client("mrfakename/minimax-h3-ultra-fast")
+                      result = client.predict(
+                          prompt=prompt,
+                          image_path=handle_file(input_img_path) if has_image else None,
+                          last_image_path=None,
+                          canvas="960x544 \u00b7 16:9 fast",
+                          duration=5.0,
+                          steps=6,
+                          seed=rand_seed,
+                          upsample=False,
+                          acceleration="Balanced",
+                          lora_preset="None",
+                          lora_repo="",
+                          lora_filename="",
+                          lora_strength=1.0,
+                          generation_preset="Balanced \u00b7 best overall (recommended)",
+                          references=None,
+                          api_name="/generate"
+                      )
+                      vid_path = extract_path(result)
+                      if vid_path and os.path.exists(vid_path):
+                          import shutil
+                          shutil.copyfile(vid_path, video_output_path)
+                          print("[+] High-Speed Video Complete via mrfakename!")
+                          ltx_success = True
+                  except Exception as e4:
+                      print(f"[-] mrfakename fallback error: {e4}")
+                      renew_tor_ip()
+
+
 
           elif action == "kokoro-tts":
               print(f"[*] Generating Kokoro-TTS Hyper-Realistic Voice...")

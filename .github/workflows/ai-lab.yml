@@ -175,27 +175,82 @@ jobs:
                   image.save(output_path, format="PNG")
 
           elif action == "qwen-edit":
-              print(f"[*] Loading Qwen-Image-Edit-2511 for prompt: {prompt}")
+              print(f"[*] Loading Qwen Rapid AIO for prompt: {prompt}")
               from gradio_client import Client, handle_file
+              import random
               # Download base image
               input_img_path = "/tmp/ai_lab/input.png"
               resp = requests.get(image_url, timeout=15)
               with open(input_img_path, "wb") as f:
                   f.write(resp.content)
 
+              qwen_success = False
+              # 1. Primary: aet256 Rapid AIO LoRAs Space (Ultra fast 4-step GPU inference)
               try:
-                  client = Client("Qwen/Qwen-Image-Edit-2511")
+                  print("[*] Connecting to aet256/Qwen-Image-Edit-Rapid-AIO-Loras-Experimental...")
+                  client = Client("aet256/Qwen-Image-Edit-Rapid-AIO-Loras-Experimental")
+                  rand_seed = random.randint(1, 9999999)
+                  
+                  # Call /infer endpoint
                   result = client.predict(
-                      image=handle_file(input_img_path),
+                      input_image_1=handle_file(input_img_path),
+                      input_image_2=handle_file(input_img_path),
+                      input_images_extra=[],
                       prompt=prompt,
-                      api_name="/predict"
+                      lora_adapter="None",
+                      seed=rand_seed,
+                      randomize_seed=True,
+                      guidance_scale=1.0,
+                      steps=4,
+                      target_megapixels=1.0,
+                      extras_condition_only=True,
+                      pad_to_canvas=True,
+                      vae_tiling=False,
+                      resolution_multiple="32",
+                      vae_ref_megapixels=0.0,
+                      decoder_vae="qwen",
+                      keep_decoder_2x=False,
+                      highlight_protection=True,
+                      highlight_protection_strength=0.35,
+                      api_name="/infer"
                   )
-                  if isinstance(result, tuple) or isinstance(result, list):
-                      result = result[0]
-                  Image.open(result).save(output_path)
-                  print("[+] Qwen-Image-Edit-2511 Render Complete!")
+                  
+                  # result[0] is output image filepath
+                  out_file = result[0] if isinstance(result, (tuple, list)) else result
+                  if isinstance(out_file, dict):
+                      out_file = out_file.get("path")
+                  if out_file and os.path.exists(out_file):
+                      Image.open(out_file).save(output_path, format="PNG")
+                      print("[+] Qwen Rapid AIO Edit Completed via aet256 GPU Space!")
+                      qwen_success = True
               except Exception as e:
-                  print(f"[-] Space error, trying direct diffusers pipeline: {e}")
+                  print(f"[-] aet256 space error: {e}")
+                  renew_tor_ip()
+
+              # 2. Secondary: Fallback to official Qwen/Qwen-Image-Edit-2511 space
+              if not qwen_success:
+                  try:
+                      print("[*] Fallback: Connecting to official Qwen/Qwen-Image-Edit-2511...")
+                      client = Client("Qwen/Qwen-Image-Edit-2511")
+                      result = client.predict(
+                          image=handle_file(input_img_path),
+                          prompt=prompt,
+                          api_name="/predict"
+                      )
+                      if isinstance(result, (tuple, list)):
+                          result = result[0]
+                      if isinstance(result, dict):
+                          result = result.get("path")
+                      if result and os.path.exists(result):
+                          Image.open(result).save(output_path, format="PNG")
+                          print("[+] Qwen Official Space Completed!")
+                          qwen_success = True
+                  except Exception as e2:
+                      print(f"[-] Official space error: {e2}")
+
+              # 3. Final Fallback: Local diffusers pipeline in 23GB memory
+              if not qwen_success:
+                  print("[-] GPU Spaces failed, triggering local CPU pipeline fallback...")
                   from diffusers import QwenImageEditPlusPipeline
                   pipe = QwenImageEditPlusPipeline.from_pretrained(
                       "Qwen/Qwen-Image-Edit-2511",

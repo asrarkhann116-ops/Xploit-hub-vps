@@ -388,18 +388,18 @@ const commands = [
                 ),
         ),
     new SlashCommandBuilder()
-        .setName("ltx")
-        .setDescription("⚡ LTX 2.3 Studio Generative Video (Text-to-Video & Image-to-Video)")
+        .setName("music")
+        .setDescription("🎵 MiniMax Music 3 — AI Full Song & Instrumental Music Generator")
         .addStringOption((o) =>
             o
                 .setName("prompt")
-                .setDescription("Motion / scene prompt (e.g. 'cyberpunk car cruising in rainy neon city')")
+                .setDescription("Song description or style (e.g. 'romantic acoustic guitar ballad, warm female vocals')")
                 .setRequired(true),
         )
-        .addAttachmentOption((o) =>
+        .addBooleanOption((o) =>
             o
-                .setName("image")
-                .setDescription("Optional start image for Image-to-Video (I2V)")
+                .setName("instrumental")
+                .setDescription("Instrumental only (no vocals)?")
                 .setRequired(false),
         ),
 ].map((c) => c.toJSON());
@@ -1070,12 +1070,10 @@ client.on("interactionCreate", async (interaction) => {
             });
         }
     }
-
-    // /ltx
-    if (commandName === "ltx") {
+    // /music
+    if (commandName === "music") {
         const prompt = interaction.options.getString("prompt");
-        const attachment = interaction.options.getAttachment("image");
-        const imageUrl = attachment ? attachment.url : "";
+        const instrumental = interaction.options.getBoolean("instrumental") || false;
 
         await interaction.deferReply({ ephemeral: false });
 
@@ -1086,31 +1084,30 @@ client.on("interactionCreate", async (interaction) => {
                 workflow_id: "ai-lab.yml",
                 ref: "main",
                 inputs: {
-                    action_type: "ltx-video",
+                    action_type: "minimax-music",
                     prompt: prompt,
-                    image_url: imageUrl,
-                    steps: "24",
+                    image_url: instrumental ? "true" : "false",
+                    steps: "30",
                     user_id: interaction.user.id,
                     channel_id: interaction.channelId,
                 },
             });
 
-            const modeLabel = imageUrl ? "🖼️ Image-to-Video (I2V)" : "📝 Text-to-Video (T2V)";
             const embed = new EmbedBuilder()
-                .setTitle("⚡ Xploit AI Lab — LTX 2.3 Video Studio")
-                .setColor("#00FFFF")
-                .setDescription("Dispatching generation task to **LTX 2.3 DiT Neural Engine**!")
+                .setTitle("🎵 Xploit AI Lab — MiniMax Music 3")
+                .setColor("#FF1493")
+                .setDescription("Composing full song via **MiniMax Music 3 Neural Model**!")
                 .addFields(
-                    { name: "🎬 Mode", value: `\`${modeLabel}\``, inline: true },
-                    { name: "⚡ Preset", value: "`Fast / 24 FPS`", inline: true },
-                    { name: "📝 Prompt", value: `\`${prompt}\``, inline: false },
+                    { name: "🎼 Description / Style", value: `\`${prompt}\``, inline: false },
+                    { name: "🎤 Mode", value: instrumental ? "`Instrumental Only`" : "`Full Vocals + Lyrics`", inline: true },
+                    { name: "⚡ Quality", value: "`44.1kHz Studio Master`", inline: true },
                 )
-                .setFooter({ text: "Cinematic .mp4 video will be rendered and uploaded shortly." })
+                .setFooter({ text: "Composed song (.mp3) will be delivered directly to this channel." })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
-            console.error("LTX error:", err);
+            console.error("Music error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

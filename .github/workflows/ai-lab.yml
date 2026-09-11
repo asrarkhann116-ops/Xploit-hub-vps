@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'AI Action Type (zimage / qwen-edit / wan-video / krea-2 / minimax-h3 / ltx-video / kokoro-tts / qwen-voice)'
+        description: 'AI Action Type (zimage / qwen-edit / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music)'
         required: true
         default: 'zimage'
       prompt:
@@ -283,36 +283,64 @@ jobs:
                   init_img = Image.open(input_img_path).convert("RGB")
                   image = pipe(image=init_img, prompt=prompt, num_inference_steps=20).images[0]
                   image.save(output_path)
-
           elif action == "wan-video":
-              print(f"[*] Connecting to Wan 2.2 I2V 14B High-Speed Video Space...")
+              print(f"[*] Connecting to Wan 2.2 Uncensored Video Space (STCM Missionary AOTI)...")
               from gradio_client import Client, handle_file
               import random
 
-              # Download input image
-              input_img_path = "/tmp/ai_lab/input.png"
-              resp = requests.get(image_url, timeout=15)
-              with open(input_img_path, "wb") as f:
-                  f.write(resp.content)
-
               video_output_path = "/tmp/ai_lab/output.mp4"
               output_path = video_output_path
+              input_img_path = "/tmp/ai_lab/input.png"
+              rand_seed = random.randint(1, 9999999)
               wan_success = False
 
-              # Space 1: Cockdaddyfuck Wan 2.2 Custom LoRA Space
+              # Check or prepare input image
+              has_image = bool(image_url and image_url.startswith("http"))
+              if has_image:
+                  try:
+                      resp = requests.get(image_url, timeout=15)
+                      with open(input_img_path, "wb") as f:
+                          f.write(resp.content)
+                  except Exception as e:
+                      print(f"[-] Image download error: {e}")
+                      has_image = False
+
+              # If no image provided, generate an ultra-fast base image via Krea-2
+              if not has_image or not os.path.exists(input_img_path):
+                  try:
+                      print(f"[*] Auto-generating base frame for prompt: {prompt[:60]}...")
+                      krea_client = Client("ravenrose996688/Krea-2-Turbo_I2I")
+                      krea_res = krea_client.predict(
+                          param_0="text2image", param_1=prompt, param_2=None, param_3=None, param_4=None,
+                          param_5=832, param_6=480, param_7=1.4, param_8=768, param_9=1.0, param_10=1.0,
+                          param_11=6, param_12=1.0, param_13="euler", param_14="beta", param_15=rand_seed,
+                          param_16=True, param_17=0, param_18="pornmasterKrea2_v2TurboInt8.safetensors",
+                          param_19=None, param_20=None, param_21=None,
+                          param_22={'headers': ['repo_id', 'filename', 'revision', 'weight'], 'data': [], 'metadata': None},
+                          param_23=0.0, param_24=0.8, param_25=0.0, param_26=0.0, param_27=0.0,
+                          param_28=0.0, param_29=0.0, param_30=0.0, param_31=0.0, param_32=0.0,
+                          param_33=0.0, param_34=0.0, param_35=0.0, param_36=0.0, param_37=0.0,
+                          param_38=0.0, param_39=0.0, param_40=0.0, api_name="/_generate_wrapper"
+                      )
+                      base_img = extract_path(krea_res)
+                      if base_img and os.path.exists(base_img):
+                          import shutil
+                          shutil.copyfile(base_img, input_img_path)
+                          has_image = True
+                  except Exception as err:
+                      print(f"[-] Base frame gen error: {err}")
+
+              # Space 1: STCM/wan2-2-fp8da-aoti-preview-2c-missionary (Unrestricted FP8DA AOTI)
               try:
-                  client = Client("Cockdaddyfuck/Wan_2.2_I2V_14B_Custom_Lora_Wow")
-                  rand_seed = random.randint(1, 9999999)
-                  print(f"[*] Generating Wan 2.2 14B Video for prompt: {prompt}...")
-                  
-                  # Call /generate_video endpoint
+                  print("[*] Connecting to STCM/wan2-2-fp8da-aoti-preview-2c-missionary...")
+                  client = Client("STCM/wan2-2-fp8da-aoti-preview-2c-missionary")
                   result = client.predict(
-                      input_image=handle_file(input_img_path),
+                      input_image=handle_file(input_img_path) if os.path.exists(input_img_path) else None,
                       last_image=None,
                       prompt=prompt,
                       steps=steps if steps <= 12 else 6,
-                      negative_prompt="色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 风格, 画面, 静止, 整体发灰, 最差质量, 低质量, 丑陋的, 畸形",
-                      duration_seconds=3.5,
+                      negative_prompt="blurry, distorted, low quality, static, artifacts",
+                      duration_seconds=3.0,
                       guidance_scale=1.0,
                       guidance_scale_2=1.0,
                       seed=rand_seed,
@@ -320,67 +348,31 @@ jobs:
                       quality=6,
                       scheduler="UniPCMultistep",
                       flow_shift=3.0,
-                      frame_multiplier=16,
+                      frame_multiplier="16",
                       safe_mode=False,
-                      lora1_preset="(None)",
-                      lora1_high_scale=1.0,
-                      lora1_low_scale=1.0,
-                      lora2_preset="(None)",
-                      lora2_high_scale=1.0,
-                      lora2_low_scale=1.0,
-                      lora3_preset="(None)",
-                      lora3_high_scale=1.0,
-                      lora3_low_scale=1.0,
-                      my1_repo="",
-                      my1_high="(None)",
-                      my1_hs=1.0,
-                      my1_low="(None)",
-                      my1_ls=1.0,
-                      my2_repo="",
-                      my2_high="(None)",
-                      my2_hs=1.0,
-                      my2_low="(None)",
-                      my2_ls=1.0,
-                      my3_repo="",
-                      my3_high="(None)",
-                      my3_hs=1.0,
-                      my3_low="(None)",
-                      my3_ls=1.0,
-                      my4_repo="",
-                      my4_high="(None)",
-                      my4_hs=1.0,
-                      my4_low="(None)",
-                      my4_ls=1.0,
-                      my5_repo="",
-                      my5_high="(None)",
-                      my5_hs=1.0,
-                      my5_low="(None)",
-                      my5_ls=1.0,
                       video_component=True,
                       api_name="/generate_video"
                   )
-                  
-                  # Extract generated video filepath
                   vid_path = extract_path(result)
                   if vid_path and os.path.exists(vid_path):
                       import shutil
                       shutil.copyfile(vid_path, video_output_path)
-                      print("[+] Wan 2.2 Video Complete from Cockdaddyfuck Space!")
+                      print("[+] Wan 2.2 Missionary Video Complete!")
                       wan_success = True
                   else:
-                      print(f"[-] Wan-Video path not resolved from result: {result}")
-              except Exception as err:
-                  print(f"[-] Cockdaddyfuck Wan generation error: {err}")
+                      print(f"[-] STCM Missionary path not resolved from result: {result}")
+                      renew_tor_ip()
+              except Exception as e:
+                  print(f"[-] STCM Missionary error: {e}")
                   renew_tor_ip()
 
               # Space 2: kulkas2pintu/edit-video-wan fallback
               if not wan_success:
                   try:
-                      print("[*] Fallback: Connecting to kulkas2pintu/edit-video-wan...")
+                      print("[*] Trying Fallback 2: kulkas2pintu/edit-video-wan...")
                       client = Client("kulkas2pintu/edit-video-wan")
-                      rand_seed = random.randint(1, 9999999)
                       result = client.predict(
-                          input_image=handle_file(input_img_path),
+                          input_image=handle_file(input_img_path) if os.path.exists(input_img_path) else None,
                           last_image=None,
                           prompt=prompt,
                           steps=steps if steps <= 12 else 6,
@@ -404,9 +396,39 @@ jobs:
                           shutil.copyfile(vid_path, video_output_path)
                           print("[+] Wan Video Complete from kulkas2pintu Space!")
                           wan_success = True
-                  except Exception as err2:
-                      print(f"[-] kulkas2pintu space error: {err2}")
+                  except Exception as e2:
+                      print(f"[-] kulkas2pintu space error: {e2}")
                       renew_tor_ip()
+
+              # Space 3: Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED (100% Unrestricted Text/Image to Video)
+              if not wan_success:
+                  try:
+                      print("[*] Trying Fallback 3: Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED...")
+                      client = Client("Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED")
+                      result = client.predict(
+                          prompt=prompt,
+                          image_path=handle_file(input_img_path) if os.path.exists(input_img_path) else None,
+                          last_image_path=None,
+                          canvas="960x544 \u00b7 16:9 fast",
+                          duration=5.0,
+                          steps=6,
+                          seed=rand_seed,
+                          upsample=False,
+                          use_lora=True,
+                          lora="larry",
+                          api_name="/generate"
+                      )
+                      vid_path = extract_path(result)
+                      if vid_path and os.path.exists(vid_path):
+                          import shutil
+                          shutil.copyfile(vid_path, video_output_path)
+                          print("[+] Uncensored Video Complete from Pepe104 Space!")
+                          wan_success = True
+                  except Exception as e3:
+                      print(f"[-] Pepe104 error: {e3}")
+                      renew_tor_ip()
+
+
 
           elif action == "krea-2":
               print(f"[*] Connecting to Krea-2-Turbo Ultra-Realism / Unrestricted Space...")
@@ -570,194 +592,53 @@ jobs:
                   except Exception as err:
                       print(f"[-] multimodalart error: {err}")
                       renew_tor_ip()
-          elif action == "ltx-video":
-              print(f"[*] Connecting to LTX 2.3 Studio Generative Video Space...")
-              from gradio_client import Client, handle_file
-              import random
-              video_output_path = "/tmp/ai_lab/output.mp4"
-              output_path = video_output_path
+          elif action == "minimax-music":
+              print(f"[*] Composing studio-grade AI Music with MiniMax-Music3...")
+              audio_output_path = "/tmp/ai_lab/output.mp3"
+              output_path = audio_output_path
+              is_instrumental = image_url.lower() in ("true", "1", "yes") if image_url else False
               rand_seed = random.randint(1, 9999999)
-              ltx_success = False
-              has_image = bool(image_url and image_url.startswith("http"))
-              input_img_path = "/tmp/ai_lab/input.png"
+              music_success = False
 
-              if has_image:
-                  try:
-                      resp = requests.get(image_url, timeout=15)
-                      with open(input_img_path, "wb") as f:
-                          f.write(resp.content)
-                  except Exception as e:
-                      print(f"[-] Image download error: {e}")
-                      has_image = False
-
-              # Tier 1: techfreakworm/LTX2.3-Studio
               try:
-                  print("[*] Trying Space 1: techfreakworm/LTX2.3-Studio...")
-                  client = Client("techfreakworm/LTX2.3-Studio")
-
-                  if has_image:
-                      print(f"[*] Dispatching LTX 2.3 Image-to-Video (I2V) for prompt: {prompt}...")
-                      result = client.predict(
-                          param_0=prompt,
-                          param_1="Fast",
-                          param_2=768,
-                          param_3=512,
-                          param_4=4,
-                          param_5=24,
-                          param_6=rand_seed,
-                          param_7=True,
-                          param_8=handle_file(input_img_path),
-                          param_9="worst quality, low quality, blurry, distorted, watermark",
-                          param_10="none",
-                          param_11=1.0,
-                          param_12=True,
-                          param_13=0.8,
-                          param_14="none",
-                          param_15=0.8,
-                          param_16=False,
-                          api_name="/handler_1"
-                      )
-                  else:
-                      print(f"[*] Dispatching LTX 2.3 Text-to-Video (T2V) for prompt: {prompt}...")
-                      result = client.predict(
-                          param_0=prompt,
-                          param_1="Fast",
-                          param_2=768,
-                          param_3=512,
-                          param_4=4,
-                          param_5=24,
-                          param_6=rand_seed,
-                          param_7=True,
-                          param_8="worst quality, low quality, blurry, distorted, watermark",
-                          param_9="none",
-                          param_10=1.0,
-                          param_11=True,
-                          param_12=0.8,
-                          api_name="/handler"
-                      )
-
-                  vid_path = extract_path(result)
-                  if vid_path and os.path.exists(vid_path):
+                  from gradio_client import Client
+                  print(f"[*] Connecting to MiniMaxAI/MiniMax-Music3 Space...")
+                  client = Client("MiniMaxAI/MiniMax-Music3")
+                  state_payload = {
+                      "mode": "simple",
+                      "description": prompt,
+                      "instrumental": is_instrumental,
+                      "title": prompt[:30],
+                      "lyrics": "",
+                      "global_meta": "",
+                      "vocals": "",
+                      "arrangement": ""
+                  }
+                  print(f"[*] Generating song (instrumental={is_instrumental}): {prompt}...")
+                  result = client.predict(
+                      state=state_payload,
+                      duration=60,
+                      seed=rand_seed,
+                      randomize_seed=True,
+                      headroom=0,
+                      steps=30,
+                      guidance=1.7,
+                      api_name="/simple_generate"
+                  )
+                  audio_path = extract_path(result)
+                  if audio_path and os.path.exists(audio_path):
                       import shutil
-                      shutil.copyfile(vid_path, video_output_path)
-                      print("[+] LTX 2.3 Studio Video Complete!")
-                      ltx_success = True
+                      shutil.copyfile(audio_path, audio_output_path)
+                      print("[+] MiniMax Music 3 Generation Complete!")
+                      music_success = True
                   else:
-                      print(f"[-] LTX Studio path not resolved from result: {result}")
+                      print(f"[-] MiniMax Music path not resolved: {result}")
                       renew_tor_ip()
               except Exception as e:
-                  print(f"[-] LTX 2.3 Studio error: {e}")
+                  print(f"[-] MiniMax-Music3 error: {e}")
                   renew_tor_ip()
 
-              # Tier 2: Lightricks Official Distilled LTX Space
-              if not ltx_success:
-                  try:
-                      print("[*] Trying Space 2: Lightricks/ltx-video-distilled...")
-                      client = Client("Lightricks/ltx-video-distilled")
-                      if has_image:
-                          result = client.predict(
-                              prompt=prompt,
-                              negative_prompt="worst quality, low quality, blurry",
-                              input_image_filepath=handle_file(input_img_path),
-                              input_video_filepath=None,
-                              height_ui=480,
-                              width_ui=704,
-                              mode="image-to-video",
-                              duration_ui=3.0,
-                              ui_frames_to_use=73,
-                              seed_ui=rand_seed,
-                              randomize_seed=True,
-                              ui_guidance_scale=3.0,
-                              improve_texture_flag=True,
-                              api_name="/image_to_video"
-                          )
-                      else:
-                          result = client.predict(
-                              prompt=prompt,
-                              negative_prompt="worst quality, low quality, blurry",
-                              input_image_filepath=None,
-                              input_video_filepath=None,
-                              height_ui=480,
-                              width_ui=704,
-                              mode="text-to-video",
-                              duration_ui=3.0,
-                              ui_frames_to_use=73,
-                              seed_ui=rand_seed,
-                              randomize_seed=True,
-                              ui_guidance_scale=3.0,
-                              improve_texture_flag=True,
-                              api_name="/text_to_video"
-                          )
-                      vid_path = extract_path(result)
-                      if vid_path and os.path.exists(vid_path):
-                          import shutil
-                          shutil.copyfile(vid_path, video_output_path)
-                          print("[+] Lightricks LTX Video Complete!")
-                          ltx_success = True
-                  except Exception as e2:
-                      print(f"[-] Lightricks distilled error: {e2}")
-                      renew_tor_ip()
 
-              # Tier 3: Uncensored Video Fallback (MiniMax-H3 Uncensored + LoRA)
-              if not ltx_success:
-                  try:
-                      print("[*] Unrestricted Fallback: Connecting to Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED...")
-                      client = Client("Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED")
-                      result = client.predict(
-                          prompt=prompt,
-                          image_path=handle_file(input_img_path) if has_image else None,
-                          last_image_path=None,
-                          canvas="960x544 \u00b7 16:9 fast",
-                          duration=5.0,
-                          steps=6,
-                          seed=rand_seed,
-                          upsample=False,
-                          use_lora=True,
-                          lora="larry",
-                          api_name="/generate"
-                      )
-                      vid_path = extract_path(result)
-                      if vid_path and os.path.exists(vid_path):
-                          import shutil
-                          shutil.copyfile(vid_path, video_output_path)
-                          print("[+] Unrestricted Video Complete via MiniMax-H3!")
-                          ltx_success = True
-                  except Exception as e3:
-                      print(f"[-] MiniMax fallback error: {e3}")
-                      renew_tor_ip()
-
-              # Tier 4: High-Speed Video Fallback (mrfakename)
-              if not ltx_success:
-                  try:
-                      print("[*] High-Speed Fallback: Connecting to mrfakename/minimax-h3-ultra-fast...")
-                      client = Client("mrfakename/minimax-h3-ultra-fast")
-                      result = client.predict(
-                          prompt=prompt,
-                          image_path=handle_file(input_img_path) if has_image else None,
-                          last_image_path=None,
-                          canvas="960x544 \u00b7 16:9 fast",
-                          duration=5.0,
-                          steps=6,
-                          seed=rand_seed,
-                          upsample=False,
-                          acceleration="Balanced",
-                          lora_preset="None",
-                          lora_repo="",
-                          lora_filename="",
-                          lora_strength=1.0,
-                          generation_preset="Balanced \u00b7 best overall (recommended)",
-                          references=None,
-                          api_name="/generate"
-                      )
-                      vid_path = extract_path(result)
-                      if vid_path and os.path.exists(vid_path):
-                          import shutil
-                          shutil.copyfile(vid_path, video_output_path)
-                          print("[+] High-Speed Video Complete via mrfakename!")
-                          ltx_success = True
-                  except Exception as e4:
-                      print(f"[-] mrfakename fallback error: {e4}")
-                      renew_tor_ip()
 
 
 
@@ -876,10 +757,10 @@ jobs:
           if os.path.exists(output_path):
               url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
               headers = {"Authorization": f"Bot {discord_token}"}
-              if action in ("wan-video", "minimax-h3", "ltx-video"):
+              if action in ("wan-video", "minimax-h3"):
                   filename = "xploit_video.mp4"
                   mimetype = "video/mp4"
-              elif action in ("kokoro-tts", "qwen-voice"):
+              elif action in ("kokoro-tts", "qwen-voice", "minimax-music"):
                   filename = "xploit_voice.mp3"
                   mimetype = "audio/mpeg"
               else:

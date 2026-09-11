@@ -387,6 +387,21 @@ const commands = [
                     { name: "Sohee (Korean Voice)", value: "Sohee" },
                 ),
         ),
+    new SlashCommandBuilder()
+        .setName("ltx")
+        .setDescription("⚡ LTX 2.3 Studio Generative Video (Text-to-Video & Image-to-Video)")
+        .addStringOption((o) =>
+            o
+                .setName("prompt")
+                .setDescription("Motion / scene prompt (e.g. 'cyberpunk car cruising in rainy neon city')")
+                .setRequired(true),
+        )
+        .addAttachmentOption((o) =>
+            o
+                .setName("image")
+                .setDescription("Optional start image for Image-to-Video (I2V)")
+                .setRequired(false),
+        ),
 ].map((c) => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(
@@ -1050,6 +1065,52 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
             console.error("Qwen Voice error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /ltx
+    if (commandName === "ltx") {
+        const prompt = interaction.options.getString("prompt");
+        const attachment = interaction.options.getAttachment("image");
+        const imageUrl = attachment ? attachment.url : "";
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "ltx-video",
+                    prompt: prompt,
+                    image_url: imageUrl,
+                    steps: "24",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const modeLabel = imageUrl ? "🖼️ Image-to-Video (I2V)" : "📝 Text-to-Video (T2V)";
+            const embed = new EmbedBuilder()
+                .setTitle("⚡ Xploit AI Lab — LTX 2.3 Video Studio")
+                .setColor("#00FFFF")
+                .setDescription("Dispatching generation task to **LTX 2.3 DiT Neural Engine**!")
+                .addFields(
+                    { name: "🎬 Mode", value: `\`${modeLabel}\``, inline: true },
+                    { name: "⚡ Preset", value: "`Fast / 24 FPS`", inline: true },
+                    { name: "📝 Prompt", value: `\`${prompt}\``, inline: false },
+                )
+                .setFooter({ text: "Cinematic .mp4 video will be rendered and uploaded shortly." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("LTX error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

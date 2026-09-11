@@ -62,7 +62,7 @@ jobs:
           mkdir -p /tmp/ai_lab
           cd /tmp/ai_lab
 
-          cat << 'EOF' > generate.py
+          python3 -c "import sys, textwrap; open('generate.py', 'w', encoding='utf-8').write(textwrap.dedent(sys.stdin.read()))" << 'EOF'
           import os
           import sys
           import requests
@@ -343,6 +343,11 @@ jobs:
                   if video_res and os.path.exists(video_res):
                       import shutil
                       shutil.copyfile(video_res, video_output_path)
+                      print("[+] Wan 2.2 Video Generation Complete!")
+              except Exception as err:
+                  print(f"[-] Wan-Video generation error: {err}")
+                  renew_tor_ip()
+
           elif action == "krea-2":
               print(f"[*] Connecting to Krea-2-Turbo Ultra-Realism / Unrestricted Space...")
               from gradio_client import Client

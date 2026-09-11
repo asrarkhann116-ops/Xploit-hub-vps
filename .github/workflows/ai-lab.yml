@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'AI Action Type (zimage / qwen-edit)'
+        description: 'AI Action Type (zimage / qwen-edit / wan-video / krea-2)'
         required: true
         default: 'zimage'
       prompt:
@@ -263,14 +263,163 @@ jobs:
                   image = pipe(image=init_img, prompt=prompt, num_inference_steps=20).images[0]
                   image.save(output_path)
 
+          elif action == "wan-video":
+              print(f"[*] Connecting to Wan 2.2 I2V 14B High-Speed Video Space...")
+              from gradio_client import Client, handle_file
+              import random
+
+              # Download input image
+              input_img_path = "/tmp/ai_lab/input.png"
+              resp = requests.get(image_url, timeout=15)
+              with open(input_img_path, "wb") as f:
+                  f.write(resp.content)
+
+              video_output_path = "/tmp/ai_lab/output.mp4"
+              output_path = video_output_path
+              try:
+                  client = Client("Cockdaddyfuck/Wan_2.2_I2V_14B_Custom_Lora_Wow")
+                  rand_seed = random.randint(1, 9999999)
+                  print(f"[*] Generating Wan 2.2 14B Video for prompt: {prompt}...")
+                  
+                  # Call /generate_video endpoint
+                  result = client.predict(
+                      input_image=handle_file(input_img_path),
+                      last_image=None,
+                      prompt=prompt,
+                      steps=steps if steps <= 12 else 6,
+                      negative_prompt="色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 风格, 画面, 静止, 整体发灰, 最差质量, 低质量, 丑陋的, 畸形",
+                      duration_seconds=3.5,
+                      guidance_scale=1.0,
+                      guidance_scale_2=1.0,
+                      seed=rand_seed,
+                      randomize_seed=True,
+                      quality=6,
+                      scheduler="UniPCMultistep",
+                      flow_shift=3.0,
+                      frame_multiplier=16,
+                      safe_mode=False,
+                      lora1_preset="(None)",
+                      lora1_high_scale=1.0,
+                      lora1_low_scale=1.0,
+                      lora2_preset="(None)",
+                      lora2_high_scale=1.0,
+                      lora2_low_scale=1.0,
+                      lora3_preset="(None)",
+                      lora3_high_scale=1.0,
+                      lora3_low_scale=1.0,
+                      my1_repo="",
+                      my1_high="(None)",
+                      my1_hs=1.0,
+                      my1_low="(None)",
+                      my1_ls=1.0,
+                      my2_repo="",
+                      my2_high="(None)",
+                      my2_hs=1.0,
+                      my2_low="(None)",
+                      my2_ls=1.0,
+                      my3_repo="",
+                      my3_high="(None)",
+                      my3_hs=1.0,
+                      my3_low="(None)",
+                      my3_ls=1.0,
+                      my4_repo="",
+                      my4_high="(None)",
+                      my4_hs=1.0,
+                      my4_low="(None)",
+                      my4_ls=1.0,
+                      my5_repo="",
+                      my5_high="(None)",
+                      my5_hs=1.0,
+                      my5_low="(None)",
+                      my5_ls=1.0,
+                      video_component=True,
+                      api_name="/generate_video"
+                  )
+                  
+                  # result[0] or result[1] contains generated video filepath
+                  video_res = result[0] if isinstance(result, (tuple, list)) else result
+                  if isinstance(video_res, dict):
+                      video_res = video_res.get("video", {}).get("path", video_res.get("path"))
+                  if video_res and os.path.exists(video_res):
+                      import shutil
+                      shutil.copyfile(video_res, video_output_path)
+          elif action == "krea-2":
+              print(f"[*] Connecting to Krea-2-Turbo Ultra-Realism / Unrestricted Space...")
+              from gradio_client import Client
+              import random
+              try:
+                  client = Client("ravenrose996688/Krea-2-Turbo_I2I")
+                  rand_seed = random.randint(1, 9999999)
+                  
+                  # Professional photorealism prompt tuning
+                  tuned_prompt = f"{prompt}, raw photo, 8k uhd, dslr, soft natural lighting, high quality, film grain, Fujifilm XT4"
+                  print(f"[*] Dispatching tuned prompt: {tuned_prompt}")
+                  
+                  result = client.predict(
+                      param_0="text2image",
+                      param_1=tuned_prompt,
+                      param_2=None,
+                      param_3=None,
+                      param_4=None,
+                      param_5=1024,
+                      param_6=1024,
+                      param_7=1.4,
+                      param_8=768,
+                      param_9=1.0,
+                      param_10=1.0,
+                      param_11=steps if steps <= 15 else 8,
+                      param_12=1.0,
+                      param_13="euler",
+                      param_14="beta",
+                      param_15=rand_seed,
+                      param_16=True,
+                      param_17=0,
+                      param_18="pornmasterKrea2_v2TurboInt8.safetensors",
+                      param_19=None,
+                      param_20=None,
+                      param_21=None,
+                      param_22={'headers': ['repo_id', 'filename', 'revision', 'weight'], 'data': [], 'metadata': None},
+                      param_23=0.0,
+                      param_24=0.8, # Refusal-Reduction LoRA enabled!
+                      param_25=0.0,
+                      param_26=0.0,
+                      param_27=0.0,
+                      param_28=0.0,
+                      param_29=0.0,
+                      param_30=0.0,
+                      param_31=0.0,
+                      param_32=0.0,
+                      param_33=0.0,
+                      param_34=0.0,
+                      param_35=0.0,
+                      param_36=0.0,
+                      param_37=0.0,
+                      param_38=0.0,
+                      param_39=0.0,
+                      param_40=0.0,
+                      api_name="/_generate_wrapper"
+                  )
+                  
+                  img_res = result[0] if isinstance(result, (tuple, list)) else result
+                  if isinstance(img_res, dict):
+                      img_res = img_res.get("path")
+                  if img_res and os.path.exists(img_res):
+                      Image.open(img_res).save(output_path, format="PNG")
+                      print("[+] Krea-2 Ultra-Realistic Generation Complete!")
+              except Exception as err:
+                  print(f"[-] Krea-2 generation error: {err}")
+                  renew_tor_ip()
+
           # Send generated artifact directly to Discord Channel
           if os.path.exists(output_path):
               url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
               headers = {"Authorization": f"Bot {discord_token}"}
+              filename = "xploit_video.mp4" if action == "wan-video" else "xploit_render.png"
+              mimetype = "video/mp4" if action == "wan-video" else "image/png"
               with open(output_path, "rb") as f:
-                  files = {"file": ("xploit_render.png", f, "image/png")}
+                  files = {"file": (filename, f, mimetype)}
                   data = {
-                      "content": f"⚡ **XPLOIT NEXT-GEN AI LAB — UNRESTRICTED RENDER**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `{action.upper()}`\n📝 **Prompt:** `{prompt}`"
+                      "content": f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()} RENDER**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `{action.upper()} (14B High-Speed)`\n📝 **Prompt:** `{prompt}`"
                   }
                   r = requests.post(url, headers=headers, data=data, files=files)
                   print(f"[+] Discord upload status: {r.status_code}")

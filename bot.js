@@ -361,6 +361,32 @@ const commands = [
                     { name: "George (British Male - Classic)", value: "bm_george" },
                 ),
         ),
+    new SlashCommandBuilder()
+        .setName("qwen-voice")
+        .setDescription("🎙️ Qwen Voice Studio — Advanced Multilingual Neural Voice Studio")
+        .addStringOption((o) =>
+            o
+                .setName("text")
+                .setDescription("What should the voice speak?")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("speaker")
+                .setDescription("Speaker character")
+                .setRequired(false)
+                .addChoices(
+                    { name: "Vivian (Natural Female)", value: "Vivian" },
+                    { name: "Serena (Warm Female)", value: "Serena" },
+                    { name: "Uncle Fu (Mature Deep Male)", value: "Uncle_Fu" },
+                    { name: "Dylan (Confident Male)", value: "Dylan" },
+                    { name: "Eric (Casual Male)", value: "Eric" },
+                    { name: "Ryan (Energetic Male)", value: "Ryan" },
+                    { name: "Aiden (Clear Male)", value: "Aiden" },
+                    { name: "Ono Anna (Japanese Voice)", value: "Ono_Anna" },
+                    { name: "Sohee (Korean Voice)", value: "Sohee" },
+                ),
+        ),
 ].map((c) => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(
@@ -980,6 +1006,50 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
             console.error("Kokoro error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /qwen-voice
+    if (commandName === "qwen-voice") {
+        const text = interaction.options.getString("text");
+        const speaker = interaction.options.getString("speaker") || "Vivian";
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "qwen-voice",
+                    prompt: text,
+                    image_url: speaker,
+                    steps: "1",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🎙️ Xploit AI Lab — Qwen Voice Studio")
+                .setColor("#8A2BE2")
+                .setDescription("Synthesizing speech via **Qwen-Voice Neural Engine**!")
+                .addFields(
+                    { name: "🗣️ Text", value: `\`${text}\``, inline: false },
+                    { name: "🎭 Speaker", value: `\`${speaker}\``, inline: true },
+                    { name: "🌐 Language", value: "`Auto (Detect & Adapt)`", inline: true },
+                )
+                .setFooter({ text: "High-fidelity audio will be delivered directly to this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("Qwen Voice error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

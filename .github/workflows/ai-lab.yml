@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'AI Action Type (zimage / qwen-edit / wan-video / krea-2 / minimax-h3 / kokoro-tts)'
+        description: 'AI Action Type (zimage / qwen-edit / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice)'
         required: true
         default: 'zimage'
       prompt:
@@ -297,6 +297,9 @@ jobs:
 
               video_output_path = "/tmp/ai_lab/output.mp4"
               output_path = video_output_path
+              wan_success = False
+
+              # Space 1: Cockdaddyfuck Wan 2.2 Custom LoRA Space
               try:
                   client = Client("Cockdaddyfuck/Wan_2.2_I2V_14B_Custom_Lora_Wow")
                   rand_seed = random.randint(1, 9999999)
@@ -362,12 +365,48 @@ jobs:
                   if vid_path and os.path.exists(vid_path):
                       import shutil
                       shutil.copyfile(vid_path, video_output_path)
-                      print("[+] Wan 2.2 Video Generation Complete!")
+                      print("[+] Wan 2.2 Video Complete from Cockdaddyfuck Space!")
+                      wan_success = True
                   else:
                       print(f"[-] Wan-Video path not resolved from result: {result}")
               except Exception as err:
-                  print(f"[-] Wan-Video generation error: {err}")
+                  print(f"[-] Cockdaddyfuck Wan generation error: {err}")
                   renew_tor_ip()
+
+              # Space 2: kulkas2pintu/edit-video-wan fallback
+              if not wan_success:
+                  try:
+                      print("[*] Fallback: Connecting to kulkas2pintu/edit-video-wan...")
+                      client = Client("kulkas2pintu/edit-video-wan")
+                      rand_seed = random.randint(1, 9999999)
+                      result = client.predict(
+                          input_image=handle_file(input_img_path),
+                          last_image=None,
+                          prompt=prompt,
+                          steps=steps if steps <= 12 else 6,
+                          negative_prompt="blurry, distorted, low quality, static",
+                          duration_seconds=3.0,
+                          guidance_scale=1.0,
+                          guidance_scale_2=1.0,
+                          seed=rand_seed,
+                          randomize_seed=True,
+                          quality=6,
+                          scheduler="UniPCMultistep",
+                          flow_shift=3.0,
+                          frame_multiplier="16",
+                          video_component=True,
+                          safe_mode=False,
+                          api_name="/generate_video"
+                      )
+                      vid_path = extract_path(result)
+                      if vid_path and os.path.exists(vid_path):
+                          import shutil
+                          shutil.copyfile(vid_path, video_output_path)
+                          print("[+] Wan Video Complete from kulkas2pintu Space!")
+                          wan_success = True
+                  except Exception as err2:
+                      print(f"[-] kulkas2pintu space error: {err2}")
+                      renew_tor_ip()
 
           elif action == "krea-2":
               print(f"[*] Connecting to Krea-2-Turbo Ultra-Realism / Unrestricted Space...")
@@ -442,21 +481,19 @@ jobs:
               import random
               video_output_path = "/tmp/ai_lab/output.mp4"
               output_path = video_output_path
-              minimax_spaces = [
-                  "Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED",
-                  "mrfakename/minimax-h3-ultra-fast",
-                  "multimodalart/minimax-h3"
-              ]
-              for m_space in minimax_spaces:
+              rand_seed = random.randint(1, 999999)
+              mm_success = False
+
+              # Space 1: Pepe104 (Uncensored + Turbo LoRA)
+              if not mm_success:
                   try:
-                      print(f"[*] Dispatching MiniMax-H3 request to space: {m_space}...")
-                      client = Client(m_space)
-                      rand_seed = random.randint(1, 999999)
+                      print("[*] Trying Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED...")
+                      client = Client("Pepe104/MiniMax-H3-Turbo-Lora-UNCENSORED")
                       result = client.predict(
                           prompt=prompt,
                           image_path=None,
                           last_image_path=None,
-                          canvas="960x544 — 16:9 fast",
+                          canvas="960x544 \u00b7 16:9 fast",
                           duration=5.0,
                           steps=steps if steps <= 8 else 6,
                           seed=rand_seed,
@@ -465,15 +502,73 @@ jobs:
                           lora="larry",
                           api_name="/generate"
                       )
-                      print(f"[*] Raw MiniMax-H3 result: {result}")
                       vid_path = extract_path(result)
                       if vid_path and os.path.exists(vid_path):
                           import shutil
                           shutil.copyfile(vid_path, video_output_path)
-                          print(f"[+] MiniMax-H3 Video+Audio Complete from {m_space}!")
-                          break
+                          print("[+] MiniMax-H3 Video+Audio Complete from Pepe104!")
+                          mm_success = True
                   except Exception as err:
-                      print(f"[-] MiniMax-H3 error on {m_space}: {err}")
+                      print(f"[-] Pepe104 error: {err}")
+                      renew_tor_ip()
+
+              # Space 2: mrfakename (ultra-fast, different params)
+              if not mm_success:
+                  try:
+                      print("[*] Trying mrfakename/minimax-h3-ultra-fast...")
+                      client = Client("mrfakename/minimax-h3-ultra-fast")
+                      result = client.predict(
+                          prompt=prompt,
+                          image_path=None,
+                          last_image_path=None,
+                          canvas="960x544 \u00b7 16:9 fast",
+                          duration=5.0,
+                          steps=steps if steps <= 8 else 6,
+                          seed=rand_seed,
+                          upsample=False,
+                          acceleration="Balanced",
+                          lora_preset="None",
+                          lora_repo="",
+                          lora_filename="",
+                          lora_strength=1.0,
+                          generation_preset="Balanced \u00b7 best overall (recommended)",
+                          references=None,
+                          api_name="/generate"
+                      )
+                      vid_path = extract_path(result)
+                      if vid_path and os.path.exists(vid_path):
+                          import shutil
+                          shutil.copyfile(vid_path, video_output_path)
+                          print("[+] MiniMax-H3 Video+Audio Complete from mrfakename!")
+                          mm_success = True
+                  except Exception as err:
+                      print(f"[-] mrfakename error: {err}")
+                      renew_tor_ip()
+
+              # Space 3: multimodalart (official, minimal params)
+              if not mm_success:
+                  try:
+                      print("[*] Trying multimodalart/minimax-h3...")
+                      client = Client("multimodalart/minimax-h3")
+                      result = client.predict(
+                          prompt=prompt,
+                          image_path=None,
+                          last_image_path=None,
+                          canvas="960x544 \u00b7 16:9 fast",
+                          duration=5.0,
+                          steps=28,
+                          seed=rand_seed,
+                          upsample=False,
+                          api_name="/generate"
+                      )
+                      vid_path = extract_path(result)
+                      if vid_path and os.path.exists(vid_path):
+                          import shutil
+                          shutil.copyfile(vid_path, video_output_path)
+                          print("[+] MiniMax-H3 Video+Audio Complete from multimodalart!")
+                          mm_success = True
+                  except Exception as err:
+                      print(f"[-] multimodalart error: {err}")
                       renew_tor_ip()
 
           elif action == "kokoro-tts":
@@ -525,6 +620,68 @@ jobs:
                   except Exception as err2:
                       print(f"[-] Local Kokoro error: {err2}")
 
+          elif action == "qwen-voice":
+              print(f"[*] Generating speech via Qwen Voice Studio...")
+              audio_output_path = "/tmp/ai_lab/output.mp3"
+              output_path = audio_output_path
+              speaker = os.environ.get("IMAGE_URL", "Vivian")
+              valid_speakers = ["Vivian", "Serena", "Uncle_Fu", "Dylan", "Eric", "Ryan", "Aiden", "Ono_Anna", "Sohee"]
+              if speaker not in valid_speakers:
+                  speaker = "Vivian"
+              qwen_voice_success = False
+
+              # Space: techfreakworm/qwen-voice-studio
+              try:
+                  from gradio_client import Client
+                  print(f"[*] Connecting to techfreakworm/qwen-voice-studio (speaker: {speaker})...")
+                  client = Client("techfreakworm/qwen-voice-studio")
+                  result = client.predict(
+                      text=prompt,
+                      speaker=speaker,
+                      instruct="",
+                      language="Auto (detect)",
+                      longform=False,
+                      param_5=0.7,
+                      param_6=0.8,
+                      param_7=50,
+                      param_8=1.05,
+                      param_9=False,
+                      param_10=0.7,
+                      param_11=0.8,
+                      param_12=50,
+                      param_13=1024,
+                      param_14=-1,
+                      api_name="/do_preset"
+                  )
+                  audio_path = extract_path(result)
+                  if audio_path and os.path.exists(audio_path):
+                      import shutil
+                      shutil.copyfile(audio_path, audio_output_path)
+                      print("[+] Qwen Voice generation complete!")
+                      qwen_voice_success = True
+              except Exception as e:
+                  print(f"[-] Qwen Voice Studio error: {e}")
+                  renew_tor_ip()
+
+              # Fallback: Kokoro-TTS if ZeroGPU rate-limited
+              if not qwen_voice_success:
+                  try:
+                      print("[*] Quota/Space fallback: Generating via Kokoro-TTS...")
+                      from kokoro import KPipeline
+                      import soundfile as sf
+                      import numpy as np
+                      pipeline = KPipeline(lang_code='a')
+                      generator = pipeline(prompt, voice='af_heart', speed=1, split_pattern=r'\n+')
+                      audio_pieces = []
+                      for i, (gs, ps, audio) in enumerate(generator):
+                          audio_pieces.append(audio)
+                      if audio_pieces:
+                          full_audio = np.concatenate(audio_pieces)
+                          sf.write(audio_output_path, full_audio, 24000)
+                          print("[+] Fallback Kokoro generation complete!")
+                  except Exception as fallback_err:
+                      print(f"[-] Voice fallback error: {fallback_err}")
+
           # Send generated artifact directly to Discord Channel
           if os.path.exists(output_path):
               url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
@@ -532,7 +689,7 @@ jobs:
               if action in ("wan-video", "minimax-h3"):
                   filename = "xploit_video.mp4"
                   mimetype = "video/mp4"
-              elif action == "kokoro-tts":
+              elif action in ("kokoro-tts", "qwen-voice"):
                   filename = "xploit_voice.mp3"
                   mimetype = "audio/mpeg"
               else:

@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music)'
+        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music / yue-music)'
         required: true
         default: 'zimage'
       prompt:
@@ -1121,9 +1121,111 @@ jobs:
                   print(f"[-] MiniMax-Music3 error: {e}")
                   renew_tor_ip()
 
+          elif action in ("yue-music", "yue"):
+              print(f"[*] Composing studio-grade AI Music with YuE 2 (3B)...")
+              req_format = style_val.lower() if style_val and style_val.lower() in ("flac", "ogg", "mp3") else "mp3"
+              audio_output_path = f"/tmp/ai_lab/output.{req_format}"
+              output_path = audio_output_path
 
+              style_prompt = prompt.strip() if prompt else "Cyber metal, English, aggressive male vocals, distorted guitars, double-kick drums"
+              lyrics_text = image_url.strip() if image_url and image_url.strip() else ""
 
+              # CoT mode ('full', 'melody', 'off')
+              cot_mode = steps_val.lower() if steps_val and steps_val.lower() in ("full", "melody", "off") else "full"
 
+              # CFG scale
+              try:
+                  cfg_scale = float(duration_val) if duration_val else 1.0
+                  if cfg_scale <= 0 or cfg_scale > 10:
+                      cfg_scale = 1.0
+              except:
+                  cfg_scale = 1.0
+
+              # Seed
+              if seed_val and seed_val != "-1":
+                  try:
+                      rand_seed = int(seed_val)
+                  except:
+                      rand_seed = random.randint(1, 10**6)
+              else:
+                  rand_seed = random.randint(1, 10**6)
+              final_seed = rand_seed
+
+              print(f"[*] YuE 2 Config: Style='{style_prompt[:60]}...' | CoT={cot_mode} | CFG={cfg_scale} | Seed={rand_seed} | Format={req_format}")
+              yue_success = False
+
+              # Space 1: Primary - directedbykobyperez/YuE2-Create
+              try:
+                  from gradio_client import Client
+                  print(f"[*] Connecting to Primary YuE2 Space: directedbykobyperez/YuE2-Create...")
+                  client = Client("directedbykobyperez/YuE2-Create")
+                  print(f"[*] Generating song via YuE 2 (cot={cot_mode}, cfg={cfg_scale}, seed={rand_seed})...")
+                  result = client.predict(
+                      style=style_prompt,
+                      lyrics=lyrics_text,
+                      cot=cot_mode,
+                      seed=rand_seed,
+                      cfg_scale=cfg_scale,
+                      api_name="/generate"
+                  )
+                  print(f"[+] YuE 2 Generation returned: {result}")
+                  chosen_path = None
+                  if isinstance(result, (list, tuple)) and len(result) >= 4:
+                      if req_format == "flac":
+                          chosen_path = extract_path(result[1]) or extract_path(result[2]) or extract_path(result[0])
+                      elif req_format == "ogg":
+                          chosen_path = extract_path(result[3]) or extract_path(result[2]) or extract_path(result[0])
+                      else:
+                          chosen_path = extract_path(result[2]) or extract_path(result[0])
+                  if not chosen_path:
+                      chosen_path = extract_path(result)
+
+                  if chosen_path and os.path.exists(chosen_path):
+                      import shutil
+                      shutil.copyfile(chosen_path, audio_output_path)
+                      print(f"[+] YuE 2 Music Generation Complete! Saved to {audio_output_path}")
+                      yue_success = True
+                  else:
+                      print(f"[-] YuE 2 output path not resolved: {result}")
+                      renew_tor_ip()
+              except Exception as e:
+                  print(f"[-] Primary YuE2 Space error: {e}")
+                  renew_tor_ip()
+
+              # Space 2: Fallback - mrfakename/yue2-3b
+              if not yue_success:
+                  try:
+                      print(f"[*] Trying Secondary YuE2 Space: mrfakename/yue2-3b...")
+                      client = Client("mrfakename/yue2-3b")
+                      fallback_lyrics = lyrics_text if lyrics_text else "[verse]\nnothing here but static skies\nwe ride the current till it dies"
+                      result = client.predict(
+                          style=style_prompt,
+                          lyrics=fallback_lyrics,
+                          planning_mode=cot_mode,
+                          render_quality="16",
+                          seed=rand_seed,
+                          api_name="/generate_song"
+                      )
+                      chosen_path = None
+                      if isinstance(result, (list, tuple)) and len(result) >= 2:
+                          if req_format == "flac":
+                              chosen_path = extract_path(result[1]) or extract_path(result[0])
+                          else:
+                              chosen_path = extract_path(result[0])
+                      if not chosen_path:
+                          chosen_path = extract_path(result)
+
+                      if chosen_path and os.path.exists(chosen_path):
+                          import shutil
+                          shutil.copyfile(chosen_path, audio_output_path)
+                          print(f"[+] Fallback YuE2 Music Generation Complete! Saved to {audio_output_path}")
+                          yue_success = True
+                      else:
+                          print(f"[-] Fallback YuE2 output path not resolved: {result}")
+                          renew_tor_ip()
+                  except Exception as e2:
+                      print(f"[-] Secondary YuE2 Space error: {e2}")
+                      renew_tor_ip()
 
           elif action == "kokoro-tts":
               print(f"[*] Generating Kokoro-TTS Hyper-Realistic Voice...")
@@ -1359,9 +1461,17 @@ jobs:
               if action in ("wan-video", "minimax-h3"):
                   filename = "xploit_video.mp4"
                   mimetype = "video/mp4"
-              elif action in ("kokoro-tts", "qwen-voice", "minimax-music"):
-                  filename = "xploit_voice.mp3"
-                  mimetype = "audio/mpeg"
+              elif action in ("kokoro-tts", "qwen-voice", "minimax-music", "yue-music", "yue"):
+                  ext = os.path.splitext(output_path)[1].lower()
+                  if ext == ".flac":
+                      filename = "xploit_song.flac"
+                      mimetype = "audio/flac"
+                  elif ext == ".ogg":
+                      filename = "xploit_song.ogg"
+                      mimetype = "audio/ogg"
+                  else:
+                      filename = "xploit_song.mp3"
+                      mimetype = "audio/mpeg"
               else:
                   filename = "xploit_render.png"
                   mimetype = "image/png"
@@ -1462,7 +1572,11 @@ jobs:
               for dest_name, dest_id, is_dm_fail in destinations:
                   try:
                       dm_warning = "\n⚠️ *Note: Your Direct Messages (DMs) are disabled in server privacy settings, so output was delivered here.*" if is_dm_fail else ""
-                      content = f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()}**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `{action.upper()}`\n📝 **Input:** `{prompt}`{seed_line}{dm_warning}"
+                      if action in ("yue-music", "yue"):
+                          lyrics_snip = f"\n📜 **Lyrics:** `{image_url[:120]}...`" if image_url else ""
+                          content = f"🎵 **XPLOIT NEXT-GEN AI LAB — YUE 2 (3B) MUSIC**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `YuE 2 (3B) Neural Music Pipeline`\n🎼 **Style:** `{prompt}`{lyrics_snip}\n🧠 **CoT Mode:** `{steps_val.upper()}` | 🎛️ **CFG:** `{duration_val or '1.0'}`{seed_line}{dm_warning}"
+                      else:
+                          content = f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()}**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `{action.upper()}`\n📝 **Input:** `{prompt}`{seed_line}{dm_warning}"
                       dest_url = f"https://discord.com/api/v10/channels/{dest_id}/messages"
 
                       if external_link:

@@ -31,10 +31,15 @@ const AI_LAB_COMMANDS = new Set([
     "flux-klein",
     "wan-video",
     "krea-2",
+    "krea",
     "minimax",
     "kokoro-tts",
+    "kokoro",
     "qwen-voice",
     "minimax-music",
+    "music",
+    "yue",
+    "yue-music",
 ]);
 
 const client = new Client({
@@ -647,7 +652,7 @@ const commands = [
         ),
     new SlashCommandBuilder()
         .setName("music")
-        .setDescription("🎵 MiniMax Music 3 — AI Full Song & Instrumental Music Generator")
+        .setDescription("🎵 AI Full Song & Instrumental Generator (MiniMax Music 3 / YuE 2)")
         .addStringOption((o) =>
             o
                 .setName("prompt")
@@ -656,8 +661,24 @@ const commands = [
         )
         .addStringOption((o) =>
             o
+                .setName("engine")
+                .setDescription("AI Music Engine (default: MiniMax Music 3)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "🎵 MiniMax Music 3 (Fast Full Song & Instrumentals)", value: "minimax" },
+                    { name: "🔥 YuE 2 (3B) — CoT Reasoning & Custom Lyrics", value: "yue" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("lyrics")
+                .setDescription("Custom lyrics with structure tags ([verse], [chorus]) for YuE 2 / vocal mode")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
                 .setName("duration")
-                .setDescription("Song duration")
+                .setDescription("Song duration (MiniMax Music)")
                 .setRequired(false)
                 .addChoices(
                     { name: "30s (Sample Preview)", value: "30" },
@@ -678,6 +699,57 @@ const commands = [
                 .setName("seed")
                 .setDescription("Seed number (default: random)")
                 .setRequired(false),
+        ),
+    new SlashCommandBuilder()
+        .setName("yue")
+        .setDescription("🎵 YuE 2 (3B) — CoT Full Song & Instrumental Generator (Vocals + Lyrics + Melody)")
+        .addStringOption((o) =>
+            o
+                .setName("prompt")
+                .setDescription("Song style, genre, instruments & vocals (e.g. 'Cyber metal, aggressive male vocals, double-kick drums')")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("lyrics")
+                .setDescription("Custom song lyrics with tags ([verse], [chorus]). Leave blank for auto.")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("cot")
+                .setDescription("Chain-of-Thought planning mode (default: Full CoT)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "🧠 Full CoT (Highest coherence, melody & structure)", value: "full" },
+                    { name: "🎼 Melody CoT (Melodic planning only)", value: "melody" },
+                    { name: "⚡ Off (Direct generation — fastest)", value: "off" },
+                ),
+        )
+        .addNumberOption((o) =>
+            o
+                .setName("cfg_scale")
+                .setDescription("CFG guidance scale (default: 1.0, range: 0.1 - 5.0)")
+                .setRequired(false)
+                .setMinValue(0.1)
+                .setMaxValue(5.0),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Seed number for reproducible track (default: random)")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("format")
+                .setDescription("Audio format (default: MP3 320kbps)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "🎧 MP3 (320kbps Studio Master)", value: "mp3" },
+                    { name: "💎 FLAC (Lossless Master)", value: "flac" },
+                    { name: "📻 OGG (Opus High Efficiency)", value: "ogg" },
+                ),
         ),
 ].map((c) => c.toJSON());
 
@@ -1493,6 +1565,8 @@ client.on("interactionCreate", async (interaction) => {
     // /music
     if (commandName === "music") {
         const prompt = interaction.options.getString("prompt");
+        const engine = interaction.options.getString("engine") || "minimax";
+        const lyrics = interaction.options.getString("lyrics") || "";
         const duration = interaction.options.getString("duration") || "60";
         const instrumental = interaction.options.getBoolean("instrumental") || false;
         const seed = interaction.options.getInteger("seed");
@@ -1500,6 +1574,42 @@ client.on("interactionCreate", async (interaction) => {
         await interaction.deferReply({ ephemeral: false });
 
         try {
+            if (engine === "yue") {
+                await octokit.actions.createWorkflowDispatch({
+                    owner: REPO_OWNER,
+                    repo: REPO_NAME,
+                    workflow_id: "ai-lab.yml",
+                    ref: "main",
+                    inputs: {
+                        action_type: "yue-music",
+                        prompt: prompt,
+                        image_url: lyrics || (instrumental ? "[instrumental]" : ""),
+                        steps: "full",
+                        duration: "1.0",
+                        seed: seed !== null && seed !== undefined ? String(seed) : "-1",
+                        style: "mp3",
+                        user_id: interaction.user.id,
+                        channel_id: interaction.channelId,
+                    },
+                });
+
+                const embed = new EmbedBuilder()
+                    .setTitle("🎵 Xploit AI Lab — YuE 2 (3B) Music")
+                    .setColor("#9370DB")
+                    .setDescription("Composing full studio track via **YuE 2 (3B) Neural Music Pipeline**!")
+                    .addFields(
+                        { name: "🎼 Style / Prompt", value: `\`${prompt.length > 150 ? prompt.slice(0, 147) + "..." : prompt}\``, inline: false },
+                        { name: "📝 Lyrics", value: lyrics ? `\`${lyrics.length > 100 ? lyrics.slice(0, 97) + "..." : lyrics}\`` : (instrumental ? "`Instrumental Only`" : "`Auto / Vocal Mode`"), inline: false },
+                        { name: "🧠 Mode", value: "`Full CoT Reasoning`", inline: true },
+                        { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
+                        { name: "⚡ Quality", value: "`320kbps Studio Master`", inline: true },
+                    )
+                    .setFooter({ text: "Generated master audio file will be delivered directly to your DM and this channel." })
+                    .setTimestamp();
+
+                return interaction.editReply({ embeds: [embed] });
+            }
+
             await octokit.actions.createWorkflowDispatch({
                 owner: REPO_OWNER,
                 repo: REPO_NAME,
@@ -1534,6 +1644,60 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
             console.error("Music error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /yue
+    if (commandName === "yue") {
+        const prompt = interaction.options.getString("prompt");
+        const lyrics = interaction.options.getString("lyrics") || "";
+        const cot = interaction.options.getString("cot") || "full";
+        const cfgScale = interaction.options.getNumber("cfg_scale") ?? 1.0;
+        const seed = interaction.options.getInteger("seed");
+        const format = interaction.options.getString("format") || "mp3";
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "yue-music",
+                    prompt: prompt,
+                    image_url: lyrics,
+                    steps: cot,
+                    duration: String(cfgScale),
+                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
+                    style: format,
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🎵 Xploit AI Lab — YuE 2 (3B) Neural Music")
+                .setColor("#9370DB")
+                .setDescription("Composing full studio track with **YuE 2 (3B) Neural Music Pipeline**!")
+                .addFields(
+                    { name: "🎼 Style / Prompt", value: `\`${prompt.length > 150 ? prompt.slice(0, 147) + "..." : prompt}\``, inline: false },
+                    { name: "📝 Lyrics", value: lyrics ? `\`${lyrics.length > 100 ? lyrics.slice(0, 97) + "..." : lyrics}\`` : "`Auto-Composed / Instrumental`", inline: false },
+                    { name: "🧠 CoT Mode", value: `\`${cot.toUpperCase()}\``, inline: true },
+                    { name: "🎛️ CFG Scale", value: `\`${cfgScale}\``, inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
+                    { name: "📦 Format", value: `\`${format.toUpperCase()}\``, inline: true },
+                )
+                .setFooter({ text: "Generated master audio file will be delivered directly to your DM and this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("YuE error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

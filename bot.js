@@ -31,17 +31,10 @@ const AI_LAB_COMMANDS = new Set([
     "flux-klein",
     "wan-video",
     "krea-2",
-    "krea",
     "minimax",
     "kokoro-tts",
-    "kokoro",
     "qwen-voice",
     "minimax-music",
-    "music",
-    "yue",
-    "yue-music",
-    "breeze",
-    "breeze-tts",
 ]);
 
 const client = new Client({
@@ -654,7 +647,7 @@ const commands = [
         ),
     new SlashCommandBuilder()
         .setName("music")
-        .setDescription("🎵 AI Full Song & Instrumental Generator (MiniMax Music 3 / YuE 2)")
+        .setDescription("🎵 MiniMax Music 3 — AI Full Song & Instrumental Music Generator")
         .addStringOption((o) =>
             o
                 .setName("prompt")
@@ -663,24 +656,8 @@ const commands = [
         )
         .addStringOption((o) =>
             o
-                .setName("engine")
-                .setDescription("AI Music Engine (default: MiniMax Music 3)")
-                .setRequired(false)
-                .addChoices(
-                    { name: "🎵 MiniMax Music 3 (Fast Full Song & Instrumentals)", value: "minimax" },
-                    { name: "🔥 YuE 2 (3B) — CoT Reasoning & Custom Lyrics", value: "yue" },
-                ),
-        )
-        .addStringOption((o) =>
-            o
-                .setName("lyrics")
-                .setDescription("Custom lyrics with structure tags ([verse], [chorus]) for YuE 2 / vocal mode")
-                .setRequired(false),
-        )
-        .addStringOption((o) =>
-            o
                 .setName("duration")
-                .setDescription("Song duration (MiniMax Music)")
+                .setDescription("Song duration")
                 .setRequired(false)
                 .addChoices(
                     { name: "30s (Sample Preview)", value: "30" },
@@ -700,109 +677,6 @@ const commands = [
             o
                 .setName("seed")
                 .setDescription("Seed number (default: random)")
-                .setRequired(false),
-        ),
-    new SlashCommandBuilder()
-        .setName("yue")
-        .setDescription("🎵 YuE 2 (3B) — CoT Full Song & Instrumental Generator (Vocals + Lyrics + Melody)")
-        .addStringOption((o) =>
-            o
-                .setName("prompt")
-                .setDescription("Song style, genre, instruments & vocals (e.g. 'Cyber metal, aggressive male vocals, double-kick drums')")
-                .setRequired(true),
-        )
-        .addStringOption((o) =>
-            o
-                .setName("lyrics")
-                .setDescription("Custom song lyrics with tags ([verse], [chorus]). Leave blank for auto.")
-                .setRequired(false),
-        )
-        .addStringOption((o) =>
-            o
-                .setName("cot")
-                .setDescription("Chain-of-Thought planning mode (default: Full CoT)")
-                .setRequired(false)
-                .addChoices(
-                    { name: "🧠 Full CoT (Highest coherence, melody & structure)", value: "full" },
-                    { name: "🎼 Melody CoT (Melodic planning only)", value: "melody" },
-                    { name: "⚡ Off (Direct generation — fastest)", value: "off" },
-                ),
-        )
-        .addNumberOption((o) =>
-            o
-                .setName("cfg_scale")
-                .setDescription("CFG guidance scale (default: 1.0, range: 0.1 - 5.0)")
-                .setRequired(false)
-                .setMinValue(0.1)
-                .setMaxValue(5.0),
-        )
-        .addIntegerOption((o) =>
-            o
-                .setName("seed")
-                .setDescription("Seed number for reproducible track (default: random)")
-                .setRequired(false),
-        )
-        .addStringOption((o) =>
-            o
-                .setName("format")
-                .setDescription("Audio format (default: MP3 320kbps)")
-                .setRequired(false)
-                .addChoices(
-                    { name: "🎧 MP3 (320kbps Studio Master)", value: "mp3" },
-                    { name: "💎 FLAC (Lossless Master)", value: "flac" },
-                    { name: "📻 OGG (Opus High Efficiency)", value: "ogg" },
-                ),
-        ),
-    new SlashCommandBuilder()
-        .setName("breeze")
-        .setDescription("🎙️ Breeze TTS 2 — Voice Design | Voice Clone | Voice Direction (Bilingual EN/ZH)")
-        .addStringOption((o) =>
-            o
-                .setName("text")
-                .setDescription("Text to speak (supports vocal events: (laugh), (sigh), (cough), (clears throat))")
-                .setRequired(true),
-        )
-        .addStringOption((o) =>
-            o
-                .setName("mode")
-                .setDescription("TTS Mode (default: Voice Design)")
-                .setRequired(false)
-                .addChoices(
-                    { name: "🎨 Voice Design (describe a voice from text description)", value: "design" },
-                    { name: "🧬 Voice Clone (clone from clean reference audio)", value: "clone" },
-                    { name: "🎛️ Voice Direction (steer emotion, tone, pace & delivery)", value: "direction" },
-                ),
-        )
-        .addStringOption((o) =>
-            o
-                .setName("instruction")
-                .setDescription("Voice description (for Design) or tone/emotion direction (for Direction)")
-                .setRequired(false),
-        )
-        .addAttachmentOption((o) =>
-            o
-                .setName("ref_audio")
-                .setDescription("Reference audio file (.mp3/.wav) for Voice Clone or Voice Direction")
-                .setRequired(false),
-        )
-        .addStringOption((o) =>
-            o
-                .setName("ref_text")
-                .setDescription("Exact reference transcript (optional — auto-transcribes with Whisper if omitted)")
-                .setRequired(false),
-        )
-        .addNumberOption((o) =>
-            o
-                .setName("cfg_scale")
-                .setDescription("CFG guidance scale (default: 4.0, range: 1.0 - 10.0 — higher = stronger instruction adherence)")
-                .setRequired(false)
-                .setMinValue(1.0)
-                .setMaxValue(10.0),
-        )
-        .addIntegerOption((o) =>
-            o
-                .setName("seed")
-                .setDescription("Seed number for reproducible generation (default: 42)")
                 .setRequired(false),
         ),
 ].map((c) => c.toJSON());
@@ -1619,8 +1493,6 @@ client.on("interactionCreate", async (interaction) => {
     // /music
     if (commandName === "music") {
         const prompt = interaction.options.getString("prompt");
-        const engine = interaction.options.getString("engine") || "minimax";
-        const lyrics = interaction.options.getString("lyrics") || "";
         const duration = interaction.options.getString("duration") || "60";
         const instrumental = interaction.options.getBoolean("instrumental") || false;
         const seed = interaction.options.getInteger("seed");
@@ -1628,42 +1500,6 @@ client.on("interactionCreate", async (interaction) => {
         await interaction.deferReply({ ephemeral: false });
 
         try {
-            if (engine === "yue") {
-                await octokit.actions.createWorkflowDispatch({
-                    owner: REPO_OWNER,
-                    repo: REPO_NAME,
-                    workflow_id: "ai-lab.yml",
-                    ref: "main",
-                    inputs: {
-                        action_type: "yue-music",
-                        prompt: prompt,
-                        image_url: lyrics || (instrumental ? "[instrumental]" : ""),
-                        steps: "full",
-                        duration: "1.0",
-                        seed: seed !== null && seed !== undefined ? String(seed) : "-1",
-                        style: "mp3",
-                        user_id: interaction.user.id,
-                        channel_id: interaction.channelId,
-                    },
-                });
-
-                const embed = new EmbedBuilder()
-                    .setTitle("🎵 Xploit AI Lab — YuE 2 (3B) Music")
-                    .setColor("#9370DB")
-                    .setDescription("Composing full studio track via **YuE 2 (3B) Neural Music Pipeline**!")
-                    .addFields(
-                        { name: "🎼 Style / Prompt", value: `\`${prompt.length > 150 ? prompt.slice(0, 147) + "..." : prompt}\``, inline: false },
-                        { name: "📝 Lyrics", value: lyrics ? `\`${lyrics.length > 100 ? lyrics.slice(0, 97) + "..." : lyrics}\`` : (instrumental ? "`Instrumental Only`" : "`Auto / Vocal Mode`"), inline: false },
-                        { name: "🧠 Mode", value: "`Full CoT Reasoning`", inline: true },
-                        { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
-                        { name: "⚡ Quality", value: "`320kbps Studio Master`", inline: true },
-                    )
-                    .setFooter({ text: "Generated master audio file will be delivered directly to your DM and this channel." })
-                    .setTimestamp();
-
-                return interaction.editReply({ embeds: [embed] });
-            }
-
             await octokit.actions.createWorkflowDispatch({
                 owner: REPO_OWNER,
                 repo: REPO_NAME,
@@ -1698,136 +1534,6 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
             console.error("Music error:", err);
-            return interaction.editReply({
-                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
-            });
-        }
-    }
-
-    // /yue
-    if (commandName === "yue") {
-        const prompt = interaction.options.getString("prompt");
-        const lyrics = interaction.options.getString("lyrics") || "";
-        const cot = interaction.options.getString("cot") || "full";
-        const cfgScale = interaction.options.getNumber("cfg_scale") ?? 1.0;
-        const seed = interaction.options.getInteger("seed");
-        const format = interaction.options.getString("format") || "mp3";
-
-        await interaction.deferReply({ ephemeral: false });
-
-        try {
-            await octokit.actions.createWorkflowDispatch({
-                owner: REPO_OWNER,
-                repo: REPO_NAME,
-                workflow_id: "ai-lab.yml",
-                ref: "main",
-                inputs: {
-                    action_type: "yue-music",
-                    prompt: prompt,
-                    image_url: lyrics,
-                    steps: cot,
-                    duration: String(cfgScale),
-                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
-                    style: format,
-                    user_id: interaction.user.id,
-                    channel_id: interaction.channelId,
-                },
-            });
-
-            const embed = new EmbedBuilder()
-                .setTitle("🎵 Xploit AI Lab — YuE 2 (3B) Neural Music")
-                .setColor("#9370DB")
-                .setDescription("Composing full studio track with **YuE 2 (3B) Neural Music Pipeline**!")
-                .addFields(
-                    { name: "🎼 Style / Prompt", value: `\`${prompt.length > 150 ? prompt.slice(0, 147) + "..." : prompt}\``, inline: false },
-                    { name: "📝 Lyrics", value: lyrics ? `\`${lyrics.length > 100 ? lyrics.slice(0, 97) + "..." : lyrics}\`` : "`Auto-Composed / Instrumental`", inline: false },
-                    { name: "🧠 CoT Mode", value: `\`${cot.toUpperCase()}\``, inline: true },
-                    { name: "🎛️ CFG Scale", value: `\`${cfgScale}\``, inline: true },
-                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
-                    { name: "📦 Format", value: `\`${format.toUpperCase()}\``, inline: true },
-                )
-                .setFooter({ text: "Generated master audio file will be delivered directly to your DM and this channel." })
-                .setTimestamp();
-
-            return interaction.editReply({ embeds: [embed] });
-        } catch (err) {
-            console.error("YuE error:", err);
-            return interaction.editReply({
-                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
-            });
-        }
-    }
-
-    // /breeze
-    if (commandName === "breeze") {
-        const text = interaction.options.getString("text");
-        const mode = interaction.options.getString("mode") || "design";
-        const instruction = interaction.options.getString("instruction") || "";
-        const refAudio = interaction.options.getAttachment("ref_audio");
-        const refText = interaction.options.getString("ref_text") || "";
-        const cfgScale = interaction.options.getNumber("cfg_scale") ?? 4.0;
-        const seed = interaction.options.getInteger("seed");
-
-        // Clone & Direction modes require reference audio
-        if ((mode === "clone" || mode === "direction") && (!refAudio || !refAudio.url)) {
-            return interaction.reply({
-                content: `❌ **${mode === "clone" ? "Voice Clone" : "Voice Direction"} mode** requires a \`ref_audio\` attachment (.mp3 or .wav)!`,
-                ephemeral: true,
-            });
-        }
-
-        await interaction.deferReply({ ephemeral: false });
-
-        try {
-            await octokit.actions.createWorkflowDispatch({
-                owner: REPO_OWNER,
-                repo: REPO_NAME,
-                workflow_id: "ai-lab.yml",
-                ref: "main",
-                inputs: {
-                    action_type: "breeze-tts",
-                    prompt: text,
-                    image_url: JSON.stringify({
-                        mode,
-                        instruction,
-                        ref_audio_url: refAudio ? refAudio.url : "",
-                        ref_text: refText,
-                        cfg_scale: cfgScale,
-                    }),
-                    steps: mode,
-                    duration: String(cfgScale),
-                    seed: seed !== null && seed !== undefined ? String(seed) : "42",
-                    user_id: interaction.user.id,
-                    channel_id: interaction.channelId,
-                },
-            });
-
-            const modeLabels = {
-                design: "🎨 Voice Design",
-                clone: "🧬 Voice Clone",
-                direction: "🎛️ Voice Direction",
-            };
-
-            const embed = new EmbedBuilder()
-                .setTitle("🎙️ Xploit AI Lab — Breeze TTS 2")
-                .setColor("#00BFFF")
-                .setDescription(`Synthesizing speech via **Breeze TTS 2 Neural Engine** — **${modeLabels[mode] || mode}**!`)
-                .addFields(
-                    { name: "🗣️ Text", value: `\`${text.length > 150 ? text.slice(0, 147) + "..." : text}\``, inline: false },
-                    { name: "⚙️ Mode", value: `\`${modeLabels[mode] || mode}\``, inline: true },
-                    { name: "🎛️ CFG Scale", value: `\`${cfgScale}\``, inline: true },
-                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`42 (Default)`", inline: true },
-                    ...(instruction ? [{ name: "🎨 Instruction / Direction", value: `\`${instruction.length > 120 ? instruction.slice(0, 117) + "..." : instruction}\``, inline: false }] : []),
-                    ...(refAudio ? [{ name: "🎤 Ref Audio", value: `[Listen](${refAudio.url})`, inline: true }] : []),
-                    ...(refText ? [{ name: "📝 Ref Transcript", value: `\`${refText.length > 80 ? refText.slice(0, 77) + "..." : refText}\``, inline: false }] : []),
-                    { name: "⚡ Quality", value: "`Studio Master (Bilingual EN/ZH)`", inline: true },
-                )
-                .setFooter({ text: "Voice audio file (.wav) will be delivered directly to your DM and this channel." })
-                .setTimestamp();
-
-            return interaction.editReply({ embeds: [embed] });
-        } catch (err) {
-            console.error("Breeze TTS error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

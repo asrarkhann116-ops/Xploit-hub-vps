@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music / yue-music / breeze-tts)'
+        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music / yue-music)'
         required: true
         default: 'zimage'
       prompt:
@@ -1454,179 +1454,6 @@ jobs:
                   except Exception as fallback_err:
                       print(f"[-] Voice fallback error: {fallback_err}")
 
-          elif action in ("breeze-tts", "breeze"):
-              print(f"[*] Generating speech via Breeze TTS 2 Neural Engine...")
-              audio_output_path = "/tmp/ai_lab/output.wav"
-              output_path = audio_output_path
-
-              # Parse parameters from IMAGE_URL (JSON payload or raw string)
-              breeze_payload_raw = os.environ.get("IMAGE_URL", "")
-              breeze_params = {}
-              try:
-                  breeze_params = json.loads(breeze_payload_raw)
-              except Exception:
-                  breeze_params = {"mode": "design", "instruction": breeze_payload_raw or ""}
-
-              mode = breeze_params.get("mode", steps_val or "design").lower()
-              instruction = breeze_params.get("instruction", "").strip()
-              ref_audio_url = breeze_params.get("ref_audio_url", "").strip()
-              ref_text = breeze_params.get("ref_text", "").strip()
-
-              try:
-                  cfg_scale = float(breeze_params.get("cfg_scale", duration_val or 4.0))
-              except:
-                  cfg_scale = 4.0
-
-              if seed_val and seed_val != "-1":
-                  try:
-                      rand_seed = int(seed_val)
-                  except:
-                      rand_seed = 42
-              else:
-                  rand_seed = random.randint(1, 10**6)
-              final_seed = rand_seed
-
-              text_to_speak = prompt.strip() if prompt else "Welcome to Xploit AI Lab."
-
-              # Download ref_audio if in clone or direction mode
-              local_ref_audio = None
-              if mode in ("clone", "direction") and ref_audio_url:
-                  try:
-                      local_ref_audio = "/tmp/ai_lab/breeze_ref.wav"
-                      print(f"[*] Downloading Breeze reference audio: {ref_audio_url}")
-                      r_audio = requests.get(ref_audio_url, timeout=30)
-                      if r_audio.status_code == 200:
-                          with open(local_ref_audio, "wb") as af:
-                              af.write(r_audio.content)
-                          print(f"[+] Downloaded reference audio ({len(r_audio.content)} bytes)")
-                      else:
-                          print(f"[-] Reference audio download failed: {r_audio.status_code}")
-                          local_ref_audio = None
-                  except Exception as err:
-                      print(f"[-] Error downloading reference audio: {err}")
-                      local_ref_audio = None
-
-              # Default instructions if missing
-              if mode == "design" and not instruction:
-                  instruction = "A warm, thoughtful young woman with a clear voice and a calm, reflective delivery."
-              elif mode == "direction" and not instruction:
-                  instruction = "Speak slowly with a restrained, serious tone."
-
-              print(f"[*] Breeze TTS 2 Config: Mode={mode} | CFG={cfg_scale} | Seed={rand_seed} | RefAudio={'Yes' if local_ref_audio else 'No'}")
-              breeze_success = False
-
-              def run_breeze_space(space_id):
-                  from gradio_client import Client, handle_file
-                  print(f"[*] Connecting to Breeze Space: {space_id}...")
-                  client = Client(space_id)
-
-                  if mode == "clone":
-                      if not local_ref_audio or not os.path.exists(local_ref_audio):
-                          raise ValueError("Voice Clone mode requires a reference audio file.")
-                      ref_file = handle_file(local_ref_audio)
-                      resolved_ref_text = ref_text
-                      if not resolved_ref_text:
-                          try:
-                              print("[*] Auto-transcribing reference audio with Whisper...")
-                              resolved_ref_text = client.predict(ref_file, api_name="/transcribe_reference")
-                              print(f"[+] Whisper Transcript: '{resolved_ref_text}'")
-                          except Exception as te:
-                              print(f"[-] Auto-transcribe failed ({te}), using default placeholder")
-                              resolved_ref_text = "Clean reference speech sample."
-
-                      print(f"[*] Running /voice_clone on {space_id}...")
-                      res = client.predict(
-                          text=text_to_speak,
-                          ref_audio_path=ref_file,
-                          ref_text=resolved_ref_text or "speech sample",
-                          seed=rand_seed,
-                          api_name="/voice_clone"
-                      )
-                  elif mode == "direction":
-                      if not local_ref_audio or not os.path.exists(local_ref_audio):
-                          raise ValueError("Voice Direction mode requires a reference audio file.")
-                      ref_file = handle_file(local_ref_audio)
-                      resolved_ref_text = ref_text
-                      if not resolved_ref_text:
-                          try:
-                              print("[*] Auto-transcribing reference audio with Whisper...")
-                              resolved_ref_text = client.predict(ref_file, api_name="/transcribe_reference_direction")
-                              print(f"[+] Whisper Transcript: '{resolved_ref_text}'")
-                          except Exception as te:
-                              try:
-                                  resolved_ref_text = client.predict(ref_file, api_name="/transcribe_reference")
-                              except:
-                                  resolved_ref_text = "Clean reference speech sample."
-
-                      print(f"[*] Running /voice_direction on {space_id} (instruction: '{instruction}')...")
-                      res = client.predict(
-                          text=text_to_speak,
-                          instruction=instruction,
-                          ref_audio_path=ref_file,
-                          ref_text=resolved_ref_text or "speech sample",
-                          cfg_scale=cfg_scale,
-                          seed=rand_seed,
-                          api_name="/voice_direction"
-                      )
-                  else: # design mode
-                      print(f"[*] Running /voice_design on {space_id} (instruction: '{instruction}')...")
-                      res = client.predict(
-                          text=text_to_speak,
-                          instruction=instruction,
-                          cfg_scale=cfg_scale,
-                          seed=rand_seed,
-                          api_name="/voice_design"
-                      )
-
-                  gen_path = extract_path(res)
-                  if gen_path and os.path.exists(gen_path):
-                      import shutil
-                      shutil.copyfile(gen_path, audio_output_path)
-                      print(f"[+] Breeze TTS 2 synthesis complete from {space_id}! Saved to {audio_output_path}")
-                      breeze_success = True
-                      return True
-                  else:
-                      print(f"[-] Breeze output path not resolved: {res}")
-                      return False
-
-              spaces_to_try = [
-                  "BreezeBlue/breeze-tts-2-demo",
-                  "Daankular/breeze-tts-2",
-                  "RobinsAIWorld/breeze-tts-2-demo",
-                  "idkhungle/breeze-tts-2-demo"
-              ]
-
-              for s_id in spaces_to_try:
-                  if breeze_success:
-                      break
-                  try:
-                      if run_breeze_space(s_id):
-                          breeze_success = True
-                          break
-                  except Exception as be:
-                      print(f"[-] Error on {s_id}: {be}")
-                      renew_tor_ip()
-
-              # Fallback to local Kokoro-TTS if all Breeze spaces hit limit
-              if not breeze_success:
-                  try:
-                      print("[*] Quota/Space fallback: Generating via Kokoro-TTS...")
-                      from kokoro import KPipeline
-                      import soundfile as sf
-                      import numpy as np
-                      pipeline = KPipeline(lang_code='a')
-                      generator = pipeline(text_to_speak, voice='af_heart', speed=1, split_pattern=r'\n+')
-                      audio_pieces = []
-                      for i, (gs, ps, audio) in enumerate(generator):
-                          audio_pieces.append(audio)
-                      if audio_pieces:
-                          full_audio = np.concatenate(audio_pieces)
-                          sf.write(audio_output_path, full_audio, 24000)
-                          print("[+] Fallback Kokoro generation complete for Breeze!")
-                          breeze_success = True
-                  except Exception as fb_err:
-                      print(f"[-] Breeze final fallback error: {fb_err}")
-
 
                     # Send generated artifact to user's DM & server audit log channel (1506768429107908719)
           if os.path.exists(output_path):
@@ -1634,7 +1461,7 @@ jobs:
               if action in ("wan-video", "minimax-h3"):
                   filename = "xploit_video.mp4"
                   mimetype = "video/mp4"
-              elif action in ("kokoro-tts", "qwen-voice", "minimax-music", "yue-music", "yue", "breeze-tts", "breeze"):
+              elif action in ("kokoro-tts", "qwen-voice", "minimax-music", "yue-music", "yue"):
                   ext = os.path.splitext(output_path)[1].lower()
                   if ext == ".flac":
                       filename = "xploit_song.flac"
@@ -1642,11 +1469,8 @@ jobs:
                   elif ext == ".ogg":
                       filename = "xploit_song.ogg"
                       mimetype = "audio/ogg"
-                  elif ext == ".wav":
-                      filename = "xploit_voice.wav"
-                      mimetype = "audio/wav"
                   else:
-                      filename = "xploit_song.mp3" if "music" in action or "yue" in action else "xploit_voice.mp3"
+                      filename = "xploit_song.mp3"
                       mimetype = "audio/mpeg"
               else:
                   filename = "xploit_render.png"
@@ -1751,10 +1575,6 @@ jobs:
                       if action in ("yue-music", "yue"):
                           lyrics_snip = f"\n📜 **Lyrics:** `{image_url[:120]}...`" if image_url else ""
                           content = f"🎵 **XPLOIT NEXT-GEN AI LAB — YUE 2 (3B) MUSIC**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `YuE 2 (3B) Neural Music Pipeline`\n🎼 **Style:** `{prompt}`{lyrics_snip}\n🧠 **CoT Mode:** `{steps_val.upper()}` | 🎛️ **CFG:** `{duration_val or '1.0'}`{seed_line}{dm_warning}"
-                      elif action in ("breeze-tts", "breeze"):
-                          mode_label = mode.upper()
-                          inst_line = f"\n🎨 **Instruction:** `{instruction[:100]}`" if instruction else ""
-                          content = f"🎙️ **XPLOIT NEXT-GEN AI LAB — BREEZE TTS 2**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `Breeze TTS 2 Neural Pipeline`\n🗣️ **Text:** `{prompt}`\n⚙️ **Mode:** `{mode_label}`{inst_line}\n🎛️ **CFG Scale:** `{cfg_scale}`{seed_line}{dm_warning}"
                       else:
                           content = f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()}**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `{action.upper()}`\n📝 **Input:** `{prompt}`{seed_line}{dm_warning}"
                       dest_url = f"https://discord.com/api/v10/channels/{dest_id}/messages"

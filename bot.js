@@ -708,7 +708,7 @@ const commands = [
         .addStringOption((o) =>
             o
                 .setName("prompt")
-                .setDescription("Song style, genre, instruments & vocals (e.g. 'Cyber metal, aggressive male vocals, double-kick drums')")
+                .setDescription("Song style, genre, instruments & vocals (e.g. 'Cyber metal, aggressive vocals')")
                 .setRequired(true),
         )
         .addStringOption((o) =>
@@ -794,7 +794,7 @@ const commands = [
         .addNumberOption((o) =>
             o
                 .setName("cfg_scale")
-                .setDescription("CFG guidance scale (default: 4.0, range: 1.0 - 10.0 — higher = stronger instruction adherence)")
+                .setDescription("CFG scale (default: 4.0, range: 1.0 - 10.0 — higher = stronger instruction adherence)")
                 .setRequired(false)
                 .setMinValue(1.0)
                 .setMaxValue(10.0),

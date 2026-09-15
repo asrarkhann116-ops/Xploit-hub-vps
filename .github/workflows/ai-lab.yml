@@ -1652,30 +1652,13 @@ jobs:
                   filename = "xploit_render.png"
                   mimetype = "image/png"
 
-              # 1. Open User DM Channel
-              dm_channel_id = None
-              try:
-                  create_dm_url = "https://discord.com/api/v10/users/@me/channels"
-                  dm_resp = requests.post(create_dm_url, headers=headers, json={"recipient_id": str(user_id)}, timeout=10)
-                  if dm_resp.status_code in (200, 201):
-                      dm_channel_id = dm_resp.json().get("id")
-                      print(f"[+] Created user DM channel: {dm_channel_id}")
-                  else:
-                      print(f"[-] Could not open DM channel (status {dm_resp.status_code}): {dm_resp.text}")
-              except Exception as e_dm:
-                  print(f"[-] Exception opening DM channel: {e_dm}")
-
               # Target destinations:
-              # Destination 1: User's DM (or fallback to original channel if DM is closed)
-              # Destination 2: Server Audit Log private channel: 1506768429107908719
+              # Destination 1: Origin Command Channel where the user ran the command (NO DM)
+              # Destination 2: Server Audit Log private channel (if different)
               AUDIT_CHANNEL_ID = "1506768429107908719"
-              destinations = []
-              if dm_channel_id:
-                  destinations.append(("User DM", dm_channel_id, False))
-              else:
-                  destinations.append(("Origin Channel (DM Closed)", channel_id, True))
-
-              destinations.append(("Audit Log Channel", AUDIT_CHANNEL_ID, False))
+              destinations = [("Origin Command Channel", channel_id, False)]
+              if str(channel_id) != str(AUDIT_CHANNEL_ID):
+                  destinations.append(("Audit Log Channel", AUDIT_CHANNEL_ID, False))
 
               seed_line = f"\n🎲 **Seed:** `{final_seed}`" if final_seed is not None else ""
 
@@ -1745,18 +1728,18 @@ jobs:
               with open(output_path, "rb") as f:
                   file_bytes = f.read()
 
-              for dest_name, dest_id, is_dm_fail in destinations:
+              for dest_name, dest_id, _ in destinations:
                   try:
-                      dm_warning = "\n⚠️ *Note: Your Direct Messages (DMs) are disabled in server privacy settings, so output was delivered here.*" if is_dm_fail else ""
+                      cluster_info = "\n🖥️ **Cluster Node:** `Localhost Dedicated Node (70GB VRAM)`"
                       if action in ("yue-music", "yue"):
                           lyrics_snip = f"\n📜 **Lyrics:** `{image_url[:120]}...`" if image_url else ""
-                          content = f"🎵 **XPLOIT NEXT-GEN AI LAB — YUE 2 (3B) MUSIC**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `YuE 2 (3B) Neural Music Pipeline`\n🎼 **Style:** `{prompt}`{lyrics_snip}\n🧠 **CoT Mode:** `{steps_val.upper()}` | 🎛️ **CFG:** `{duration_val or '1.0'}`{seed_line}{dm_warning}"
+                          content = f"🎵 **XPLOIT NEXT-GEN AI LAB — YUE 2 (3B) MUSIC**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `YuE 2 (3B) Neural Music Pipeline`\n🎼 **Style:** `{prompt}`{lyrics_snip}\n🧠 **CoT Mode:** `{steps_val.upper()}` | 🎛️ **CFG:** `{duration_val or '1.0'}`{seed_line}"
                       elif action in ("breeze-tts", "breeze"):
                           mode_label = mode.upper()
                           inst_line = f"\n🎨 **Instruction:** `{instruction[:100]}`" if instruction else ""
-                          content = f"🎙️ **XPLOIT NEXT-GEN AI LAB — BREEZE TTS 2**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `Breeze TTS 2 Neural Pipeline`\n🗣️ **Text:** `{prompt}`\n⚙️ **Mode:** `{mode_label}`{inst_line}\n🎛️ **CFG Scale:** `{cfg_scale}`{seed_line}{dm_warning}"
+                          content = f"🎙️ **XPLOIT NEXT-GEN AI LAB — BREEZE TTS 2**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `Breeze TTS 2 Neural Pipeline`\n🗣️ **Text:** `{prompt}`\n⚙️ **Mode:** `{mode_label}`{inst_line}\n🎛️ **CFG Scale:** `{cfg_scale}`{seed_line}"
                       else:
-                          content = f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()}**\n👤 **Operator:** <@{user_id}>\n🧬 **Engine:** `{action.upper()}`\n📝 **Input:** `{prompt}`{seed_line}{dm_warning}"
+                          content = f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()}**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `{action.upper()}`\n📝 **Input:** `{prompt}`{seed_line}"
                       dest_url = f"https://discord.com/api/v10/channels/{dest_id}/messages"
 
                       if external_link:

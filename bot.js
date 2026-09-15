@@ -25,6 +25,27 @@ const SUPER_ADMINS = new Set(["1104652354655113268"]);
 // AI Lab Cooldown: 1:30 min (90s) for regular users, 0 cooldown for Admin
 const AI_LAB_COOLDOWN_MS = 90 * 1000;
 const aiLabCooldowns = new Map();
+// AI Lab Command Dedicated Channels
+const AI_COMMAND_CHANNELS = {
+    "zimage": "1549262502972620921",
+    "qwen-edit": "1549262544047440043",
+    "flux-klein": "1549262578138615889",
+    "krea": "1549262620710666270",
+    "krea-2": "1549262620710666270",
+    "wan-video": "1549262663874252951",
+    "minimax": "1549262751958827130",
+    "minimax-h3": "1549262751958827130",
+    "music": "1549262789753704449",
+    "minimax-music": "1549262789753704449",
+    "yue": "1549262843197521960",
+    "yue-music": "1549262843197521960",
+    "kokoro": "1549262935552041060",
+    "kokoro-tts": "1549262935552041060",
+    "qwen-voice": "1549262974441750579",
+    "breeze": "1549263004229697556",
+    "breeze-tts": "1549263004229697556",
+};
+
 const AI_LAB_COMMANDS = new Set([
     "zimage",
     "qwen-edit",
@@ -964,6 +985,17 @@ client.on("interactionCreate", async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
     const { commandName } = interaction;
 
+    // AI Lab Dedicated Channel Enforcement (Admins exempt)
+    if (AI_COMMAND_CHANNELS[commandName]) {
+        const allowedChannel = AI_COMMAND_CHANNELS[commandName];
+        if (interaction.channelId !== allowedChannel && !SUPER_ADMINS.has(interaction.user.id)) {
+            return interaction.reply({
+                content: `🚫 **Galat Channel! / Wrong Channel!**\nThe \`/${commandName}\` command can only be used in <#${allowedChannel}>.\nPlease run your prompt in <#${allowedChannel}>!`,
+                ephemeral: true,
+            });
+        }
+    }
+
     // AI Lab Cooldown Enforcement (1:30 min for users, Admin exempt)
     if (AI_LAB_COMMANDS.has(commandName)) {
         const uid = interaction.user.id;
@@ -1209,9 +1241,10 @@ client.on("interactionCreate", async (interaction) => {
                     { name: "⚡ Inference Steps", value: `\`${steps} NFEs\``, inline: true },
                     { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
                     { name: "🧠 Model Architecture", value: "`Tongyi-MAI Z-Image-Turbo`", inline: true },
-                    { name: "💾 Allocation", value: "`23GB High-Capacity Memory`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~2 Minutes`", inline: true },
                 )
-                .setFooter({ text: "Image will be dropped in this channel upon completion." })
+                .setFooter({ text: "⚡ Running on Localhost Dedicated Node (70GB Cluster) • Please wait ~2 minutes. Dropping in this channel." })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
@@ -1269,10 +1302,11 @@ client.on("interactionCreate", async (interaction) => {
                     { name: "⚡ FLUX.2 Klein 4K", value: fluxUpscale ? "`Auto-Chain 4K UltraSharp`" : "`Disabled`", inline: true },
                     { name: "🔧 Quality Mode", value: quality === "ultra" ? "`Ultra — Max Res & Steps`" : "`Fast — ZeroGPU Safe`", inline: true },
                     { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Random / Auto`", inline: true },
-                    { name: "🔓 Safety Mode", value: "`Unrestricted / Raw Mode`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~2 Minutes`", inline: true },
                 )
                 .setThumbnail(attachment.url)
-                .setFooter({ text: "Edited render will be posted directly in this channel." })
+                .setFooter({ text: "⚡ Running on Localhost Dedicated Node (70GB Cluster) • Please wait ~2 minutes. Dropping in this channel." })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
@@ -1323,9 +1357,11 @@ client.on("interactionCreate", async (interaction) => {
                     { name: "🧬 Style LoRA", value: `\`${style}\``, inline: true },
                     { name: "⚡ Steps", value: `\`${steps}\``, inline: true },
                     { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Random / Auto`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~2 Minutes`", inline: true },
                 )
                 .setColor(0x00ffcc)
-                .setFooter({ text: "Upscaled render will be posted directly in this channel." })
+                .setFooter({ text: "⚡ Running on Localhost Dedicated Node (70GB Cluster) • Please wait ~2 minutes. Dropping in this channel." })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
@@ -1379,10 +1415,11 @@ client.on("interactionCreate", async (interaction) => {
                     { name: "⏱️ Duration", value: `\`${duration} Seconds\``, inline: true },
                     { name: "⚡ Steps", value: `\`${steps} Steps\``, inline: true },
                     { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
-                    { name: "🧬 Model Size", value: "`Wan 2.2 14B High-Speed`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~2 Minutes`", inline: true },
                 )
                 .setThumbnail(attachment.url)
-                .setFooter({ text: "Animated MP4 will be rendered and dropped in this channel." })
+                .setFooter({ text: "⚡ Running on Localhost Dedicated Node (70GB Cluster) • Please wait ~2 minutes. Dropping in this channel." })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
@@ -1431,9 +1468,10 @@ client.on("interactionCreate", async (interaction) => {
                     { name: "⚡ Inference Steps", value: `\`${steps} Steps\``, inline: true },
                     { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
                     { name: "🧬 Base Checkpoint", value: "`Krea2-v2Turbo Int8`", inline: true },
-                    { name: "🔓 Safety Level", value: "`Zero Censorship (LoRA Enabled)`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~2 Minutes`", inline: true },
                 )
-                .setFooter({ text: "Ultra-realistic render will be dropped in this channel upon completion." })
+                .setFooter({ text: "⚡ Running on Localhost Dedicated Node (70GB Cluster) • Please wait ~2 minutes. Dropping in this channel." })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
@@ -1482,9 +1520,10 @@ client.on("interactionCreate", async (interaction) => {
                     { name: "⚡ Turbo Steps", value: `\`${steps} Steps (LoRA)\``, inline: true },
                     { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
                     { name: "🔊 Soundtrack", value: "`Auto-Synchronized SFX`", inline: true },
-                    { name: "🔓 Moderation", value: "`Uncensored / Zero-Refusal`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~2 Minutes`", inline: true },
                 )
-                .setFooter({ text: "MP4 Video with audio will be rendered and dropped in this channel." })
+                .setFooter({ text: "⚡ Running on Localhost Dedicated Node (70GB Cluster) • Please wait ~2 minutes. Dropping in this channel." })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
@@ -1527,8 +1566,10 @@ client.on("interactionCreate", async (interaction) => {
                     { name: "🗣️ Text", value: `\`${text}\``, inline: false },
                     { name: "🎭 Voice Preset", value: `\`${voice}\``, inline: true },
                     { name: "⚡ Quality", value: "`24kHz Studio Quality`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~2 Minutes`", inline: true },
                 )
-                .setFooter({ text: "Voice audio file (.mp3) will be delivered shortly." })
+                .setFooter({ text: "⚡ Running on Localhost Dedicated Node (70GB Cluster) • Please wait ~2 minutes. Dropping in this channel." })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
@@ -1604,8 +1645,10 @@ client.on("interactionCreate", async (interaction) => {
                     ...(mode === "clone" ? [{ name: "🎤 Ref Audio", value: `[Listen](${refAudio.url})`, inline: true }] : []),
                     ...(mode === "clone" && refText ? [{ name: "📝 Ref Transcript", value: `\`${refText.slice(0, 100)}\``, inline: false }] : []),
                     ...(mode === "design" ? [{ name: "🎨 Voice Description", value: `\`${voiceDescription}\``, inline: false }] : []),
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~2 Minutes`", inline: true },
                 )
-                .setFooter({ text: "High-fidelity audio will be delivered directly to this channel." })
+                .setFooter({ text: "⚡ Running on Localhost Dedicated Node (70GB Cluster) • Please wait ~2 minutes. Dropping in this channel." })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
@@ -1657,8 +1700,10 @@ client.on("interactionCreate", async (interaction) => {
                         { name: "🧠 Mode", value: "`Full CoT Reasoning`", inline: true },
                         { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
                         { name: "⚡ Quality", value: "`320kbps Studio Master`", inline: true },
+                        { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                        { name: "⏳ Est. Render", value: "`~2 Minutes`", inline: true },
                     )
-                    .setFooter({ text: "Generated master audio file will be delivered directly to your DM and this channel." })
+                    .setFooter({ text: "⚡ Running on Localhost Dedicated Node (70GB Cluster) • Please wait ~2 minutes. Dropping in this channel." })
                     .setTimestamp();
 
                 return interaction.editReply({ embeds: [embed] });
@@ -1691,8 +1736,10 @@ client.on("interactionCreate", async (interaction) => {
                     { name: "🎤 Mode", value: instrumental ? "`Instrumental Only`" : "`Full Vocals + Lyrics`", inline: true },
                     { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
                     { name: "⚡ Quality", value: "`44.1kHz Studio Master`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~2 Minutes`", inline: true },
                 )
-                .setFooter({ text: "Composed song (.mp3) will be delivered directly to this channel." })
+                .setFooter({ text: "⚡ Running on Localhost Dedicated Node (70GB Cluster) • Please wait ~2 minutes. Dropping in this channel." })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
@@ -1745,8 +1792,10 @@ client.on("interactionCreate", async (interaction) => {
                     { name: "🎛️ CFG Scale", value: `\`${cfgScale}\``, inline: true },
                     { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
                     { name: "📦 Format", value: `\`${format.toUpperCase()}\``, inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~2 Minutes`", inline: true },
                 )
-                .setFooter({ text: "Generated master audio file will be delivered directly to your DM and this channel." })
+                .setFooter({ text: "⚡ Running on Localhost Dedicated Node (70GB Cluster) • Please wait ~2 minutes. Dropping in this channel." })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
@@ -1821,8 +1870,10 @@ client.on("interactionCreate", async (interaction) => {
                     ...(refAudio ? [{ name: "🎤 Ref Audio", value: `[Listen](${refAudio.url})`, inline: true }] : []),
                     ...(refText ? [{ name: "📝 Ref Transcript", value: `\`${refText.length > 80 ? refText.slice(0, 77) + "..." : refText}\``, inline: false }] : []),
                     { name: "⚡ Quality", value: "`Studio Master (Bilingual EN/ZH)`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~2 Minutes`", inline: true },
                 )
-                .setFooter({ text: "Voice audio file (.wav) will be delivered directly to your DM and this channel." })
+                .setFooter({ text: "⚡ Running on Localhost Dedicated Node (70GB Cluster) • Please wait ~2 minutes. Dropping in this channel." })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });

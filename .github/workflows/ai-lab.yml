@@ -88,7 +88,11 @@ jobs:
           action = os.environ.get("ACTION_TYPE", "zimage")
           prompt = os.environ.get("PROMPT", "")
           image_url = os.environ.get("IMAGE_URL", "")
-          steps = int(os.environ.get("STEPS", "8"))
+          steps_val = os.environ.get("STEPS", "8").strip()
+          try:
+              steps = int(steps_val)
+          except (ValueError, TypeError):
+              steps = 8
           duration_val = os.environ.get("DURATION", "").strip()
           seed_val = os.environ.get("SEED", "").strip()
           style_val = os.environ.get("STYLE", "").strip()
@@ -524,22 +528,27 @@ jobs:
                       print(f"[-] Image download error: {e}")
                       has_image = False
 
-              # If no image provided, generate an initial base image via Krea-2 for text-to-image
+              # If no image provided, generate an initial base image via Spicy-krea2 / Z-Image for text-to-image
               if not has_image or not os.path.exists(input_img_path):
                   try:
-                      print(f"[*] Generating initial base image via Krea-2 for text-to-image...")
-                      krea_client = Client("ravenrose996688/Krea-2-Turbo_I2I")
+                      print(f"[*] Generating initial base image via Spicy-krea2 for text-to-image...")
+                      krea_client = Client("MarkTheArtist/Spicy-krea2")
                       krea_res = krea_client.predict(
-                          param_0="text2image", param_1=prompt, param_2=None, param_3=None, param_4=None,
-                          param_5=1024, param_6=1024, param_7=1.4, param_8=768, param_9=1.0, param_10=1.0,
-                          param_11=6, param_12=1.0, param_13="euler", param_14="beta", param_15=random.randint(1, 999999),
-                          param_16=True, param_17=0, param_18="pornmasterKrea2_v2TurboInt8.safetensors",
-                          param_19=None, param_20=None, param_21=None,
-                          param_22={'headers': ['repo_id', 'filename', 'revision', 'weight'], 'data': [], 'metadata': None},
-                          param_23=0.0, param_24=0.8, param_25=0.0, param_26=0.0, param_27=0.0,
-                          param_28=0.0, param_29=0.0, param_30=0.0, param_31=0.0, param_32=0.0,
-                          param_33=0.0, param_34=0.0, param_35=0.0, param_36=0.0, param_37=0.0,
-                          param_38=0.0, param_39=0.0, param_40=0.0, api_name="/_generate_wrapper"
+                          prompt=prompt,
+                          width=1024,
+                          height=1024,
+                          seed=random.randint(1, 999999),
+                          steps=6.0,
+                          cfg=1.0,
+                          sampler_name="Euler",
+                          enable_lora=False,
+                          lora_name="krea2_darkbrush.safetensors",
+                          lora_strength=0.8,
+                          trigger_word="",
+                          prompt_enhance=False,
+                          thinking=False,
+                          max_tokens=256,
+                          api_name="/generate_image"
                       )
                       base_img = extract_path(krea_res)
                       if base_img and os.path.exists(base_img):
@@ -547,7 +556,18 @@ jobs:
                           shutil.copyfile(base_img, input_img_path)
                           has_image = True
                   except Exception as err:
-                      print(f"[-] Base frame gen error: {err}")
+                      print(f"[-] Base frame Spicy-krea2 error: {err}")
+                      # Fallback base image via Z-Image
+                      try:
+                          z_client = Client("rahul7star/Z-Image-Turbo")
+                          z_res = z_client.predict(prompt=prompt, height=1024, width=1024, num_inference_steps=6, seed=random.randint(1, 999999), randomize_seed=True, num_images=1, api_name="/generate_image")
+                          base_img = extract_path(z_res)
+                          if base_img and os.path.exists(base_img):
+                              import shutil
+                              shutil.copyfile(base_img, input_img_path)
+                              has_image = True
+                      except Exception as z_err:
+                          print(f"[-] Base frame Z-Image fallback error: {z_err}")
 
               if seed_val and seed_val != "-1":
                   try:
@@ -580,6 +600,7 @@ jobs:
 
               klein_steps = steps if (steps and 2 <= steps <= 15) else 4
               print(f"[*] Dispatching to FLUX.2 Klein: LoRAs={selected_loras} | Upscaler={upscale_choice} | Steps={klein_steps} | Seed={final_seed}")
+              klein_success = False
 
               try:
                   client_flux = Client("M3st3rJ4k3l/FLUX.2-Klein-Multi-LoRA")
@@ -620,9 +641,63 @@ jobs:
                           import shutil
                           shutil.copyfile(k_path, output_path)
                           print("[+] FLUX.2 Klein Generation & 4K Upscale Complete!")
+                          klein_success = True
               except Exception as err:
                   print(f"[-] FLUX.2 Klein error: {err}")
                   renew_tor_ip()
+
+              # Fallback 1: Official black-forest-labs/FLUX.2-dev Flagship Studio
+              if not klein_success:
+                  try:
+                      print(f"[*] Fallback 1: Connecting to black-forest-labs/FLUX.2-dev Flagship Studio...")
+                      client_dev = Client("black-forest-labs/FLUX.2-dev")
+                      dev_res = client_dev.predict(
+                          prompt=prompt,
+                          input_images=[handle_file(input_img_path)] if (has_image and os.path.exists(input_img_path)) else [],
+                          seed=float(final_seed),
+                          randomize_seed=False,
+                          width=1024.0,
+                          height=1024.0,
+                          num_inference_steps=28.0,
+                          guidance_scale=4.0,
+                          prompt_upsampling=True,
+                          api_name="/infer"
+                      )
+                      k_path = extract_path(dev_res)
+                      if k_path and os.path.exists(k_path):
+                          import shutil
+                          shutil.copyfile(k_path, output_path)
+                          print("[+] Official FLUX.2-dev Flagship Generation Complete!")
+                          klein_success = True
+                  except Exception as err_dev:
+                      print(f"[-] FLUX.2-dev error: {err_dev}")
+                      renew_tor_ip()
+
+              # Fallback 2: black-forest-labs/flux-klein-9b-kv official space
+              if not klein_success:
+                  try:
+                      print(f"[*] Fallback 2: Connecting to black-forest-labs/flux-klein-9b-kv...")
+                      client_kv = Client("black-forest-labs/flux-klein-9b-kv")
+                      kv_res = client_kv.predict(
+                          prompt=prompt,
+                          input_images=[handle_file(input_img_path)] if (has_image and os.path.exists(input_img_path)) else [],
+                          seed=float(final_seed),
+                          randomize_seed=False,
+                          width=1024.0,
+                          height=1024.0,
+                          num_inference_steps=float(klein_steps),
+                          prompt_upsampling=False,
+                          api_name="/generate"
+                      )
+                      k_path = extract_path(kv_res)
+                      if k_path and os.path.exists(k_path):
+                          import shutil
+                          shutil.copyfile(k_path, output_path)
+                          print("[+] FLUX.2 Klein 9B-KV Official Generation Complete!")
+                          klein_success = True
+                  except Exception as err_kv:
+                      print(f"[-] FLUX.2 Klein 9B-KV error: {err_kv}")
+                      renew_tor_ip()
 
           elif action == "wan-video":
               print(f"[*] Connecting to Wan 2.2 Uncensored Video Space (STCM Missionary AOTI)...")
@@ -666,22 +741,27 @@ jobs:
                       print(f"[-] Image download error: {e}")
                       has_image = False
 
-              # If no image provided, generate an ultra-fast base image via Krea-2
+              # If no image provided, generate an ultra-fast base image via Spicy-krea2 or Z-Image
               if not has_image or not os.path.exists(input_img_path):
                   try:
-                      print(f"[*] Auto-generating base frame for prompt: {prompt[:60]}...")
-                      krea_client = Client("ravenrose996688/Krea-2-Turbo_I2I")
+                      print(f"[*] Auto-generating base frame via Spicy-krea2 for prompt: {prompt[:60]}...")
+                      krea_client = Client("MarkTheArtist/Spicy-krea2")
                       krea_res = krea_client.predict(
-                          param_0="text2image", param_1=prompt, param_2=None, param_3=None, param_4=None,
-                          param_5=832, param_6=480, param_7=1.4, param_8=768, param_9=1.0, param_10=1.0,
-                          param_11=6, param_12=1.0, param_13="euler", param_14="beta", param_15=rand_seed,
-                          param_16=True, param_17=0, param_18="pornmasterKrea2_v2TurboInt8.safetensors",
-                          param_19=None, param_20=None, param_21=None,
-                          param_22={'headers': ['repo_id', 'filename', 'revision', 'weight'], 'data': [], 'metadata': None},
-                          param_23=0.0, param_24=0.8, param_25=0.0, param_26=0.0, param_27=0.0,
-                          param_28=0.0, param_29=0.0, param_30=0.0, param_31=0.0, param_32=0.0,
-                          param_33=0.0, param_34=0.0, param_35=0.0, param_36=0.0, param_37=0.0,
-                          param_38=0.0, param_39=0.0, param_40=0.0, api_name="/_generate_wrapper"
+                          prompt=prompt,
+                          width=832,
+                          height=480,
+                          seed=rand_seed,
+                          steps=6.0,
+                          cfg=1.0,
+                          sampler_name="Euler",
+                          enable_lora=False,
+                          lora_name="krea2_darkbrush.safetensors",
+                          lora_strength=0.8,
+                          trigger_word="",
+                          prompt_enhance=False,
+                          thinking=False,
+                          max_tokens=256,
+                          api_name="/generate_image"
                       )
                       base_img = extract_path(krea_res)
                       if base_img and os.path.exists(base_img):
@@ -689,7 +769,17 @@ jobs:
                           shutil.copyfile(base_img, input_img_path)
                           has_image = True
                   except Exception as err:
-                      print(f"[-] Base frame gen error: {err}")
+                      print(f"[-] Base frame Spicy-krea2 error: {err}")
+                      try:
+                          z_client = Client("rahul7star/Z-Image-Turbo")
+                          z_res = z_client.predict(prompt=prompt, height=480, width=832, num_inference_steps=6, seed=rand_seed, randomize_seed=True, num_images=1, api_name="/generate_image")
+                          base_img = extract_path(z_res)
+                          if base_img and os.path.exists(base_img):
+                              import shutil
+                              shutil.copyfile(base_img, input_img_path)
+                              has_image = True
+                      except Exception as z_err:
+                          print(f"[-] Base frame Z-Image fallback error: {z_err}")
 
               # Space 1: STCM/wan2-2-fp8da-aoti-preview-2c-missionary (Unrestricted FP8DA AOTI)
               try:
@@ -859,89 +949,148 @@ jobs:
 
 
           elif action == "krea-2":
-              print(f"[*] Connecting to Krea-2-Turbo Ultra-Realism / Unrestricted Space...")
+              print(f"[*] Connecting to Krea-2 Ultra-Realism / Unrestricted Space...")
               from gradio_client import Client
               import random
-              try:
-                  client = Client("ravenrose996688/Krea-2-Turbo_I2I")
-                  ratio = image_url.strip() if image_url else "1:1"
-                  if ratio == "16:9":
-                      krea_w, krea_h = 1280, 720
-                  elif ratio == "9:16":
-                      krea_w, krea_h = 720, 1280
-                  else:
-                      krea_w, krea_h = 1024, 1024
+              krea_success = False
 
-                  if seed_val and seed_val != "-1":
-                      try:
-                          krea_seed = int(seed_val)
-                          krea_rand = False
-                      except:
-                          krea_seed = random.randint(1, 9999999)
-                          krea_rand = True
-                  else:
+              ratio = image_url.strip() if image_url else "1:1"
+              if ratio == "16:9":
+                  krea_w, krea_h = 1344, 768
+              elif ratio == "9:16":
+                  krea_w, krea_h = 768, 1344
+              else:
+                  krea_w, krea_h = 1024, 1024
+
+              if seed_val and seed_val != "-1":
+                  try:
+                      krea_seed = int(seed_val)
+                      krea_rand = False
+                  except:
                       krea_seed = random.randint(1, 9999999)
                       krea_rand = True
-                  final_seed = krea_seed
-                  
-                  # Professional photorealism prompt tuning
-                  tuned_prompt = f"{prompt}, raw photo, 8k uhd, dslr, soft natural lighting, high quality, film grain, Fujifilm XT4"
-                  print(f"[*] Dispatching tuned prompt: {tuned_prompt} | Ratio: {ratio} | Seed: {krea_seed}")
-                  
+              else:
+                  krea_seed = random.randint(1, 9999999)
+                  krea_rand = True
+              final_seed = krea_seed
+
+              # Professional photorealism prompt tuning
+              tuned_prompt = f"{prompt}, raw photo, 8k uhd, dslr, soft natural lighting, high quality, film grain, Fujifilm XT4"
+
+              # 1. Primary: MarkTheArtist/Spicy-krea2 (Working Unrestricted Krea-2 Space)
+              try:
+                  print(f"[*] Connecting to MarkTheArtist/Spicy-krea2...")
+                  client = Client("MarkTheArtist/Spicy-krea2")
+                  print(f"[*] Dispatching tuned prompt to Spicy-krea2: {tuned_prompt} | Dimensions: {krea_w}x{krea_h} | Seed: {krea_seed}")
                   result = client.predict(
-                      param_0="text2image",
-                      param_1=tuned_prompt,
-                      param_2=None,
-                      param_3=None,
-                      param_4=None,
-                      param_5=krea_w,
-                      param_6=krea_h,
-                      param_7=1.4,
-                      param_8=768,
-                      param_9=1.0,
-                      param_10=1.0,
-                      param_11=steps if steps <= 15 else 8,
-                      param_12=1.0,
-                      param_13="euler",
-                      param_14="beta",
-                      param_15=krea_seed,
-                      param_16=krea_rand,
-                      param_17=0,
-                      param_18="pornmasterKrea2_v2TurboInt8.safetensors",
-                      param_19=None,
-                      param_20=None,
-                      param_21=None,
-                      param_22={'headers': ['repo_id', 'filename', 'revision', 'weight'], 'data': [], 'metadata': None},
-                      param_23=0.0,
-                      param_24=0.8, # Refusal-Reduction LoRA enabled!
-                      param_25=0.0,
-                      param_26=0.0,
-                      param_27=0.0,
-                      param_28=0.0,
-                      param_29=0.0,
-                      param_30=0.0,
-                      param_31=0.0,
-                      param_32=0.0,
-                      param_33=0.0,
-                      param_34=0.0,
-                      param_35=0.0,
-                      param_36=0.0,
-                      param_37=0.0,
-                      param_38=0.0,
-                      param_39=0.0,
-                      param_40=0.0,
-                      api_name="/_generate_wrapper"
+                      prompt=tuned_prompt,
+                      width=krea_w,
+                      height=krea_h,
+                      seed=krea_seed,
+                      steps=float(steps if steps <= 15 else 8),
+                      cfg=1.0,
+                      sampler_name="Euler",
+                      enable_lora=False,
+                      lora_name="krea2_darkbrush.safetensors",
+                      lora_strength=0.8,
+                      trigger_word="",
+                      prompt_enhance=False,
+                      thinking=False,
+                      max_tokens=512,
+                      api_name="/generate_image"
                   )
-                  
                   img_path = extract_path(result)
                   if img_path and os.path.exists(img_path):
                       Image.open(img_path).save(output_path, format="PNG")
-                      print("[+] Krea-2 Ultra-Realistic Generation Complete!")
+                      print("[+] Spicy-krea2 Ultra-Realistic Generation Complete!")
+                      krea_success = True
                   else:
-                      print(f"[-] Krea-2 image path not resolved from result: {result}")
-              except Exception as err:
-                  print(f"[-] Krea-2 generation error: {err}")
+                      print(f"[-] Spicy-krea2 image path not resolved: {result}")
+                      renew_tor_ip()
+              except Exception as e_spicy:
+                  print(f"[-] Spicy-krea2 error: {e_spicy}")
                   renew_tor_ip()
+
+              # 2. Fallback 1: ravenrose996688/Krea-2-Turbo_I2I
+              if not krea_success:
+                  try:
+                      print(f"[*] Trying Fallback 1: ravenrose996688/Krea-2-Turbo_I2I...")
+                      client = Client("ravenrose996688/Krea-2-Turbo_I2I")
+                      result = client.predict(
+                          param_0="text2image",
+                          param_1=tuned_prompt,
+                          param_2=None,
+                          param_3=None,
+                          param_4=None,
+                          param_5=krea_w if krea_w <= 1024 else 1024,
+                          param_6=krea_h if krea_h <= 1024 else 1024,
+                          param_7=1.4,
+                          param_8=768,
+                          param_9=1.0,
+                          param_10=1.0,
+                          param_11=steps if steps <= 15 else 8,
+                          param_12=1.0,
+                          param_13="euler",
+                          param_14="beta",
+                          param_15=krea_seed,
+                          param_16=krea_rand,
+                          param_17=0,
+                          param_18="pornmasterKrea2_v2TurboInt8.safetensors",
+                          param_19=None,
+                          param_20=None,
+                          param_21=None,
+                          param_22={'headers': ['repo_id', 'filename', 'revision', 'weight'], 'data': [], 'metadata': None},
+                          param_23=0.0,
+                          param_24=0.8,
+                          param_25=0.0,
+                          param_26=0.0,
+                          param_27=0.0,
+                          param_28=0.0,
+                          param_29=0.0,
+                          param_30=0.0,
+                          param_31=0.0,
+                          param_32=0.0,
+                          param_33=0.0,
+                          param_34=0.0,
+                          param_35=0.0,
+                          param_36=0.0,
+                          param_37=0.0,
+                          param_38=0.0,
+                          param_39=0.0,
+                          param_40=0.0,
+                          api_name="/_generate_wrapper"
+                      )
+                      img_path = extract_path(result)
+                      if img_path and os.path.exists(img_path):
+                          Image.open(img_path).save(output_path, format="PNG")
+                          print("[+] Krea-2 Turbo_I2I Generation Complete!")
+                          krea_success = True
+                  except Exception as err:
+                      print(f"[-] Krea-2 Turbo_I2I generation error: {err}")
+                      renew_tor_ip()
+
+              # 3. Fallback 2: High-Speed Z-Image Mirror
+              if not krea_success:
+                  try:
+                      print(f"[*] Trying High-Speed Mirror Fallback: rahul7star/Z-Image-Turbo...")
+                      client = Client("rahul7star/Z-Image-Turbo")
+                      result = client.predict(
+                          prompt=tuned_prompt,
+                          height=krea_h,
+                          width=krea_w,
+                          num_inference_steps=steps if steps <= 15 else 8,
+                          seed=krea_seed,
+                          randomize_seed=krea_rand,
+                          num_images=1,
+                          api_name="/generate_image"
+                      )
+                      img_path = extract_path(result)
+                      if img_path and os.path.exists(img_path):
+                          Image.open(img_path).save(output_path, format="PNG")
+                          print("[+] Fallback Z-Image Ultra-Realistic Generation Complete!")
+                          krea_success = True
+                  except Exception as e_z:
+                      print(f"[-] Z-Image mirror fallback error: {e_z}")
 
           elif action == "minimax-h3":
               print(f"[*] Connecting to MiniMax-H3 Uncensored Video+Audio Space...")

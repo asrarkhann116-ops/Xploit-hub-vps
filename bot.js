@@ -44,6 +44,7 @@ const AI_COMMAND_CHANNELS = {
     "qwen-voice": "1549262974441750579",
     "breeze": "1549263004229697556",
     "breeze-tts": "1549263004229697556",
+    "step-music": "1549870041057595413",
 };
 
 const AI_LAB_COMMANDS = new Set([
@@ -63,6 +64,7 @@ const AI_LAB_COMMANDS = new Set([
     "yue-music",
     "breeze",
     "breeze-tts",
+    "step-music",
 ]);
 
 const client = new Client({
@@ -773,6 +775,27 @@ const commands = [
                     { name: "💎 FLAC (Lossless Master)", value: "flac" },
                     { name: "📻 OGG (Opus High Efficiency)", value: "ogg" },
                 ),
+        ),
+    new SlashCommandBuilder()
+        .setName("step-music")
+        .setDescription("🎵 StepAudio 3 — AI Full Studio Song Generator (StepFun Step-Music)")
+        .addStringOption((o) =>
+            o
+                .setName("prompt")
+                .setDescription("Song description, style, genre & instruments (e.g. 'summer acoustic pop with sweet vocals')")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("lyrics")
+                .setDescription("Custom lyrics with structure tags ([verse], [chorus]). Leave blank for AI auto-writing.")
+                .setRequired(false),
+        )
+        .addBooleanOption((o) =>
+            o
+                .setName("instrumental")
+                .setDescription("Instrumental only (no vocals)?")
+                .setRequired(false),
         ),
     new SlashCommandBuilder()
         .setName("breeze")
@@ -1879,6 +1902,56 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
             console.error("Breeze TTS error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /step-music
+    if (commandName === "step-music") {
+        const prompt = interaction.options.getString("prompt");
+        const lyrics = interaction.options.getString("lyrics") || "";
+        const instrumental = interaction.options.getBoolean("instrumental") || false;
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "step-music",
+                    prompt: prompt,
+                    image_url: lyrics,
+                    steps: instrumental ? "true" : "false",
+                    duration: "180",
+                    seed: "-1",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🎵 Xploit AI Lab — StepAudio 3 Music")
+                .setColor("#FF4500")
+                .setDescription("Composing full studio track with **StepFun StepAudio-3 Music Neural Engine**!")
+                .addFields(
+                    { name: "🎼 Style / Prompt", value: `\`${prompt.length > 150 ? prompt.slice(0, 147) + "..." : prompt}\``, inline: false },
+                    { name: "📝 Lyrics", value: lyrics ? `\`${lyrics.length > 100 ? lyrics.slice(0, 97) + "..." : lyrics}\`` : (instrumental ? "`Instrumental Only`" : "`Auto AI Lyrics Composing`"), inline: false },
+                    { name: "🎤 Mode", value: instrumental ? "`Instrumental Only`" : "`Full Vocals + Lyrics`", inline: true },
+                    { name: "⚡ Quality", value: "`192kbps 44.1kHz Studio Master`", inline: true },
+                    { name: "🖥️ Host Node", value: "`StepAudio Cloud Cluster`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~45 Seconds`", inline: true },
+                )
+                .setFooter({ text: "⚡ Running on StepAudio High-Speed Cloud • Dropping in this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("StepAudio Music error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

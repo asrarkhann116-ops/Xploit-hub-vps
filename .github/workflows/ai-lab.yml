@@ -1445,7 +1445,26 @@ jobs:
 
           elif action == "step-music":
               print(f"[*] Composing High-Fidelity Studio Music with StepAudio-3-Music...")
-              audio_output_path = "/tmp/ai_lab/output.mp3"
+
+              # Parse flexible config payload from style_val
+              resp_format = "mp3"
+              bit_rate = 192
+              sample_rate = 44100
+              task_mode = "text_to_music"
+              generated_lyrics_full = ""
+
+              if style_val:
+                  try:
+                      cfg_p = json.loads(style_val)
+                      if isinstance(cfg_p, dict):
+                          resp_format = cfg_p.get("format", "mp3").lower()
+                          bit_rate = int(cfg_p.get("bitrate", 192))
+                          sample_rate = int(cfg_p.get("sample_rate", 44100))
+                          task_mode = cfg_p.get("task", "text_to_music")
+                  except Exception:
+                      pass
+
+              audio_output_path = f"/tmp/ai_lab/output.{resp_format}"
               output_path = audio_output_path
               step_success = False
 
@@ -1459,20 +1478,23 @@ jobs:
               query_url = "https://stepfun-ai-stepaudio-3-music.hf.space/v1/audio/music/query"
 
               payload = {
-                  "task": "text_to_music",
+                  "task": task_mode,
                   "caption": caption_prompt,
                   "model_id": "step-music",
-                  "response_format": "mp3",
-                  "bit_rate": 192,
-                  "sample_rate": 44100
+                  "response_format": resp_format,
+                  "sample_rate": sample_rate
               }
+              if resp_format in ("mp3", "opus"):
+                  payload["bit_rate"] = bit_rate
+
               if custom_lyrics:
                   payload["lyrics"] = custom_lyrics
               elif is_instrumental:
                   payload["caption"] = f"{caption_prompt}, purely instrumental, no vocals, no singing"
+                  payload["instrumental"] = True
 
               try:
-                  print(f"[*] Submitting to StepAudio-3: Caption='{caption_prompt[:60]}' | Instrumental={is_instrumental}...")
+                  print(f"[*] Submitting to StepAudio-3: Caption='{caption_prompt[:60]}' | Mode={task_mode} | Format={resp_format}@{bit_rate}k | Instrumental={is_instrumental}...")
                   resp = requests.post(submit_url, json=payload, timeout=60)
                   if resp.status_code == 200:
                       task_data = resp.json()
@@ -1494,8 +1516,9 @@ jobs:
                                       with open(audio_output_path, "wb") as f_out:
                                           f_out.write(base64.b64decode(audio_b64))
                                       print(f"[+] StepAudio-3 Music Complete! Output written ({os.path.getsize(audio_output_path)} bytes)")
-                                      if q_data.get("rewritten_lyrics"):
-                                          print(f"[+] Generated Lyrics:\n{q_data.get('rewritten_lyrics')[:200]}...")
+                                      generated_lyrics_full = q_data.get("rewritten_lyrics") or custom_lyrics
+                                      if generated_lyrics_full:
+                                          print(f"[+] Studio Lyrics ready ({len(generated_lyrics_full)} chars)")
                                       step_success = True
                                       break
                               elif q_status == "FAILED":
@@ -1951,16 +1974,16 @@ jobs:
               if action in ("wan-video", "minimax-h3"):
                   filename = "xploit_video.mp4"
                   mimetype = "video/mp4"
-              elif action in ("kokoro-tts", "qwen-voice", "minimax-music", "yue-music", "yue", "breeze-tts", "breeze"):
+              elif action in ("kokoro-tts", "qwen-voice", "minimax-music", "yue-music", "yue", "step-music", "breeze-tts", "breeze"):
                   ext = os.path.splitext(output_path)[1].lower()
                   if ext == ".flac":
                       filename = "xploit_song.flac"
                       mimetype = "audio/flac"
-                  elif ext == ".ogg":
+                  elif ext == ".ogg" or ext == ".opus":
                       filename = "xploit_song.ogg"
                       mimetype = "audio/ogg"
                   elif ext == ".wav":
-                      filename = "xploit_voice.wav"
+                      filename = "xploit_song.wav" if "music" in action or "yue" in action else "xploit_voice.wav"
                       mimetype = "audio/wav"
                   else:
                       filename = "xploit_song.mp3" if "music" in action or "yue" in action else "xploit_voice.mp3"
@@ -2051,6 +2074,10 @@ jobs:
                       if action in ("yue-music", "yue"):
                           lyrics_snip = f"\n📜 **Lyrics:** `{image_url[:120]}...`" if image_url else ""
                           content = f"🎵 **XPLOIT NEXT-GEN AI LAB — YUE 2 (3B) MUSIC**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `YuE 2 (3B) Neural Music Pipeline`\n🎼 **Style:** `{prompt}`{lyrics_snip}\n🧠 **CoT Mode:** `{steps_val.upper()}` | 🎛️ **CFG:** `{duration_val or '1.0'}`{seed_line}"
+                      elif action == "step-music":
+                          mode_str = "Instrumental Only" if is_instrumental else "Full Vocals + Lyrics"
+                          lyrics_preview = f"\n📜 **Lyrics:**\n```{generated_lyrics_full[:300]}...```" if generated_lyrics_full else ""
+                          content = f"🎵 **XPLOIT NEXT-GEN AI LAB — STEPAUDIO 3 MUSIC**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `StepFun Step-Music 3 Neural Studio`\n🎼 **Style:** `{caption_prompt}`\n🎤 **Mode:** `{mode_str}` | ⚡ **Quality:** `{resp_format.upper()} {bit_rate}kbps / {sample_rate}Hz`{lyrics_preview}"
                       elif action in ("breeze-tts", "breeze"):
                           mode_label = mode.upper()
                           inst_line = f"\n🎨 **Instruction:** `{instruction[:100]}`" if instruction else ""

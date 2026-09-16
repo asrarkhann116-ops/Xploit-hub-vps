@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music / yue-music / breeze-tts)'
+        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music / yue-music / step-music / breeze-tts)'
         required: true
         default: 'zimage'
       prompt:
@@ -1442,6 +1442,107 @@ jobs:
                   except Exception as e2:
                       print(f"[-] Secondary YuE2 Space error: {e2}")
                       renew_tor_ip()
+
+          elif action == "step-music":
+              print(f"[*] Composing High-Fidelity Studio Music with StepAudio-3-Music...")
+              audio_output_path = "/tmp/ai_lab/output.mp3"
+              output_path = audio_output_path
+              step_success = False
+
+              # Extract parameters
+              caption_prompt = prompt.strip() if prompt else "An energetic electronic dance track with driving synth baseline"
+              custom_lyrics = image_url.strip() if image_url and image_url.strip() else ""
+              is_instrumental = str(steps_val).lower() in ("true", "1", "yes", "instrumental")
+
+              # StepAudio REST Payload
+              submit_url = "https://stepfun-ai-stepaudio-3-music.hf.space/v1/audio/music/submit"
+              query_url = "https://stepfun-ai-stepaudio-3-music.hf.space/v1/audio/music/query"
+
+              payload = {
+                  "task": "text_to_music",
+                  "caption": caption_prompt,
+                  "model_id": "step-music",
+                  "response_format": "mp3",
+                  "bit_rate": 192,
+                  "sample_rate": 44100
+              }
+              if custom_lyrics:
+                  payload["lyrics"] = custom_lyrics
+              elif is_instrumental:
+                  payload["caption"] = f"{caption_prompt}, purely instrumental, no vocals, no singing"
+
+              try:
+                  print(f"[*] Submitting to StepAudio-3: Caption='{caption_prompt[:60]}' | Instrumental={is_instrumental}...")
+                  resp = requests.post(submit_url, json=payload, timeout=60)
+                  if resp.status_code == 200:
+                      task_data = resp.json()
+                      task_id = task_data.get("task_id")
+                      print(f"[+] StepAudio Task Queued! Task ID: {task_id}")
+
+                      # Poll for completion (up to 4 minutes)
+                      import time
+                      import base64
+                      for attempt in range(48):
+                          time.sleep(5)
+                          q_resp = requests.post(query_url, json={"task_id": task_id}, timeout=30)
+                          if q_resp.status_code == 200:
+                              q_data = q_resp.json()
+                              q_status = q_data.get("status")
+                              if q_status == "SUCCESS":
+                                  audio_b64 = q_data.get("audio", "")
+                                  if audio_b64:
+                                      with open(audio_output_path, "wb") as f_out:
+                                          f_out.write(base64.b64decode(audio_b64))
+                                      print(f"[+] StepAudio-3 Music Complete! Output written ({os.path.getsize(audio_output_path)} bytes)")
+                                      if q_data.get("rewritten_lyrics"):
+                                          print(f"[+] Generated Lyrics:\n{q_data.get('rewritten_lyrics')[:200]}...")
+                                      step_success = True
+                                      break
+                              elif q_status == "FAILED":
+                                  print(f"[-] StepAudio Task Failed: {q_data}")
+                                  break
+                              elif attempt % 3 == 0:
+                                  print(f"[*] StepAudio Still Composing... ({attempt * 5}s elapsed)")
+                  else:
+                      print(f"[-] StepAudio Submit HTTP error: {resp.status_code} - {resp.text}")
+              except Exception as e_step:
+                  print(f"[-] StepAudio primary error: {e_step}")
+                  renew_tor_ip()
+
+              # Fallback to MiniMax Music if StepAudio was busy
+              if not step_success:
+                  print("[*] Falling back to MiniMax-Music3...")
+                  try:
+                      from gradio_client import Client
+                      client = Client("MiniMaxAI/MiniMax-Music3")
+                      state_payload = {
+                          "mode": "simple",
+                          "description": caption_prompt,
+                          "instrumental": is_instrumental,
+                          "title": caption_prompt[:30],
+                          "lyrics": custom_lyrics,
+                          "global_meta": "",
+                          "vocals": "",
+                          "arrangement": ""
+                      }
+                      result = client.predict(
+                          state=state_payload,
+                          duration="120",
+                          seed=random.randint(1, 999999),
+                          randomize_seed=True,
+                          headroom=0,
+                          steps=30,
+                          guidance=1.7,
+                          api_name="/simple_generate"
+                      )
+                      audio_path = extract_path(result)
+                      if audio_path and os.path.exists(audio_path):
+                          import shutil
+                          shutil.copyfile(audio_path, audio_output_path)
+                          print("[+] MiniMax Music Fallback Complete!")
+                          step_success = True
+                  except Exception as e_mm:
+                      print(f"[-] MiniMax fallback error: {e_mm}")
 
           elif action == "kokoro-tts":
               print(f"[*] Generating Kokoro-TTS Hyper-Realistic Voice...")

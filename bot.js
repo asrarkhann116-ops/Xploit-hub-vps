@@ -796,6 +796,38 @@ const commands = [
                 .setName("instrumental")
                 .setDescription("Instrumental only (no vocals)?")
                 .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("format")
+                .setDescription("Audio output format (default: MP3)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "🎵 MP3 (Compact / Streaming standard)", value: "mp3" },
+                    { name: "💿 WAV (Lossless uncompressed studio)", value: "wav" },
+                    { name: "🎧 FLAC (High-res lossless)", value: "flac" },
+                    { name: "🌐 OPUS (Ultra low bitrate speech/music)", value: "opus" },
+                ),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("bitrate")
+                .setDescription("Audio bitrate kbps for MP3/OPUS (default: 192kbps)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "192 kbps (Standard Studio)", value: 192 },
+                    { name: "320 kbps (Ultra Audiophile High-Res)", value: 320 },
+                ),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("sample_rate")
+                .setDescription("Audio sample rate in Hz (default: 44.1kHz)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "44.1 kHz (CD / Commercial Quality)", value: 44100 },
+                    { name: "48.0 kHz (Studio Video / Broadcast)", value: 48000 },
+                ),
         ),
     new SlashCommandBuilder()
         .setName("breeze")
@@ -1913,6 +1945,9 @@ client.on("interactionCreate", async (interaction) => {
         const prompt = interaction.options.getString("prompt");
         const lyrics = interaction.options.getString("lyrics") || "";
         const instrumental = interaction.options.getBoolean("instrumental") || false;
+        const format = interaction.options.getString("format") || "mp3";
+        const bitrate = interaction.options.getInteger("bitrate") || 192;
+        const sampleRate = interaction.options.getInteger("sample_rate") || 44100;
 
         await interaction.deferReply({ ephemeral: false });
 
@@ -1929,6 +1964,12 @@ client.on("interactionCreate", async (interaction) => {
                     steps: instrumental ? "true" : "false",
                     duration: "180",
                     seed: "-1",
+                    style: JSON.stringify({
+                        format: format,
+                        bitrate: bitrate,
+                        sample_rate: sampleRate,
+                        task: "text_to_music",
+                    }),
                     user_id: interaction.user.id,
                     channel_id: interaction.channelId,
                 },
@@ -1942,7 +1983,9 @@ client.on("interactionCreate", async (interaction) => {
                     { name: "🎼 Style / Prompt", value: `\`${prompt.length > 150 ? prompt.slice(0, 147) + "..." : prompt}\``, inline: false },
                     { name: "📝 Lyrics", value: lyrics ? `\`${lyrics.length > 100 ? lyrics.slice(0, 97) + "..." : lyrics}\`` : (instrumental ? "`Instrumental Only`" : "`Auto AI Lyrics Composing`"), inline: false },
                     { name: "🎤 Mode", value: instrumental ? "`Instrumental Only`" : "`Full Vocals + Lyrics`", inline: true },
-                    { name: "⚡ Quality", value: "`192kbps 44.1kHz Studio Master`", inline: true },
+                    { name: "📦 Format", value: `\`${format.toUpperCase()}\``, inline: true },
+                    { name: "⚡ Bitrate", value: `\`${bitrate} kbps\``, inline: true },
+                    { name: "🎚️ Sample Rate", value: `\`${(sampleRate / 1000).toFixed(1)} kHz\``, inline: true },
                     { name: "🖥️ Host Node", value: "`StepAudio Cloud Cluster`", inline: true },
                     { name: "⏳ Est. Render", value: "`~45 Seconds`", inline: true },
                 )

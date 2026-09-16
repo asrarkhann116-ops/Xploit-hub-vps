@@ -15,14 +15,16 @@ on:
       wallpaper_url:
         description: 'Wallpaper URL'
         required: false
-        default: ''
+        default: 'https://raw.githubusercontent.com/asrarkhann116-ops/Xploit-hub-vps/main/xploit_hub_vps_wallpaper.png'
 
 jobs:
   launch:
     runs-on: macos-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
-      - name: Enable Screen Sharing (VNC on port 5900)
+      - name: Enable Screen Sharing & Apply Wallpaper
+        env:
+          WALLPAPER_URL: ${{ github.event.inputs.wallpaper_url || 'https://raw.githubusercontent.com/asrarkhann116-ops/Xploit-hub-vps/main/xploit_hub_vps_wallpaper.png' }}
         run: |
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
             -activate -configure -access -on \
@@ -32,6 +34,13 @@ jobs:
           sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist \
             com.apple.screensharing -dict Disabled -bool false 2>/dev/null || true
           sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
+
+          # Download and set wallpaper on macOS desktop
+          WALL_PATH="/tmp/xploit_wallpaper.png"
+          curl -sL "$WALLPAPER_URL" -o "$WALL_PATH" || true
+          if [ -f "$WALL_PATH" ]; then
+            osascript -e "tell application \"Finder\" to set desktop picture to POSIX file \"$WALL_PATH\"" 2>/dev/null || true
+          fi
 
           # Wait for VNC port to be ready
           echo "Waiting for VNC port 5900..."

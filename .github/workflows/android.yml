@@ -15,7 +15,7 @@ on:
       wallpaper_url:
         description: 'Wallpaper URL'
         required: false
-        default: ''
+        default: 'https://raw.githubusercontent.com/asrarkhann116-ops/Xploit-hub-vps/main/xploit_hub_vps_wallpaper.png'
 
 jobs:
   launch:

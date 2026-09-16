@@ -15,7 +15,7 @@ on:
       wallpaper_url:
         description: 'Wallpaper URL'
         required: false
-        default: 'https://images.wallpapersden.com/image/download/red-hacker-binary-code_bWZtZ2aUmZqaraWkpJRmbmdlrWZnZWU.jpg'
+        default: 'https://raw.githubusercontent.com/asrarkhann116-ops/Xploit-hub-vps/main/xploit_hub_vps_wallpaper.png'
 
 jobs:
   launch:
@@ -45,7 +45,9 @@ jobs:
           unzip -q nuclei.zip 2>/dev/null && sudo mv nuclei /usr/local/bin/ 2>/dev/null || true
           rm -f nuclei.zip
 
-      - name: Configure xRDP + Create User
+      - name: Configure xRDP + Create User + Apply Wallpaper
+        env:
+          WALLPAPER_URL: ${{ github.event.inputs.wallpaper_url || 'https://raw.githubusercontent.com/asrarkhann116-ops/Xploit-hub-vps/main/xploit_hub_vps_wallpaper.png' }}
         run: |
           # Create user — add to ssl-cert group (required for xRDP on Ubuntu)
           sudo useradd -m -s /bin/bash xploit
@@ -56,6 +58,19 @@ jobs:
           sudo mkdir -p /home/xploit/.config/xfce4/xfconf/xfce-perchannel-xml
           sudo mkdir -p /home/xploit/.local/share/xfce4
           sudo mkdir -p /home/xploit/.cache/sessions
+          sudo mkdir -p /usr/share/backgrounds/xploit
+
+          # Download and apply default / selected wallpaper
+          sudo mkdir -p /usr/share/backgrounds/xfce
+          sudo curl -sL "$WALLPAPER_URL" -o /usr/share/backgrounds/xfce/xploit_wallpaper.png || true
+          sudo cp -f /usr/share/backgrounds/xfce/xploit_wallpaper.png /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || true
+          sudo cp -f /usr/share/backgrounds/xfce/xploit_wallpaper.png /usr/share/backgrounds/xfce/xfce-teal.jpg 2>/dev/null || true
+          sudo cp -f /usr/share/backgrounds/xfce/xploit_wallpaper.png /usr/share/backgrounds/xfce/xfce-stripes.png 2>/dev/null || true
+
+          # Autostart wallpaper setter script on desktop login
+          sudo mkdir -p /home/xploit/.config/autostart
+          sudo bash -c "printf '[Desktop Entry]\nType=Application\nExec=sh -c \"sleep 2 && for p in \$(xfconf-query -c xfce4-desktop -l | grep last-image); do xfconf-query -c xfce4-desktop -p \$p -s /usr/share/backgrounds/xfce/xploit_wallpaper.png; done\"\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nName=Set Wallpaper\n' > /home/xploit/.config/autostart/set-wallpaper.desktop"
+
           sudo chown -R xploit:xploit /home/xploit
 
           # Set session: xploit's .xsession tells Xsession to run startxfce4
@@ -67,14 +82,7 @@ jobs:
           # properly initialises D-Bus AND sets XDG_CONFIG_DIRS before calling the DE.
           # dbus-launch alone doesn't work because xfce4-session needs the bus address
           # set BEFORE it even starts. Xsession handles this correctly.
-          sudo bash -c 'cat > /etc/xrdp/startwm.sh << "ENDSESSION"
-#!/bin/sh
-if [ -r /etc/default/locale ]; then
-  . /etc/default/locale
-  export LANG LANGUAGE
-fi
-exec /etc/X11/Xsession
-ENDSESSION'
+          sudo bash -c "printf '#!/bin/sh\nif [ -r /etc/default/locale ]; then\n  . /etc/default/locale\n  export LANG LANGUAGE\nfi\nexec /etc/X11/Xsession\n' > /etc/xrdp/startwm.sh"
           sudo chmod +x /etc/xrdp/startwm.sh
 
           # Lower color depth for stability

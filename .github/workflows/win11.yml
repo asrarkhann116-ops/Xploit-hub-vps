@@ -14,8 +14,8 @@ on:
         default: '60'
       wallpaper_url:
         description: 'Wallpaper URL'
-        required: true
-        default: 'https://images.wallpapersden.com/image/download/red-hacker-binary-code_bWZtZ2aUmZqaraWkpJRmbmdlrWZnZWU.jpg'
+        required: false
+        default: 'https://raw.githubusercontent.com/asrarkhann116-ops/Xploit-hub-vps/main/xploit_hub_vps_wallpaper.png'
 
 jobs:
   launch:
@@ -35,8 +35,10 @@ jobs:
           }
           Write-Host "✅ 16GB High-Speed NVMe Pagefile Active! Total System Memory: ~23GB"
 
-      - name: Enable RDP & Create User
+      - name: Enable RDP & Create User + Apply Wallpaper
         shell: powershell
+        env:
+          WALLPAPER_URL: ${{ github.event.inputs.wallpaper_url || 'https://raw.githubusercontent.com/asrarkhann116-ops/Xploit-hub-vps/main/xploit_hub_vps_wallpaper.png' }}
         run: |
           $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
 
@@ -64,6 +66,30 @@ jobs:
 
           $check = Get-LocalUser -Name 'xploit' -ErrorAction SilentlyContinue
           if ($check) { Write-Host 'SUCCESS: user xploit ready' } else { Write-Host 'ERROR: user xploit not found'; exit 1 }
+
+          # Download and set default wallpaper
+          try {
+            $wallDir = 'C:\Windows\Web\Wallpaper\Xploit'
+            New-Item -ItemType Directory -Force -Path $wallDir -ErrorAction SilentlyContinue | Out-Null
+            $wallFile = "$wallDir\wallpaper.png"
+            Invoke-WebRequest -Uri $env:WALLPAPER_URL -OutFile $wallFile -UseBasicParsing -ErrorAction SilentlyContinue
+
+            if (Test-Path $wallFile) {
+              # Set system-wide default wallpaper registry
+              Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP' -Name 'DesktopImagePath' -Value $wallFile -Type String -Force -ErrorAction SilentlyContinue
+              Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP' -Name 'DesktopImageUrl' -Value $wallFile -Type String -Force -ErrorAction SilentlyContinue
+              New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' -Force -ErrorAction SilentlyContinue | Out-Null
+              Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' -Name 'LockScreenImage' -Value $wallFile -Type String -Force -ErrorAction SilentlyContinue
+              # Set default user profile wallpaper
+              reg load HKU\DefaultTemp C:\Users\Default\NTUSER.DAT 2>$null
+              Set-ItemProperty -Path 'Registry::HKU\DefaultTemp\Control Panel\Desktop' -Name 'Wallpaper' -Value $wallFile -Type String -Force -ErrorAction SilentlyContinue
+              Set-ItemProperty -Path 'Registry::HKU\DefaultTemp\Control Panel\Desktop' -Name 'WallpaperStyle' -Value '10' -Type String -Force -ErrorAction SilentlyContinue
+              reg unload HKU\DefaultTemp 2>$null
+              Write-Host "Wallpaper configured: $wallFile"
+            }
+          } catch {
+            Write-Host "Wallpaper setup warning: $_"
+          }
 
       - name: Bore Tunnel & Send DM
         shell: powershell

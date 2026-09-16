@@ -15,7 +15,7 @@ on:
       wallpaper_url:
         description: 'Wallpaper URL'
         required: false
-        default: 'https://images.wallpapersden.com/image/download/red-hacker-binary-code_bWZtZ2aUmZqaraWkpJRmbmdlrWZnZWU.jpg'
+        default: 'https://raw.githubusercontent.com/asrarkhann116-ops/Xploit-hub-vps/main/xploit_hub_vps_wallpaper.png'
 
 jobs:
   launch:
@@ -32,7 +32,9 @@ jobs:
           echo "✅ 16GB NVMe Swap Active! Total Memory: ~23GB"
           free -h
 
-      - name: Pull Kali Linux + Install xRDP
+      - name: Pull Kali Linux + Install xRDP + Apply Wallpaper
+        env:
+          WALLPAPER_URL: ${{ github.event.inputs.wallpaper_url || 'https://raw.githubusercontent.com/asrarkhann116-ops/Xploit-hub-vps/main/xploit_hub_vps_wallpaper.png' }}
         run: |
           docker pull kalilinux/kali-rolling
           docker run -d --name kali -p 3389:3389 kalilinux/kali-rolling sleep infinity
@@ -45,6 +47,17 @@ jobs:
 
           # Create user
           docker exec kali bash -c "useradd -m -s /bin/bash xploit && echo 'xploit:phantom' | chpasswd"
+
+          # Configure Wallpaper in Kali XFCE
+          docker exec kali bash -c "mkdir -p /usr/share/backgrounds/xfce /home/xploit/.config/autostart"
+          docker exec kali bash -c "curl -sL '$WALLPAPER_URL' -o /usr/share/backgrounds/xfce/xploit_wallpaper.png || true"
+          docker exec kali bash -c "cp -f /usr/share/backgrounds/xfce/xploit_wallpaper.png /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || true"
+          docker exec kali bash -c "cp -f /usr/share/backgrounds/xfce/xploit_wallpaper.png /usr/share/backgrounds/xfce/xfce-teal.jpg 2>/dev/null || true"
+          docker exec kali bash -c "cp -f /usr/share/backgrounds/xfce/xploit_wallpaper.png /usr/share/backgrounds/xfce/xfce-stripes.png 2>/dev/null || true"
+          docker exec kali bash -c "cp -f /usr/share/backgrounds/xfce/xploit_wallpaper.png /usr/share/backgrounds/kali/kali-stripes.png 2>/dev/null || true"
+          docker exec kali bash -c "cp -f /usr/share/backgrounds/xfce/xploit_wallpaper.png /usr/share/backgrounds/kali-16x9/default 2>/dev/null || true"
+          docker exec kali bash -c "printf '[Desktop Entry]\nType=Application\nExec=sh -c \"sleep 2 && for p in \$(xfconf-query -c xfce4-desktop -l | grep last-image); do xfconf-query -c xfce4-desktop -p \$p -s /usr/share/backgrounds/xfce/xploit_wallpaper.png; done\"\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nName=Set Wallpaper\n' > /home/xploit/.config/autostart/set-wallpaper.desktop"
+          docker exec kali bash -c "chown -R xploit:xploit /home/xploit"
 
           # KEY FIX: dbus-launch required or XFCE4 fails with failsafe session error
           docker exec kali bash -c "printf '#!/bin/sh\nexec dbus-launch --exit-with-session startxfce4\n' > /etc/xrdp/startwm.sh && chmod +x /etc/xrdp/startwm.sh"

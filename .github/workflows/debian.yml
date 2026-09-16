@@ -15,14 +15,16 @@ on:
       wallpaper_url:
         description: 'Wallpaper URL'
         required: false
-        default: 'https://images.wallpapersden.com/image/download/red-hacker-binary-code_bWZtZ2aUmZqaraWkpJRmbmdlrWZnZWU.jpg'
+        default: 'https://raw.githubusercontent.com/asrarkhann116-ops/Xploit-hub-vps/main/xploit_hub_vps_wallpaper.png'
 
 jobs:
   launch:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
-      - name: Pull Debian + Install xRDP Desktop
+      - name: Pull Debian + Install xRDP Desktop + Apply Wallpaper
+        env:
+          WALLPAPER_URL: ${{ github.event.inputs.wallpaper_url || 'https://raw.githubusercontent.com/asrarkhann116-ops/Xploit-hub-vps/main/xploit_hub_vps_wallpaper.png' }}
         run: |
           docker pull debian:bookworm
           docker run -d --name debian -p 3389:3389 debian:bookworm sleep infinity
@@ -34,6 +36,15 @@ jobs:
 
           # Create user
           docker exec debian bash -c "useradd -m -s /bin/bash xploit && echo 'xploit:phantom' | chpasswd && usermod -aG sudo xploit"
+
+          # Configure Wallpaper in Debian XFCE
+          docker exec debian bash -c "mkdir -p /usr/share/backgrounds/xfce /home/xploit/.config/autostart"
+          docker exec debian bash -c "curl -sL '$WALLPAPER_URL' -o /usr/share/backgrounds/xfce/xploit_wallpaper.png || true"
+          docker exec debian bash -c "cp -f /usr/share/backgrounds/xfce/xploit_wallpaper.png /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || true"
+          docker exec debian bash -c "cp -f /usr/share/backgrounds/xfce/xploit_wallpaper.png /usr/share/backgrounds/xfce/xfce-teal.jpg 2>/dev/null || true"
+          docker exec debian bash -c "cp -f /usr/share/backgrounds/xfce/xploit_wallpaper.png /usr/share/backgrounds/xfce/xfce-stripes.png 2>/dev/null || true"
+          docker exec debian bash -c "printf '[Desktop Entry]\nType=Application\nExec=sh -c \"sleep 2 && for p in \$(xfconf-query -c xfce4-desktop -l | grep last-image); do xfconf-query -c xfce4-desktop -p \$p -s /usr/share/backgrounds/xfce/xploit_wallpaper.png; done\"\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nName=Set Wallpaper\n' > /home/xploit/.config/autostart/set-wallpaper.desktop"
+          docker exec debian bash -c "chown -R xploit:xploit /home/xploit"
 
           # KEY FIX: dbus-launch --exit-with-session prevents xfconfd/failsafe session errors
           docker exec debian bash -c "printf '#!/bin/sh\nexec dbus-launch --exit-with-session startxfce4\n' > /etc/xrdp/startwm.sh && chmod +x /etc/xrdp/startwm.sh"

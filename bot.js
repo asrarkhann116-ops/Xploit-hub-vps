@@ -142,7 +142,7 @@ const OS_MAP = {
 };
 
 const WALLPAPER_MAP = {
-    wall_default:  "https://images.wallpapersden.com/image/download/red-hacker-binary-code_bWZtZ2aUmZqaraWkpJRmbmdlrWZnZWU.jpg",
+    wall_default:  "https://raw.githubusercontent.com/asrarkhann116-ops/Xploit-hub-vps/main/xploit_hub_vps_wallpaper.png",
     wall_skull:    "https://images.wallpapersden.com/image/download/red-hacker-binary-code_bWZtZ2aUmZqaraWkpJRmbmdlrWZnZWU.jpg",
     wall_cyber:    "https://wallpapercave.com/wp/wp4906542.jpg",
     wall_matrix:   "https://wallpaperaccess.com/full/11554.jpg",
@@ -190,10 +190,11 @@ const commands = [
         .addStringOption((o) =>
             o
                 .setName("wallpaper")
-                .setDescription("Desktop wallpaper (Linux only)")
+                .setDescription("Desktop wallpaper (Custom/Default)")
                 .setRequired(false)
                 .addChoices(
-                    { name: "💀 Kali Red Binary (Default)",   value: "wall_default"  },
+                    { name: "🔥 Xploit HUB VPS (Default)",    value: "wall_default"  },
+                    { name: "💀 Kali Red Binary",             value: "wall_skull"    },
                     { name: "🐉 Kali Linux Official",         value: "wall_kali1"    },
                     { name: "👾 Kali Hacker Dark",            value: "wall_kali2"    },
                     { name: "🖥️ Hacker Terminal Green",       value: "wall_terminal" },

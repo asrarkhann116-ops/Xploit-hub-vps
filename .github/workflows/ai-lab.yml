@@ -73,6 +73,7 @@ jobs:
           DURATION: ${{ github.event.inputs.duration }}
           SEED: ${{ github.event.inputs.seed }}
           STYLE: ${{ github.event.inputs.style }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           mkdir -p /tmp/ai_lab
           cd /tmp/ai_lab
@@ -528,12 +529,13 @@ jobs:
                       print(f"[-] Image download error: {e}")
                       has_image = False
 
-              # If no image provided, generate an initial base image via Spicy-krea2 / Z-Image for text-to-image
+              # If no image provided, generate an initial base image via Spicy-krea2 (Primary) or krea/Krea-2 (Fallback)
               if not has_image or not os.path.exists(input_img_path):
+                  hf_tok = os.environ.get("HF_TOKEN") or None
                   try:
-                      print(f"[*] Generating initial base image via Spicy-krea2 for text-to-image...")
-                      krea_client = Client("MarkTheArtist/Spicy-krea2")
-                      krea_res = krea_client.predict(
+                      print(f"[*] Generating initial base image via MarkTheArtist/Spicy-krea2...")
+                      krea_client = Client("MarkTheArtist/Spicy-krea2", token=hf_tok, httpx_kwargs={"timeout": 180.0})
+                      job = krea_client.submit(
                           prompt=prompt,
                           width=1024,
                           height=1024,
@@ -547,9 +549,10 @@ jobs:
                           trigger_word="",
                           prompt_enhance=False,
                           thinking=False,
-                          max_tokens=256,
+                          max_tokens=256.0,
                           api_name="/generate_image"
                       )
+                      krea_res = job.result(timeout=180.0)
                       base_img = extract_path(krea_res)
                       if base_img and os.path.exists(base_img):
                           import shutil
@@ -557,17 +560,17 @@ jobs:
                           has_image = True
                   except Exception as err:
                       print(f"[-] Base frame Spicy-krea2 error: {err}")
-                      # Fallback base image via Z-Image
+                      # Fallback 1: Official krea/Krea-2
                       try:
-                          z_client = Client("rahul7star/Z-Image-Turbo")
-                          z_res = z_client.predict(prompt=prompt, height=1024, width=1024, num_inference_steps=6, seed=random.randint(1, 999999), randomize_seed=True, num_images=1, api_name="/generate_image")
-                          base_img = extract_path(z_res)
+                          off_client = Client("krea/Krea-2", token=hf_tok, httpx_kwargs={"timeout": 120.0})
+                          off_res = off_client.predict(prompt=prompt, negative_prompt="blurry, low quality", model="Turbo", steps=8.0, guidance=0.0, width=1024.0, height=1024.0, seed=float(random.randint(1, 999999)), randomize=True, api_name="/generate")
+                          base_img = extract_path(off_res)
                           if base_img and os.path.exists(base_img):
                               import shutil
                               shutil.copyfile(base_img, input_img_path)
                               has_image = True
-                      except Exception as z_err:
-                          print(f"[-] Base frame Z-Image fallback error: {z_err}")
+                      except Exception as off_err:
+                          print(f"[-] Base frame krea/Krea-2 fallback error: {off_err}")
 
               if seed_val and seed_val != "-1":
                   try:
@@ -741,12 +744,13 @@ jobs:
                       print(f"[-] Image download error: {e}")
                       has_image = False
 
-              # If no image provided, generate an ultra-fast base image via Spicy-krea2 or Z-Image
+              # If no image provided, generate an ultra-fast base image via Spicy-krea2 (Primary) or krea/Krea-2 (Fallback)
               if not has_image or not os.path.exists(input_img_path):
+                  hf_tok = os.environ.get("HF_TOKEN") or None
                   try:
-                      print(f"[*] Auto-generating base frame via Spicy-krea2 for prompt: {prompt[:60]}...")
-                      krea_client = Client("MarkTheArtist/Spicy-krea2")
-                      krea_res = krea_client.predict(
+                      print(f"[*] Auto-generating base frame via MarkTheArtist/Spicy-krea2 for prompt: {prompt[:60]}...")
+                      krea_client = Client("MarkTheArtist/Spicy-krea2", token=hf_tok, httpx_kwargs={"timeout": 180.0})
+                      job = krea_client.submit(
                           prompt=prompt,
                           width=832,
                           height=480,
@@ -760,9 +764,10 @@ jobs:
                           trigger_word="",
                           prompt_enhance=False,
                           thinking=False,
-                          max_tokens=256,
+                          max_tokens=256.0,
                           api_name="/generate_image"
                       )
+                      krea_res = job.result(timeout=180.0)
                       base_img = extract_path(krea_res)
                       if base_img and os.path.exists(base_img):
                           import shutil
@@ -771,15 +776,15 @@ jobs:
                   except Exception as err:
                       print(f"[-] Base frame Spicy-krea2 error: {err}")
                       try:
-                          z_client = Client("rahul7star/Z-Image-Turbo")
-                          z_res = z_client.predict(prompt=prompt, height=480, width=832, num_inference_steps=6, seed=rand_seed, randomize_seed=True, num_images=1, api_name="/generate_image")
-                          base_img = extract_path(z_res)
+                          off_client = Client("krea/Krea-2", token=hf_tok, httpx_kwargs={"timeout": 120.0})
+                          off_res = off_client.predict(prompt=prompt, negative_prompt="blurry, low quality", model="Turbo", steps=8.0, guidance=0.0, width=1024.0, height=576.0, seed=float(rand_seed), randomize=True, api_name="/generate")
+                          base_img = extract_path(off_res)
                           if base_img and os.path.exists(base_img):
                               import shutil
                               shutil.copyfile(base_img, input_img_path)
                               has_image = True
-                      except Exception as z_err:
-                          print(f"[-] Base frame Z-Image fallback error: {z_err}")
+                      except Exception as off_err:
+                          print(f"[-] Base frame krea/Krea-2 fallback error: {off_err}")
 
               # Space 1: STCM/wan2-2-fp8da-aoti-preview-2c-missionary (Unrestricted FP8DA AOTI)
               try:
@@ -949,7 +954,7 @@ jobs:
 
 
           elif action == "krea-2":
-              print(f"[*] Connecting to Krea-2 Ultra-Realism / Unrestricted Space...")
+              print(f"[*] Connecting to Primary: MarkTheArtist/Spicy-krea2 (Unrestricted Photorealism)...")
               from gradio_client import Client
               import random
               krea_success = False
@@ -974,19 +979,21 @@ jobs:
                   krea_rand = True
               final_seed = krea_seed
 
-              # Professional photorealism prompt tuning
+              # Photorealism prompt tuning
               tuned_prompt = f"{prompt}, raw photo, 8k uhd, dslr, soft natural lighting, high quality, film grain, Fujifilm XT4"
 
-              # 1. Primary: MarkTheArtist/Spicy-krea2 (Working Unrestricted Krea-2 Space)
+              hf_tok = os.environ.get("HF_TOKEN") or None
+
+              # 1. Primary: MarkTheArtist/Spicy-krea2 (Unrestricted, 180s httpx timeout to prevent premature read timeouts)
               try:
-                  print(f"[*] Connecting to MarkTheArtist/Spicy-krea2...")
-                  client = Client("MarkTheArtist/Spicy-krea2")
-                  print(f"[*] Dispatching tuned prompt to Spicy-krea2: {tuned_prompt} | Dimensions: {krea_w}x{krea_h} | Seed: {krea_seed}")
-                  result = client.predict(
+                  print(f"[*] Connecting to MarkTheArtist/Spicy-krea2 with 180s timeout budget...")
+                  client = Client("MarkTheArtist/Spicy-krea2", token=hf_tok, httpx_kwargs={"timeout": 180.0})
+                  print(f"[*] Dispatching prompt to Spicy-krea2: {tuned_prompt[:60]}... | {krea_w}x{krea_h} | Seed: {krea_seed}")
+                  job = client.submit(
                       prompt=tuned_prompt,
-                      width=krea_w,
-                      height=krea_h,
-                      seed=krea_seed,
+                      width=int(krea_w),
+                      height=int(krea_h),
+                      seed=int(krea_seed),
                       steps=float(steps if steps <= 15 else 8),
                       cfg=1.0,
                       sampler_name="Euler",
@@ -996,101 +1003,103 @@ jobs:
                       trigger_word="",
                       prompt_enhance=False,
                       thinking=False,
-                      max_tokens=512,
+                      max_tokens=512.0,
                       api_name="/generate_image"
                   )
+                  result = job.result(timeout=180.0)
                   img_path = extract_path(result)
                   if img_path and os.path.exists(img_path):
                       Image.open(img_path).save(output_path, format="PNG")
                       print("[+] Spicy-krea2 Ultra-Realistic Generation Complete!")
                       krea_success = True
                   else:
-                      print(f"[-] Spicy-krea2 image path not resolved: {result}")
+                      print(f"[-] Spicy-krea2 image path unresolved: {result}")
                       renew_tor_ip()
               except Exception as e_spicy:
                   print(f"[-] Spicy-krea2 error: {e_spicy}")
                   renew_tor_ip()
 
-              # 2. Fallback 1: ravenrose996688/Krea-2-Turbo_I2I
+              # 2. Fallback 1: Official krea/Krea-2 Space (Running, 11s ultra-fast generation)
               if not krea_success:
                   try:
-                      print(f"[*] Trying Fallback 1: ravenrose996688/Krea-2-Turbo_I2I...")
-                      client = Client("ravenrose996688/Krea-2-Turbo_I2I")
-                      result = client.predict(
-                          param_0="text2image",
-                          param_1=tuned_prompt,
-                          param_2=None,
-                          param_3=None,
-                          param_4=None,
-                          param_5=krea_w if krea_w <= 1024 else 1024,
-                          param_6=krea_h if krea_h <= 1024 else 1024,
-                          param_7=1.4,
-                          param_8=768,
-                          param_9=1.0,
-                          param_10=1.0,
-                          param_11=steps if steps <= 15 else 8,
-                          param_12=1.0,
-                          param_13="euler",
-                          param_14="beta",
-                          param_15=krea_seed,
-                          param_16=krea_rand,
-                          param_17=0,
-                          param_18="pornmasterKrea2_v2TurboInt8.safetensors",
-                          param_19=None,
-                          param_20=None,
-                          param_21=None,
-                          param_22={'headers': ['repo_id', 'filename', 'revision', 'weight'], 'data': [], 'metadata': None},
-                          param_23=0.0,
-                          param_24=0.8,
-                          param_25=0.0,
-                          param_26=0.0,
-                          param_27=0.0,
-                          param_28=0.0,
-                          param_29=0.0,
-                          param_30=0.0,
-                          param_31=0.0,
-                          param_32=0.0,
-                          param_33=0.0,
-                          param_34=0.0,
-                          param_35=0.0,
-                          param_36=0.0,
-                          param_37=0.0,
-                          param_38=0.0,
-                          param_39=0.0,
-                          param_40=0.0,
-                          api_name="/_generate_wrapper"
-                      )
-                      img_path = extract_path(result)
-                      if img_path and os.path.exists(img_path):
-                          Image.open(img_path).save(output_path, format="PNG")
-                          print("[+] Krea-2 Turbo_I2I Generation Complete!")
-                          krea_success = True
-                  except Exception as err:
-                      print(f"[-] Krea-2 Turbo_I2I generation error: {err}")
-                      renew_tor_ip()
-
-              # 3. Fallback 2: High-Speed Z-Image Mirror
-              if not krea_success:
-                  try:
-                      print(f"[*] Trying High-Speed Mirror Fallback: rahul7star/Z-Image-Turbo...")
-                      client = Client("rahul7star/Z-Image-Turbo")
+                      print(f"[*] Trying Fallback 1: Official krea/Krea-2 Space...")
+                      client = Client("krea/Krea-2", token=hf_tok, httpx_kwargs={"timeout": 120.0})
                       result = client.predict(
                           prompt=tuned_prompt,
-                          height=krea_h,
-                          width=krea_w,
-                          num_inference_steps=steps if steps <= 15 else 8,
-                          seed=krea_seed,
-                          randomize_seed=krea_rand,
-                          num_images=1,
-                          api_name="/generate_image"
+                          negative_prompt="blurry, bad quality, distorted, deformed, watermark, lowres",
+                          model="Turbo",
+                          steps=float(steps if steps <= 25 else 8),
+                          guidance=0.0,
+                          width=float(krea_w if krea_w <= 1024 else 1024),
+                          height=float(krea_h if krea_h <= 1024 else 1024),
+                          seed=float(krea_seed),
+                          randomize=krea_rand,
+                          api_name="/generate"
                       )
                       img_path = extract_path(result)
                       if img_path and os.path.exists(img_path):
                           Image.open(img_path).save(output_path, format="PNG")
-                          print("[+] Fallback Z-Image Ultra-Realistic Generation Complete!")
+                          print("[+] Official krea/Krea-2 Generation Complete!")
                           krea_success = True
-                  except Exception as e_z:
-                      print(f"[-] Z-Image mirror fallback error: {e_z}")
+                      else:
+                          print(f"[-] krea/Krea-2 image path unresolved: {result}")
+                          renew_tor_ip()
+                  except Exception as e_krea_off:
+                      print(f"[-] Official krea/Krea-2 error: {e_krea_off}")
+                      renew_tor_ip()
+
+              # 3. Fallback 2: black-forest-labs/FLUX.1-Krea-dev (Official BFL Krea-dev)
+              if not krea_success:
+                  try:
+                      print(f"[*] Trying Fallback 2: black-forest-labs/FLUX.1-Krea-dev...")
+                      client = Client("black-forest-labs/FLUX.1-Krea-dev", token=hf_tok, httpx_kwargs={"timeout": 120.0})
+                      result = client.predict(
+                          prompt=tuned_prompt,
+                          seed=float(krea_seed),
+                          randomize_seed=krea_rand,
+                          width=float(krea_w if krea_w <= 1024 else 1024),
+                          height=float(krea_h if krea_h <= 1024 else 1024),
+                          guidance_scale=4.5,
+                          num_inference_steps=20.0,
+                          api_name="/infer"
+                      )
+                      img_path = extract_path(result)
+                      if img_path and os.path.exists(img_path):
+                          Image.open(img_path).save(output_path, format="PNG")
+                          print("[+] FLUX.1-Krea-dev Generation Complete!")
+                          krea_success = True
+                      else:
+                          print(f"[-] FLUX.1-Krea-dev image path unresolved: {result}")
+                          renew_tor_ip()
+                  except Exception as e_flk:
+                      print(f"[-] FLUX.1-Krea-dev error: {e_flk}")
+                      renew_tor_ip()
+
+              # 4. Fallback 3: black-forest-labs/flux-klein-9b-kv (Superfast 4-step generation)
+              if not krea_success:
+                  try:
+                      print(f"[*] Trying Fallback 3: black-forest-labs/flux-klein-9b-kv...")
+                      client = Client("black-forest-labs/flux-klein-9b-kv", token=hf_tok, httpx_kwargs={"timeout": 60.0})
+                      result = client.predict(
+                          prompt=tuned_prompt,
+                          input_images=[],
+                          seed=float(krea_seed),
+                          randomize_seed=krea_rand,
+                          width=float(krea_w if krea_w <= 1024 else 1024),
+                          height=float(krea_h if krea_h <= 1024 else 1024),
+                          num_inference_steps=4.0,
+                          prompt_upsampling=False,
+                          api_name="/generate"
+                      )
+                      img_path = extract_path(result)
+                      if img_path and os.path.exists(img_path):
+                          Image.open(img_path).save(output_path, format="PNG")
+                          print("[+] flux-klein-9b-kv Fallback Generation Complete!")
+                          krea_success = True
+                      else:
+                          print(f"[-] flux-klein-9b-kv image path unresolved: {result}")
+                  except Exception as e_fk:
+                      print(f"[-] flux-klein-9b-kv fallback error: {e_fk}")
 
           elif action == "minimax-h3":
               print(f"[*] Connecting to MiniMax-H3 Uncensored Video+Audio Space...")

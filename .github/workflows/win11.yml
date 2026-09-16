@@ -67,7 +67,7 @@ jobs:
           $check = Get-LocalUser -Name 'xploit' -ErrorAction SilentlyContinue
           if ($check) { Write-Host 'SUCCESS: user xploit ready' } else { Write-Host 'ERROR: user xploit not found'; exit 1 }
 
-          # Download and set default wallpaper
+          # Download and force apply default wallpaper across all sessions
           try {
             $wallDir = 'C:\Windows\Web\Wallpaper\Xploit'
             New-Item -ItemType Directory -Force -Path $wallDir -ErrorAction SilentlyContinue | Out-Null
@@ -75,16 +75,39 @@ jobs:
             Invoke-WebRequest -Uri $env:WALLPAPER_URL -OutFile $wallFile -UseBasicParsing -ErrorAction SilentlyContinue
 
             if (Test-Path $wallFile) {
-              # Set system-wide default wallpaper registry
-              Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP' -Name 'DesktopImagePath' -Value $wallFile -Type String -Force -ErrorAction SilentlyContinue
-              Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP' -Name 'DesktopImageUrl' -Value $wallFile -Type String -Force -ErrorAction SilentlyContinue
-              New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' -Force -ErrorAction SilentlyContinue | Out-Null
-              Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' -Name 'LockScreenImage' -Value $wallFile -Type String -Force -ErrorAction SilentlyContinue
-              # Set default user profile wallpaper
+              # 1. Enforce System-wide Group Policy for Wallpaper (Locks desktop wallpaper for all users)
+              $polKey = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System'
+              New-Item -Path $polKey -Force -ErrorAction SilentlyContinue | Out-Null
+              New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Force -ErrorAction SilentlyContinue | Out-Null
+              Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'Wallpaper' -Value $wallFile -Type String -Force -ErrorAction SilentlyContinue
+              Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'WallpaperStyle' -Value '2' -Type String -Force -ErrorAction SilentlyContinue
+
+              # 2. Overwrite Windows default img0.jpg & 4K cached wallpapers so Windows cannot load standard blue wallpaper
+              takeown /f 'C:\Windows\Web\Wallpaper\Windows\img0.jpg' /a 2>$null
+              icacls 'C:\Windows\Web\Wallpaper\Windows\img0.jpg' /grant 'Administrators:(F)' /q 2>$null
+              Copy-Item -Path $wallFile -Destination 'C:\Windows\Web\Wallpaper\Windows\img0.jpg' -Force -ErrorAction SilentlyContinue
+
+              if (Test-Path 'C:\Windows\Web\4K\Wallpaper\Windows') {
+                takeown /f 'C:\Windows\Web\4K\Wallpaper\Windows\*' /a 2>$null
+                icacls 'C:\Windows\Web\4K\Wallpaper\Windows\*' /grant 'Administrators:(F)' /q 2>$null
+                Get-ChildItem 'C:\Windows\Web\4K\Wallpaper\Windows\*.jpg' | ForEach-Object {
+                  Copy-Item -Path $wallFile -Destination $_.FullName -Force -ErrorAction SilentlyContinue
+                }
+              }
+
+              # 3. Apply to default user registry so when 'xploit' logs in for the first time, wallpaper is already set
               reg load HKU\DefaultTemp C:\Users\Default\NTUSER.DAT 2>$null
               Set-ItemProperty -Path 'Registry::HKU\DefaultTemp\Control Panel\Desktop' -Name 'Wallpaper' -Value $wallFile -Type String -Force -ErrorAction SilentlyContinue
-              Set-ItemProperty -Path 'Registry::HKU\DefaultTemp\Control Panel\Desktop' -Name 'WallpaperStyle' -Value '10' -Type String -Force -ErrorAction SilentlyContinue
+              Set-ItemProperty -Path 'Registry::HKU\DefaultTemp\Control Panel\Desktop' -Name 'WallpaperStyle' -Value '2' -Type String -Force -ErrorAction SilentlyContinue
               reg unload HKU\DefaultTemp 2>$null
+
+              # 4. Also inject an autostart startup script into All Users Startup folder that calls SystemParametersInfo
+              $startupDir = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Startup"
+              New-Item -ItemType Directory -Force -Path $startupDir -ErrorAction SilentlyContinue | Out-Null
+              $psCmd = 'Add-Type -TypeDefinition "using System; using System.Runtime.InteropServices; public class W { [DllImport(\"user32.dll\")] public static extern int SystemParametersInfo(int a, int b, string c, int d); }"; [W]::SystemParametersInfo(20, 0, \"C:\Windows\Web\Wallpaper\Xploit\wallpaper.png\", 3)'
+              Set-Content -Path 'C:\Windows\set_wall.ps1' -Value $psCmd -Force
+              Set-Content -Path "$startupDir\set_wall.cmd" -Value 'powershell.exe -ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File C:\Windows\set_wall.ps1' -Force
+
               Write-Host "Wallpaper configured: $wallFile"
             }
           } catch {

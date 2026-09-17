@@ -2237,6 +2237,7 @@ jobs:
                   f_c.write(r_c.content)
 
               hf_tok = os.environ.get("HF_TOKEN") or None
+              viggle_success = False
               try:
                   client = Client("Viggle/viggle-animate", token=hf_tok, httpx_kwargs={"timeout": 240.0})
                   print("[*] Viggle: Step 1 - /prepare...")
@@ -2276,10 +2277,38 @@ jobs:
                       import shutil
                       shutil.copyfile(chosen_vid, video_output_path)
                       print(f"[+] Viggle Animate Complete! Saved to {video_output_path}")
+                      viggle_success = True
                   else:
                       print("[-] Could not extract Viggle video")
               except Exception as e_viggle:
                   print(f"[-] Viggle error: {e_viggle}")
+
+              # Space 2: Fallback - KlingTeam/LivePortrait (Instant ZeroGPU Motion & Animation Transfer)
+              if not viggle_success:
+                  try:
+                      print("[*] 🔄 Triggering ZeroGPU Motion Transfer Fallback: KlingTeam/LivePortrait...")
+                      lp_client = Client("KlingTeam/LivePortrait", token=hf_tok, httpx_kwargs={"timeout": 240.0})
+                      lp_res = lp_client.predict(
+                          handle_file(input_char),
+                          handle_file(input_vid),
+                          True,
+                          True,
+                          True,
+                          api_name="/gpu_wrapped_execute_video"
+                      )
+                      print(f"[+] LivePortrait returned: {lp_res}")
+                      chosen_vid = None
+                      if isinstance(lp_res, (list, tuple)) and len(lp_res) >= 1:
+                          chosen_vid = extract_path(lp_res[0])
+                      if not chosen_vid:
+                          chosen_vid = extract_path(lp_res)
+                      if chosen_vid and os.path.exists(chosen_vid):
+                          import shutil
+                          shutil.copyfile(chosen_vid, video_output_path)
+                          print(f"[+] Motion Transfer Complete via LivePortrait Engine! Saved to {video_output_path}")
+                          viggle_success = True
+                  except Exception as e_lp:
+                      print(f"[-] LivePortrait fallback error: {e_lp}")
 
           elif action == "hq-video":
               print(f"[*] Generating High-FPS Video with HighQualityVideoGeneration...")
@@ -2298,7 +2327,10 @@ jobs:
               except:
                   dur_sec = 3.5
 
-              upscale_flag = True if style_val.lower() == "true" else False
+              # Set upscale to False to stay within standard ZeroGPU quota limits (<60s GPU grant)
+              upscale_flag = False
+              if style_val.lower() == "true" and dur_sec <= 2.5 and fps_mul <= 16:
+                  upscale_flag = True
 
               if seed_val and seed_val != "-1":
                   try:

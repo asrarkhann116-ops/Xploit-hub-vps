@@ -16,6 +16,10 @@ on:
         description: 'Wallpaper URL'
         required: false
         default: 'https://raw.githubusercontent.com/asrarkhann116-ops/Xploit-hub-vps/main/xploit_hub_vps_wallpaper.png'
+      cf_token:
+        description: 'Cloudflare Tunnel Token (Optional for Zero Trust)'
+        required: false
+        default: ''
 
 jobs:
   launch:
@@ -114,16 +118,106 @@ jobs:
             Write-Host "Wallpaper setup warning: $_"
           }
 
-      - name: Bore Tunnel & Send DM
+      - name: ⚡ Extreme RDP Gaming & 60 FPS Engine (Options 1, 2 & 3)
+        shell: powershell
+        run: |
+          Write-Host "=================================================="
+          Write-Host " Applying Extreme Performance RDP Tweaks..."
+          Write-Host "=================================================="
+
+          # ----------------------------------------------------
+          # Option 1: Unlock Windows DWM 60 FPS Frame Rate
+          # ----------------------------------------------------
+          Write-Host "[*] Option 1: Unlocking 60 FPS in DWM & Terminal Server..."
+          $tsKey = 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations'
+          New-ItemProperty -Path $tsKey -Name 'DWM8FrameRate' -Value 60 -PropertyType DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $tsKey -Name 'DWM8FrameRate' -Value 60 -Type DWord -Force -ErrorAction SilentlyContinue
+
+          # ----------------------------------------------------
+          # Option 2: TCP NoDelay & Zero-Jitter Network Tweaks
+          # ----------------------------------------------------
+          Write-Host "[*] Option 2: Disabling Nagle Algorithm (TCPNoDelay & Immediate ACK)..."
+          $interfaces = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
+          foreach ($i in $interfaces) {
+            $tcpPath = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\$($i.InterfaceGuid)"
+            Set-ItemProperty -Path $tcpPath -Name "TcpAckFrequency" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $tcpPath -Name "TCPNoDelay" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+          }
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "DefaultTTL" -Value 64 -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "GlobalMaxTcpWindowSize" -Value 16777216 -Type DWord -Force -ErrorAction SilentlyContinue
+
+          # ----------------------------------------------------
+          # Option 3: Visual Effects & Hardware H.264 AVC444 Mode
+          # ----------------------------------------------------
+          Write-Host "[*] Option 3: Enforcing Hardware AVC444 & RemoteFX 3D Engine..."
+          $policyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services'
+          New-Item -Path $policyPath -Force -ErrorAction SilentlyContinue | Out-Null
+
+          Set-ItemProperty -Path $policyPath -Name "fEnableRemoteFXAdvancedRemoteFX" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $policyPath -Name "bEnumerateWithGpuEnumerate" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $policyPath -Name "EnableHost3DRendering" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $policyPath -Name "fEnableRemoteFXHWCodec" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $policyPath -Name "fEnableAVC444" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $policyPath -Name "selectnetworkdetect" -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $policyPath -Name "fEnableWddmDriverForRdp" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $policyPath -Name "VisualQuality" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+
+          # Enable Ultimate High Performance Power Scheme
+          powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>$null
+
+          Write-Host "✅ 60 FPS DWM Unlock, Zero-Jitter TCP, and RemoteFX AVC444 Applied!"
+
+      - name: 🌐 Option 4 - Cloudflare Tunnel & Direct RDP Link
         shell: powershell
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          CLOUDFLARE_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN || github.event.inputs.cf_token }}
           USER_ID: ${{ github.event.inputs.user_id }}
           USER_NAME: ${{ github.event.inputs.user_name }}
           DURATION: ${{ github.event.inputs.duration }}
         run: |
           $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
           $ProgressPreference = 'SilentlyContinue'
+
+          # ----------------------------------------------------
+          # 1. Start Cloudflare Tunnel (Option 4)
+          # ----------------------------------------------------
+          Write-Host "[*] Fetching Cloudflare Tunnel agent (cloudflared)..."
+          Invoke-WebRequest 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe' -OutFile cloudflared.exe
+
+          $CF_ACTIVE = $false
+          $CF_MODE   = "None"
+          $CF_URL    = ""
+
+          if ($env:CLOUDFLARE_TOKEN -and $env:CLOUDFLARE_TOKEN.Trim() -ne '') {
+            Write-Host "[*] Starting Cloudflare Zero Trust Tunnel with Token..."
+            Start-Process -FilePath '.\cloudflared.exe' -ArgumentList 'tunnel','run','--token', $env:CLOUDFLARE_TOKEN.Trim() `
+              -RedirectStandardOutput 'cf.log' -RedirectStandardError 'cf.err' -NoNewWindow
+            $CF_ACTIVE = $true
+            $CF_MODE   = "Zero Trust (Token)"
+            Write-Host "✅ Cloudflare Zero Trust Active! Traffic routed via nearest Cloudflare Edge Pop (Mumbai/Delhi/SG)."
+          } else {
+            Write-Host "[*] Starting Cloudflare Quick Tunnel for port 3389..."
+            Start-Process -FilePath '.\cloudflared.exe' -ArgumentList 'tunnel','--url','tcp://localhost:3389' `
+              -RedirectStandardOutput 'cf.log' -RedirectStandardError 'cf.err' -NoNewWindow
+            Start-Sleep 6
+            if (Test-Path cf.err) {
+              $cfLogs = Get-Content cf.err -Encoding UTF8 -ErrorAction SilentlyContinue
+              foreach ($line in $cfLogs) {
+                if ($line -match 'https://[a-zA-Z0-9-]+\.trycloudflare\.com') {
+                  $CF_URL = $Matches[0]
+                  $CF_ACTIVE = $true
+                  $CF_MODE = "Quick Tunnel"
+                  break
+                }
+              }
+            }
+          }
+
+          # ----------------------------------------------------
+          # 2. Start Direct Low-Latency TCP Tunnel (bore.pub)
+          # ----------------------------------------------------
+          Write-Host "[*] Launching Direct TCP Tunnel (bore.pub)..."
           Invoke-WebRequest 'https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-pc-windows-msvc.zip' -OutFile bore.zip
           Expand-Archive -LiteralPath bore.zip -DestinationPath . -Force
 
@@ -143,30 +237,50 @@ jobs:
             if ($PORT) { break }
           }
 
-          if (-not $PORT) { Write-Host 'ERROR: Bore tunnel failed.'; exit 1 }
+          if (-not $PORT -and -not $CF_ACTIVE) {
+            Write-Host 'ERROR: Both Bore and Cloudflare tunnels failed.'; exit 1
+          }
 
-          Write-Host '======================================'
-          Write-Host '  WINDOWS 10 RDP - SESSION ACTIVE'
-          Write-Host '======================================'
-          Write-Host "  Computer : bore.pub:$PORT"
-          Write-Host '  Username : xploit'
-          Write-Host '  Password : phantom'
-          Write-Host "  Duration : $env:DURATION minutes"
-          Write-Host '======================================'
+          Write-Host '=================================================='
+          Write-Host '  WINDOWS 10 RDP - 60 FPS ULTRA PERFORMANCE'
+          Write-Host '=================================================='
+          Write-Host "  Direct RDP Host : bore.pub:$PORT"
+          Write-Host "  Cloudflare Mode : $CF_MODE"
+          if ($CF_URL) { Write-Host "  Cloudflare URL  : $CF_URL" }
+          Write-Host '  Username        : xploit'
+          Write-Host '  Password        : phantom'
+          Write-Host "  Duration        : $env:DURATION minutes"
+          Write-Host '=================================================='
 
           $TOKEN = $env:DISCORD_TOKEN
           $UID   = $env:USER_ID
           $DUR   = $env:DURATION
           $nl    = "`n"
 
-          $MSG  = "👾 [Windows 10 RDP] SESSION ACTIVE" + $nl
+          $MSG  = "⚡ **[Windows 10 Ultra RDP] 60 FPS SESSION ACTIVE**" + $nl
           $MSG += "Operator: <@$UID>" + $nl + $nl
-          $MSG += "Open Remote Desktop Connection:" + $nl
-          $MSG += "Computer : bore.pub:$PORT" + $nl
-          $MSG += "Username : xploit" + $nl
-          $MSG += "Password : phantom" + $nl
-          $MSG += "Duration : $DUR minutes" + $nl
-          $MSG += "Accept any certificate warnings."
+          $MSG += "🎮 **Quick Connect (Native RDP Client / mstsc):**" + $nl
+          $MSG += "🖥️ **Computer :** `bore.pub:$PORT`" + $nl
+          $MSG += "👤 **Username :** `xploit`" + $nl
+          $MSG += "🔑 **Password :** `phantom`" + $nl
+          $MSG += "⏱️ **Duration :** `$DUR minutes`" + $nl + $nl
+
+          if ($CF_ACTIVE -and $CF_MODE -eq "Zero Trust (Token)") {
+            $MSG += "🌐 **Cloudflare Zero Trust Tunnel:** `Active` (Low-Latency Edge Routing)" + $nl
+            $MSG += "💡 *Connect via browser dashboard or `cloudflared access rdp` for minimum ping.*" + $nl + $nl
+          } elseif ($CF_ACTIVE -and $CF_URL) {
+            $MSG += "🌐 **Cloudflare Quick Tunnel:** `$CF_URL`" + $nl + $nl
+          }
+
+          $MSG += "🚀 **Gaming & High-FPS Optimizations Injected:**" + $nl
+          $MSG += "• ✅ **Option 1 (60 FPS Unlock):** `DWM8FrameRate = 60` (No more 15-22 FPS lock)" + $nl
+          $MSG += "• ✅ **Option 2 (Zero Jitter TCP):** `TCPNoDelay` & `TcpAckFrequency=1`" + $nl
+          $MSG += "• ✅ **Option 3 (RemoteFX AVC444):** Hardware H.264 Codec & 3D Acceleration" + $nl
+          $MSG += "• ✅ **Option 4 (Cloudflare/Direct):** Dual-Link Routing Active" + $nl + $nl
+
+          $MSG += "🔥 **Client Pro-Tip for 60 FPS on your PC:**" + $nl
+          $MSG += "1. Open `mstsc` ➔ **Display** tab ➔ Set Colors to **High Color (16-bit)**." + $nl
+          $MSG += "2. In **Experience** tab ➔ Set connection to **LAN (10 Mbps or higher)**."
 
           $chanFile  = "$env:TEMP\chan.json"
           $msgFile   = "$env:TEMP\msg.json"

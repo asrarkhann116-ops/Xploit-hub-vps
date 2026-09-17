@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music / yue-music / step-music / breeze-tts / triposplat / openvoice / auk / wan-animate / viggle / hq-video / dream-video)'
+        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music / yue-music / step-music / breeze-tts / triposplat / openvoice / wan-animate / viggle / hq-video / dream-video)'
         required: true
         default: 'zimage'
       prompt:
@@ -2092,99 +2092,29 @@ jobs:
               else:
                   raise ValueError("OpenVoice requires a reference audio file to clone!")
 
-              try:
-                  client = Client("myshell-ai/OpenVoiceV2", httpx_kwargs={"timeout": 120.0})
-                  valid_styles = ['en_default', 'en_us', 'en_br', 'en_au', 'en_in', 'es_default', 'fr_default', 'jp_default', 'zh_default', 'kr_default']
-                  selected_style = style_preset if style_preset in valid_styles else "en_default"
-                  print(f"[*] Submitting to OpenVoiceV2 (text='{text_prompt[:50]}...', style={selected_style})...")
-                  res = client.predict(
-                      text_prompt,
-                      selected_style,
-                      handle_file(ref_local_path),
-                      True,
-                      fn_index=1
-                  )
-                  print(f"[+] OpenVoice returned: {res}")
-                  chosen_audio = None
-                  if isinstance(res, (list, tuple)) and len(res) >= 2:
-                      chosen_audio = extract_path(res[1]) or extract_path(res[0])
-                  if not chosen_audio:
-                      chosen_audio = extract_path(res)
-
-                  if chosen_audio and os.path.exists(chosen_audio):
-                      import shutil
-                      shutil.copyfile(chosen_audio, audio_output_path)
-                      print(f"[+] OpenVoice V2 Complete! Saved to {audio_output_path}")
-                  else:
-                      print("[-] Could not extract audio file from OpenVoice output")
-              except Exception as e_ov:
-                  print(f"[-] OpenVoice error: {e_ov}")
-
-          elif action == "auk":
-              print(f"[*] Running Tencent AuK Audio Understanding & Inpainting...")
-              import requests
-              from gradio_client import Client, handle_file
-
-              instruction = prompt.strip() if prompt else "Enhance audio quality"
-              audio_url = image_url.strip() if image_url else ""
-              variant = steps_val if steps_val in ("AuK (Base)", "AuK-Flash ⚡") else "AuK (Base)"
-
-              try:
-                  gen_sec = float(duration_val) if duration_val else 0.0
-              except:
-                  gen_sec = 0.0
-
-              try:
-                  cfg_val = float(style_val) if style_val else 2.0
-              except:
-                  cfg_val = 2.0
-
-              if seed_val and seed_val != "-1":
-                  try:
-                      rand_seed = int(seed_val)
-                  except:
-                      rand_seed = 42
-              else:
-                  rand_seed = 42
-              final_seed = rand_seed
-
-              audio_output_path = "/tmp/ai_lab/output.wav"
-              output_path = audio_output_path
-
-              input_audio_path = "/tmp/ai_lab/input_auk.wav"
-              if audio_url:
-                  r_aud = requests.get(audio_url, timeout=30)
-                  with open(input_audio_path, "wb") as f_aud:
-                      f_aud.write(r_aud.content)
-                  print(f"[+] Downloaded input audio ({os.path.getsize(input_audio_path)} bytes)")
-              else:
-                  raise ValueError("AuK requires an input audio file!")
-
               hf_tok = os.environ.get("HF_TOKEN") or None
+              ov_success = False
+
+              # Engine 1: Instant Neural Voice Clone (tonyassi/voice-clone - SSE Gradio protocol)
               try:
-                  client = Client("tencent/AuK", token=hf_tok, httpx_kwargs={"timeout": 180.0})
-                  print(f"[*] Submitting to AuK (variant={variant}, cfg={cfg_val}, gen_sec={gen_sec})...")
+                  print(f"[*] Submitting to Instant Voice Clone Engine: tonyassi/voice-clone...")
+                  client = Client("tonyassi/voice-clone", token=hf_tok, httpx_kwargs={"timeout": 180.0})
                   res = client.predict(
-                      use_pe=False,
-                      variant=variant,
-                      audio=handle_file(input_audio_path),
-                      instruction=instruction,
-                      gen_seconds=gen_sec,
-                      nfe=32,
-                      cfg=cfg_val,
-                      seed=rand_seed,
-                      api_name="/run_generate_with_pe"
+                      text=text_prompt,
+                      audio=handle_file(ref_local_path),
+                      api_name="/clone"
                   )
-                  print(f"[+] AuK returned: {res}")
+                  print(f"[+] Voice Clone returned: {res}")
                   chosen_audio = extract_path(res)
                   if chosen_audio and os.path.exists(chosen_audio):
                       import shutil
                       shutil.copyfile(chosen_audio, audio_output_path)
-                      print(f"[+] Tencent AuK Audio Complete! Saved to {audio_output_path}")
+                      print(f"[+] Voice Clone Complete! Saved to {audio_output_path}")
+                      ov_success = True
                   else:
-                      print("[-] Could not extract audio from AuK")
-              except Exception as e_auk:
-                  print(f"[-] AuK error: {e_auk}")
+                      print("[-] Could not extract audio from voice-clone output")
+              except Exception as e_vc:
+                  print(f"[-] Voice Clone error: {e_vc}")
 
           elif action == "wan-animate":
               print(f"[*] Running Wan 2.2 Character Animation & Motion Pipeline...")
@@ -2526,9 +2456,6 @@ jobs:
                   ext = os.path.splitext(output_path)[1].lower()
                   filename = f"xploit_openvoice{ext if ext else '.mp3'}"
                   mimetype = "audio/mpeg" if ext == ".mp3" else "audio/wav"
-              elif action == "auk":
-                  filename = "xploit_auk.wav"
-                  mimetype = "audio/wav"
               elif action in ("kokoro-tts", "qwen-voice", "minimax-music", "yue-music", "yue", "step-music", "breeze-tts", "breeze"):
                   ext = os.path.splitext(output_path)[1].lower()
                   if ext == ".flac":
@@ -2641,8 +2568,6 @@ jobs:
                           content = f"🧊 **XPLOIT NEXT-GEN AI LAB — TRIPOSPLAT 3D GAUSSIAN ENGINE**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `TripoSplat (VAST-AI) 3D Generator`\n📦 **Format:** `{req_format.upper()}` | 🌐 **Gaussians:** `{num_gaussians:,}`\n⚡ **Steps:** `{steps}` | 🎯 **Guidance Scale:** `{guidance_scale}`{seed_line}\n💡 *Tip: Open `.ply` or `.splat` files in 3D viewers like SuperSplat (playcanvas.com/supersplat) or GSplat!*"
                       elif action == "openvoice":
                           content = f"🎙️ **XPLOIT NEXT-GEN AI LAB — OPENVOICE V2 CLONING**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `MyShell OpenVoice V2 Instant Voice Clone`\n🗣️ **Text:** `{prompt}`\n🌍 **Style / Accent:** `{steps_val.upper()}`{seed_line}"
-                      elif action == "auk":
-                          content = f"🎧 **XPLOIT NEXT-GEN AI LAB — TENCENT AUK AUDIO STUDIO**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `Tencent AuK Neural Audio Inpainting`\n🎨 **Instruction:** `{prompt}`\n⚙️ **Variant:** `{steps_val}` | 🎛️ **CFG Scale:** `{style_val}`{seed_line}"
                       elif action == "wan-animate":
                           content = f"🎬 **XPLOIT NEXT-GEN AI LAB — WAN 2.2 ANIMATE**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `Wan 2.2 Character Animation & Motion Pipeline`\n🎭 **Mode:** `{steps_val}` | ⏱️ **Duration:** `{duration_val}s` | 📺 **Resolution:** `{style_val}`"
                       elif action == "viggle":

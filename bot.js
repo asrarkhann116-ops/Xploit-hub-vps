@@ -47,7 +47,6 @@ const AI_COMMAND_CHANNELS = {
     "step-music": "1549870041057595413",
     "triposplat": "1549946164709687316",
     "openvoice": "1549948115900178513",
-    "auk": "1549947328146837514",
     "wan-animate": "1549949884017152030",
     "viggle": "1549950029999902820",
     "hq-video": "1549950167908753478",
@@ -74,7 +73,6 @@ const AI_LAB_COMMANDS = new Set([
     "step-music",
     "triposplat",
     "openvoice",
-    "auk",
     "wan-animate",
     "viggle",
     "hq-video",
@@ -981,53 +979,6 @@ const commands = [
                     { name: "🇨🇳 Chinese", value: "zh_default" },
                     { name: "🇰🇷 Korean", value: "kr_default" },
                 ),
-        ),
-    new SlashCommandBuilder()
-        .setName("auk")
-        .setDescription("🎧 Tencent AuK — AI Audio Understanding, Music/SFX Editing & Inpainting")
-        .addAttachmentOption((o) =>
-            o
-                .setName("audio")
-                .setDescription("Source audio file (.mp3/.wav) to edit or transform")
-                .setRequired(true),
-        )
-        .addStringOption((o) =>
-            o
-                .setName("instruction")
-                .setDescription("Editing prompt (e.g. 'add cinematic thunder rain', 'make it sound like 1980s radio')")
-                .setRequired(true),
-        )
-        .addStringOption((o) =>
-            o
-                .setName("variant")
-                .setDescription("Model variant (default: AuK Base)")
-                .setRequired(false)
-                .addChoices(
-                    { name: "🎯 AuK (Base — High Quality)", value: "AuK (Base)" },
-                    { name: "⚡ AuK-Flash (Ultra Fast)", value: "AuK-Flash ⚡" },
-                ),
-        )
-        .addNumberOption((o) =>
-            o
-                .setName("duration")
-                .setDescription("Generation duration seconds (default: 0 = auto match input)")
-                .setRequired(false)
-                .setMinValue(0)
-                .setMaxValue(30),
-        )
-        .addNumberOption((o) =>
-            o
-                .setName("cfg")
-                .setDescription("Guidance strength CFG (default: 2.0)")
-                .setRequired(false)
-                .setMinValue(1.0)
-                .setMaxValue(10.0),
-        )
-        .addIntegerOption((o) =>
-            o
-                .setName("seed")
-                .setDescription("Seed number (default: 42)")
-                .setRequired(false),
         ),
     new SlashCommandBuilder()
         .setName("wan-animate")
@@ -2442,66 +2393,6 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
             console.error("OpenVoice error:", err);
-            return interaction.editReply({
-                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
-            });
-        }
-    }
-
-    // /auk
-    if (commandName === "auk") {
-        const audio = interaction.options.getAttachment("audio");
-        const instruction = interaction.options.getString("instruction");
-        const variant = interaction.options.getString("variant") || "AuK (Base)";
-        const duration = interaction.options.getNumber("duration") ?? 0;
-        const cfg = interaction.options.getNumber("cfg") ?? 2.0;
-        const seed = interaction.options.getInteger("seed");
-
-        if (!audio || !audio.url) {
-            return interaction.reply({ content: "❌ Please attach an audio file (.mp3/.wav) to edit/inpaint.", ephemeral: true });
-        }
-
-        await interaction.deferReply({ ephemeral: false });
-
-        try {
-            await octokit.actions.createWorkflowDispatch({
-                owner: REPO_OWNER,
-                repo: REPO_NAME,
-                workflow_id: "ai-lab.yml",
-                ref: "main",
-                inputs: {
-                    action_type: "auk",
-                    prompt: instruction,
-                    image_url: audio.url,
-                    steps: variant,
-                    duration: String(duration),
-                    style: String(cfg),
-                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
-                    user_id: interaction.user.id,
-                    channel_id: interaction.channelId,
-                },
-            });
-
-            const embed = new EmbedBuilder()
-                .setTitle("🎧 Xploit AI Lab — Tencent AuK Audio Studio")
-                .setColor("#FF8C00")
-                .setDescription("Processing audio inpainting & editing via **Tencent AuK Neural Engine**!")
-                .addFields(
-                    { name: "🎨 Instruction", value: `\`${instruction.length > 150 ? instruction.slice(0, 147) + "..." : instruction}\``, inline: false },
-                    { name: "🎵 Source Audio", value: `[Listen to Source](${audio.url})`, inline: true },
-                    { name: "🧬 Model Variant", value: `\`${variant}\``, inline: true },
-                    { name: "🎛️ CFG Scale", value: `\`${cfg}\``, inline: true },
-                    { name: "⏱️ Duration", value: duration > 0 ? `\`${duration}s\`` : "`Auto Match`", inline: true },
-                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`42 (Default)`", inline: true },
-                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
-                    { name: "⏳ Est. Render", value: "`~20 - 40 Seconds`", inline: true },
-                )
-                .setFooter({ text: "⚡ Tencent AuK Audio Inpainting • Dropping in this channel." })
-                .setTimestamp();
-
-            return interaction.editReply({ embeds: [embed] });
-        } catch (err) {
-            console.error("AuK error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

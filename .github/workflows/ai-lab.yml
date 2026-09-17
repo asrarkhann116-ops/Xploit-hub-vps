@@ -2094,12 +2094,14 @@ jobs:
 
               try:
                   client = Client("myshell-ai/OpenVoiceV2", httpx_kwargs={"timeout": 120.0})
-                  print(f"[*] Submitting to OpenVoiceV2 (text='{text_prompt[:50]}...', style={style_preset})...")
+                  valid_styles = ['en_default', 'en_us', 'en_br', 'en_au', 'en_in', 'es_default', 'fr_default', 'jp_default', 'zh_default', 'kr_default']
+                  selected_style = style_preset if style_preset in valid_styles else "en_default"
+                  print(f"[*] Submitting to OpenVoiceV2 (text='{text_prompt[:50]}...', style={selected_style})...")
                   res = client.predict(
-                      text_prompt=text_prompt,
-                      style=style_preset,
-                      reference_audio=handle_file(ref_local_path),
-                      agree=True,
+                      text_prompt,
+                      selected_style,
+                      handle_file(ref_local_path),
+                      True,
                       fn_index=1
                   )
                   print(f"[+] OpenVoice returned: {res}")
@@ -2163,7 +2165,7 @@ jobs:
                   client = Client("tencent/AuK", token=hf_tok, httpx_kwargs={"timeout": 180.0})
                   print(f"[*] Submitting to AuK (variant={variant}, cfg={cfg_val}, gen_sec={gen_sec})...")
                   res = client.predict(
-                      use_pe=True,
+                      use_pe=False,
                       variant=variant,
                       audio=handle_file(input_audio_path),
                       instruction=instruction,
@@ -2223,10 +2225,10 @@ jobs:
                   client = Client("alexnasa/Wan2.2-Animate-ZEROGPU", token=hf_tok, httpx_kwargs={"timeout": 300.0})
                   res = client.predict(
                       input_video=handle_file(input_vid),
-                      max_duration_s=dur_val,
+                      max_duration_s=min(max(float(dur_val), 2.0), 5.0),
                       edited_frame=handle_file(input_img),
-                      rc_str=mode_val,
-                      resolution_choice=res_choice,
+                      rc_str=mode_val if mode_val in ("Character Swap", "Background Swap") else "Character Swap",
+                      resolution_choice="Low Res",
                       api_name="/animate_scene"
                   )
                   print(f"[+] alexnasa/Wan2.2-Animate returned: {res}")
@@ -2253,12 +2255,12 @@ jobs:
                           image=handle_file(input_img),
                           driving_video=handle_file(input_vid),
                           prompt="animate this character naturally with smooth cinematic motion",
-                          max_seconds=dur_val,
-                          height=720,
-                          width=1280,
-                          num_inference_steps=20,
-                          guidance_scale=3.5,
-                          sample_shift=3.0,
+                          max_seconds=min(max(float(dur_val), 1.0), 3.0),
+                          height=480,
+                          width=384,
+                          num_inference_steps=12,
+                          guidance_scale=1.5,
+                          sample_shift=5.0,
                           negative_prompt="blurry, distorted, low quality, glitch",
                           seed=42,
                           api_name="/animate"
@@ -2308,12 +2310,21 @@ jobs:
               try:
                   client = Client("Viggle/viggle-animate", token=hf_tok, httpx_kwargs={"timeout": 240.0})
                   print("[*] Viggle: Step 1 - /prepare...")
-                  prep = client.predict(
-                      video=handle_file(input_vid),
-                      character=handle_file(input_char),
-                      painted="",
-                      api_name="/prepare"
-                  )
+                  try:
+                      prep = client.predict(
+                          video={"video": handle_file(input_vid)},
+                          character=handle_file(input_char),
+                          painted=None,
+                          api_name="/prepare"
+                      )
+                  except Exception as e_prep_init:
+                      print(f"[*] Viggle prepare fallback mode: {e_prep_init}")
+                      prep = client.predict(
+                          video={"video": handle_file(input_vid), "subtitles": None},
+                          character=handle_file(input_char),
+                          painted=handle_file(input_char),
+                          api_name="/prepare"
+                      )
                   print(f"[+] Viggle prepare returned: {prep}")
 
                   print(f"[*] Viggle: Step 2 - /render (seed={rand_seed})...")
@@ -2347,7 +2358,10 @@ jobs:
 
               prompt_text = prompt.strip() if prompt else "make this image come alive, cinematic motion, smooth animation"
               img_url = image_url.strip() if image_url else ""
-              fps_mul = steps_val if steps_val in ("16", "32", "64", "128") else "16"
+              try:
+                  fps_mul = int(steps_val) if steps_val and int(steps_val) in (16, 32, 64, 128) else 16
+              except:
+                  fps_mul = 16
 
               try:
                   dur_sec = float(duration_val) if duration_val else 3.5
@@ -2463,7 +2477,7 @@ jobs:
                       enhance_prompt=True,
                       aspect_ratio=aspect_ratio,
                       duration_seconds=dur_sec,
-                      output_fps="16",
+                      output_fps=16,
                       quality_profile="Balanced",
                       steps=6,
                       negative_prompt="worst quality, low quality, glitch, blurry, static frame, deformed",

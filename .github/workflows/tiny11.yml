@@ -146,6 +146,55 @@ jobs:
             Write-Host "Wallpaper setup warning: $_"
           }
 
+      - name: ⚡ Ultra-Gaming 60 FPS & Low-Latency Engine
+        shell: powershell
+        run: |
+          Write-Host "🚀 Applying 60 FPS RDP, Low Latency TCP & DWM Performance Tweaks..."
+
+          # 1. Unlock 60 FPS in DWM and Terminal Services (Default is 30 FPS cap)
+          New-Item -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations' -Force -ErrorAction SilentlyContinue | Out-Null
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations' -Name 'DWM8FrameRate' -Value 60 -Type DWord -Force
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'DWM8FrameRate' -Value 60 -Type DWord -Force
+
+          # 2. RemoteFX, H.264 / AVC444 Hardware Codec & High-Speed LAN Profile
+          $tsPol = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services'
+          New-Item -Path $tsPol -Force -ErrorAction SilentlyContinue | Out-Null
+          Set-ItemProperty -Path $tsPol -Name 'fEnableRemoteFXAdvancedRemoteFX' -Value 1 -Type DWord -Force
+          Set-ItemProperty -Path $tsPol -Name 'selectnetworkdetect' -Value 2 -Type DWord -Force
+          Set-ItemProperty -Path $tsPol -Name 'fEnableHardwareAcceleration' -Value 1 -Type DWord -Force
+          Set-ItemProperty -Path $tsPol -Name 'fEnableH264AMD' -Value 1 -Type DWord -Force
+          Set-ItemProperty -Path $tsPol -Name 'bEnforceAVC444' -Value 1 -Type DWord -Force
+          Set-ItemProperty -Path $tsPol -Name 'VisualQuality' -Value 1 -Type DWord -Force
+          Set-ItemProperty -Path $tsPol -Name 'MaxMonitors' -Value 1 -Type DWord -Force
+          Set-ItemProperty -Path $tsPol -Name 'MaxXResolution' -Value 1920 -Type DWord -Force
+          Set-ItemProperty -Path $tsPol -Name 'MaxYResolution' -Value 1080 -Type DWord -Force
+
+          # 3. Disable Nagle's Algorithm (TcpAckFrequency & TCPNoDelay) for Instant Key/Mouse Response
+          $tcpParams = 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces'
+          Get-ChildItem $tcpParams -ErrorAction SilentlyContinue | ForEach-Object {
+            Set-ItemProperty -Path $_.PSPath -Name 'TcpAckFrequency' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $_.PSPath -Name 'TCPNoDelay' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $_.PSPath -Name 'TcpDelAckTicks' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+          }
+
+          # 4. Windows Multimedia & Gaming Performance Engine
+          $sysProfile = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile'
+          Set-ItemProperty -Path $sysProfile -Name 'NetworkThrottlingIndex' -Value 0xFFFFFFFF -Type DWord -Force
+          Set-ItemProperty -Path $sysProfile -Name 'SystemResponsiveness' -Value 0 -Type DWord -Force
+          New-Item -Path "$sysProfile\Tasks\Games" -Force -ErrorAction SilentlyContinue | Out-Null
+          Set-ItemProperty -Path "$sysProfile\Tasks\Games" -Name 'GPU Priority' -Value 8 -Type DWord -Force
+          Set-ItemProperty -Path "$sysProfile\Tasks\Games" -Name 'Priority' -Value 6 -Type DWord -Force
+          Set-ItemProperty -Path "$sysProfile\Tasks\Games" -Name 'Scheduling Category' -Value 'High' -Type String -Force
+          Set-ItemProperty -Path "$sysProfile\Tasks\Games" -Name 'SFIO Priority' -Value 'High' -Type String -Force
+
+          # 5. Foreground CPU Priority Boost (Win32PrioritySeparation = 38)
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl' -Name 'Win32PrioritySeparation' -Value 38 -Type DWord -Force
+
+          # 6. Optimize Visual Effects for Speed & Smoothness
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -Name 'VisualFXSetting' -Value 2 -Type DWord -Force
+
+          Write-Host "✅ 60 FPS RDP Engine, RemoteFX AVC444 & Zero-Delay TCP Active!"
+
       - name: Bore Tunnel & Send DM
         shell: powershell
         env:
@@ -189,8 +238,10 @@ jobs:
           $MSG += "Username : xploit" + $nl
           $MSG += "Password : phantom" + $nl
           $MSG += "Duration : $DUR minutes" + $nl
-          $MSG += "Accept any certificate warnings." + $nl + $nl
-          $MSG += "Debloated -- Xbox, Teams, OneDrive, telemetry all removed for faster performance."
+          $MSG += "⚡ 60 FPS Ultra-Gaming Engine: ACTIVE" + $nl
+          $MSG += "💡 Tip: In Remote Desktop Connection (mstsc), set Experience -> 'LAN (10 Mbps+)' & Display -> 'High Color (16-bit)' for butter-smooth gameplay!" + $nl + $nl
+          $MSG += "Debloated -- Xbox, Teams, OneDrive, telemetry all removed for faster performance." + $nl
+          $MSG += "Accept any certificate warnings."
 
           $chanFile  = "$env:TEMP\chan.json"
           $msgFile   = "$env:TEMP\msg.json"

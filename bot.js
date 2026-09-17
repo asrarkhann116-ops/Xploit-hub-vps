@@ -46,6 +46,12 @@ const AI_COMMAND_CHANNELS = {
     "breeze-tts": "1549263004229697556",
     "step-music": "1549870041057595413",
     "triposplat": "1549946164709687316",
+    "openvoice": "1549948115900178513",
+    "auk": "1549947328146837514",
+    "wan-animate": "1549949884017152030",
+    "viggle": "1549950029999902820",
+    "hq-video": "1549950167908753478",
+    "dream-video": "1549951104253435924",
 };
 
 const AI_LAB_COMMANDS = new Set([
@@ -67,6 +73,12 @@ const AI_LAB_COMMANDS = new Set([
     "breeze-tts",
     "step-music",
     "triposplat",
+    "openvoice",
+    "auk",
+    "wan-animate",
+    "viggle",
+    "hq-video",
+    "dream-video",
 ]);
 
 const client = new Client({
@@ -936,6 +948,269 @@ const commands = [
             o
                 .setName("seed")
                 .setDescription("Seed number for reproducible 3D generation (default: 42)")
+                .setRequired(false),
+        ),
+    new SlashCommandBuilder()
+        .setName("openvoice")
+        .setDescription("🎙️ OpenVoice V2 — Instant AI Voice Cloning & Cross-Lingual Speech Synthesis")
+        .addStringOption((o) =>
+            o
+                .setName("text")
+                .setDescription("Text to synthesize in cloned voice")
+                .setRequired(true),
+        )
+        .addAttachmentOption((o) =>
+            o
+                .setName("ref_audio")
+                .setDescription("Reference voice audio file (.mp3/.wav) to clone")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("style")
+                .setDescription("Voice accent & language style (default: English US)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "🇺🇸 English (US)", value: "en_us" },
+                    { name: "🇮🇳 English (Indian)", value: "en_in" },
+                    { name: "🇬🇧 English (Default)", value: "en_default" },
+                    { name: "🇦🇺 English (Australian)", value: "en_au" },
+                    { name: "🇪🇸 Spanish", value: "es_default" },
+                    { name: "🇫🇷 French", value: "fr_default" },
+                    { name: "🇯🇵 Japanese", value: "jp_default" },
+                    { name: "🇨🇳 Chinese", value: "zh_default" },
+                    { name: "🇰🇷 Korean", value: "kr_default" },
+                ),
+        ),
+    new SlashCommandBuilder()
+        .setName("auk")
+        .setDescription("🎧 Tencent AuK — AI Audio Understanding, Music/SFX Editing & Inpainting")
+        .addAttachmentOption((o) =>
+            o
+                .setName("audio")
+                .setDescription("Source audio file (.mp3/.wav) to edit or transform")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("instruction")
+                .setDescription("Editing prompt (e.g. 'add cinematic thunder rain', 'make it sound like 1980s radio')")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("variant")
+                .setDescription("Model variant (default: AuK Base)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "🎯 AuK (Base — High Quality)", value: "AuK (Base)" },
+                    { name: "⚡ AuK-Flash (Ultra Fast)", value: "AuK-Flash ⚡" },
+                ),
+        )
+        .addNumberOption((o) =>
+            o
+                .setName("duration")
+                .setDescription("Generation duration seconds (default: 0 = auto match input)")
+                .setRequired(false)
+                .setMinValue(0)
+                .setMaxValue(30),
+        )
+        .addNumberOption((o) =>
+            o
+                .setName("cfg")
+                .setDescription("Guidance strength CFG (default: 2.0)")
+                .setRequired(false)
+                .setMinValue(1.0)
+                .setMaxValue(10.0),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Seed number (default: 42)")
+                .setRequired(false),
+        ),
+    new SlashCommandBuilder()
+        .setName("wan-animate")
+        .setDescription("🎬 Wan 2.2 Animate — Character Swap & Motion Retargeting Video Pipeline")
+        .addAttachmentOption((o) =>
+            o
+                .setName("video")
+                .setDescription("Driving video providing motion/dance/action (.mp4)")
+                .setRequired(true),
+        )
+        .addAttachmentOption((o) =>
+            o
+                .setName("image")
+                .setDescription("Target character / edited image frame to animate")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("mode")
+                .setDescription("Animation mode (default: Character Swap)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "🎭 Character Swap (Replace subject with target character)", value: "Character Swap" },
+                    { name: "🕺 Motion Retarget (Full pose & motion transfer)", value: "Motion Retarget" },
+                ),
+        )
+        .addNumberOption((o) =>
+            o
+                .setName("duration")
+                .setDescription("Video duration in seconds (default: 2.0s, range: 1-5s)")
+                .setRequired(false)
+                .setMinValue(1.0)
+                .setMaxValue(5.0),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("resolution")
+                .setDescription("Output resolution (default: Low Res - Fast)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "⚡ Low Res (Fast Generation)", value: "Low Res" },
+                    { name: "💎 High Res (Detailed)", value: "High Res" },
+                ),
+        ),
+    new SlashCommandBuilder()
+        .setName("viggle")
+        .setDescription("🕺 Viggle Animate — Character Animation & Motion Dance Synthesis")
+        .addAttachmentOption((o) =>
+            o
+                .setName("video")
+                .setDescription("Motion reference video (.mp4)")
+                .setRequired(true),
+        )
+        .addAttachmentOption((o) =>
+            o
+                .setName("character")
+                .setDescription("Character image to animate (.png/.jpg)")
+                .setRequired(true),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Seed number (default: 42)")
+                .setRequired(false),
+        ),
+    new SlashCommandBuilder()
+        .setName("hq-video")
+        .setDescription("🎥 HighQualityVideo — 4K Multi-Frame High-FPS Video Generation Engine")
+        .addAttachmentOption((o) =>
+            o
+                .setName("image")
+                .setDescription("Source image to animate into high-quality video")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("prompt")
+                .setDescription("Motion prompt (e.g. 'cinematic slow-motion pan, glowing neon particles')")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("duration")
+                .setDescription("Duration seconds (default: 3.5s)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "3.5s (Standard)", value: "3.5" },
+                    { name: "5.0s (Extended)", value: "5.0" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("fps")
+                .setDescription("Frame rate multiplier / smoothness (default: 16 fps)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "🎬 16 FPS (Cinematic Standard)", value: "16" },
+                    { name: "⚡ 32 FPS (Smooth)", value: "32" },
+                    { name: "🚀 64 FPS (Ultra Fluid)", value: "64" },
+                    { name: "🔥 128 FPS (Hyper Real)", value: "128" },
+                ),
+        )
+        .addBooleanOption((o) =>
+            o
+                .setName("upscale")
+                .setDescription("Upscale output to 4K Ultra-HD? (default: true)")
+                .setRequired(false),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Seed number (default: random)")
+                .setRequired(false),
+        ),
+    new SlashCommandBuilder()
+        .setName("dream-video")
+        .setDescription("🎬 Dream Wan 2.2 — High-Speed 14B AOTI Video Engine with Camera Control")
+        .addAttachmentOption((o) =>
+            o
+                .setName("image")
+                .setDescription("Initial frame image to animate")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("prompt")
+                .setDescription("Motion description (e.g. 'camera zoom in, hair blowing gently in wind')")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("camera_motion")
+                .setDescription("Camera path (default: Slow Push In)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "🔍 Slow Push In", value: "Slow Push In" },
+                    { name: "🔄 Slow Pull Back", value: "Slow Pull Back" },
+                    { name: "⬅️ Pan Left", value: "Pan Left" },
+                    { name: "➡️ Pan Right", value: "Pan Right" },
+                    { name: "🌐 Orbit", value: "Orbit" },
+                    { name: "📹 Handheld", value: "Handheld" },
+                    { name: "🛑 Static", value: "Static" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("motion_style")
+                .setDescription("Motion style preset (default: Cinematic)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "🎬 Cinematic", value: "Cinematic" },
+                    { name: "🌿 Natural", value: "Natural" },
+                    { name: "⚡ Dynamic", value: "Dynamic" },
+                    { name: "👤 Portrait", value: "Portrait" },
+                    { name: "🎨 Anime", value: "Anime" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("duration")
+                .setDescription("Duration seconds (default: 3.5s)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "3.5s (Fast Turbo)", value: "3.5" },
+                    { name: "5.0s (Full Shot)", value: "5.0" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("aspect_ratio")
+                .setDescription("Aspect ratio (default: Auto)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "Auto (Keep Source)", value: "Auto (keep source ratio)" },
+                    { name: "16:9 Landscape", value: "Landscape 16:9" },
+                    { name: "9:16 Portrait", value: "Portrait 9:16" },
+                    { name: "1:1 Square", value: "Square 1:1" },
+                ),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Seed number (default: random)")
                 .setRequired(false),
         ),
 ].map((c) => c.toJSON());
@@ -2103,15 +2378,366 @@ client.on("interactionCreate", async (interaction) => {
                     { name: "🎯 Guidance Scale", value: `\`${guidance}\``, inline: true },
                     { name: "📦 3D Format", value: `\`${format.toUpperCase()}\``, inline: true },
                     { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
+                    { name: "🌐 Free 3D Viewer", value: "[PlayCanvas SuperSplat](https://playcanvas.com/supersplat/editor) • Drag & drop .ply/.splat to view!", inline: false },
                     { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
                     { name: "⏳ Est. Render", value: "`~15 - 30 Seconds`", inline: true },
                 )
-                .setFooter({ text: "⚡ TripoSplat 3D Engine • Model will be uploaded directly to this channel." })
+                .setFooter({ text: "⚡ TripoSplat 3D Engine • Drag & drop output into SuperSplat to view in 3D!" })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
             console.error("TripoSplat error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /openvoice
+    if (commandName === "openvoice") {
+        const text = interaction.options.getString("text");
+        const refAudio = interaction.options.getAttachment("ref_audio");
+        const style = interaction.options.getString("style") || "en_us";
+
+        if (!refAudio || !refAudio.url) {
+            return interaction.reply({ content: "❌ Please attach a reference audio file (.mp3/.wav) to clone.", ephemeral: true });
+        }
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "openvoice",
+                    prompt: text,
+                    image_url: refAudio.url,
+                    steps: style,
+                    duration: "0",
+                    style: style,
+                    seed: "-1",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🎙️ Xploit AI Lab — OpenVoice V2 Voice Cloning")
+                .setColor("#4169E1")
+                .setDescription("Cloning target voice & synthesizing speech via **MyShell OpenVoice V2 Neural Engine**!")
+                .addFields(
+                    { name: "🗣️ Text", value: `\`${text.length > 150 ? text.slice(0, 147) + "..." : text}\``, inline: false },
+                    { name: "🎤 Reference Audio", value: `[Listen to Source](${refAudio.url})`, inline: true },
+                    { name: "🌍 Style / Language", value: `\`${style.toUpperCase()}\``, inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~15 - 30 Seconds`", inline: true },
+                )
+                .setFooter({ text: "⚡ OpenVoice V2 Instant Cloning • Dropping audio in this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("OpenVoice error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /auk
+    if (commandName === "auk") {
+        const audio = interaction.options.getAttachment("audio");
+        const instruction = interaction.options.getString("instruction");
+        const variant = interaction.options.getString("variant") || "AuK (Base)";
+        const duration = interaction.options.getNumber("duration") ?? 0;
+        const cfg = interaction.options.getNumber("cfg") ?? 2.0;
+        const seed = interaction.options.getInteger("seed");
+
+        if (!audio || !audio.url) {
+            return interaction.reply({ content: "❌ Please attach an audio file (.mp3/.wav) to edit/inpaint.", ephemeral: true });
+        }
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "auk",
+                    prompt: instruction,
+                    image_url: audio.url,
+                    steps: variant,
+                    duration: String(duration),
+                    style: String(cfg),
+                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🎧 Xploit AI Lab — Tencent AuK Audio Studio")
+                .setColor("#FF8C00")
+                .setDescription("Processing audio inpainting & editing via **Tencent AuK Neural Engine**!")
+                .addFields(
+                    { name: "🎨 Instruction", value: `\`${instruction.length > 150 ? instruction.slice(0, 147) + "..." : instruction}\``, inline: false },
+                    { name: "🎵 Source Audio", value: `[Listen to Source](${audio.url})`, inline: true },
+                    { name: "🧬 Model Variant", value: `\`${variant}\``, inline: true },
+                    { name: "🎛️ CFG Scale", value: `\`${cfg}\``, inline: true },
+                    { name: "⏱️ Duration", value: duration > 0 ? `\`${duration}s\`` : "`Auto Match`", inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`42 (Default)`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~20 - 40 Seconds`", inline: true },
+                )
+                .setFooter({ text: "⚡ Tencent AuK Audio Inpainting • Dropping in this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("AuK error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /wan-animate
+    if (commandName === "wan-animate") {
+        const video = interaction.options.getAttachment("video");
+        const image = interaction.options.getAttachment("image");
+        const mode = interaction.options.getString("mode") || "Character Swap";
+        const duration = interaction.options.getNumber("duration") ?? 2.0;
+        const resolution = interaction.options.getString("resolution") || "Low Res";
+
+        if (!video || !video.url || !image || !image.url) {
+            return interaction.reply({ content: "❌ Please attach both a driving video (.mp4) and target character image.", ephemeral: true });
+        }
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "wan-animate",
+                    prompt: video.url,
+                    image_url: image.url,
+                    steps: mode,
+                    duration: String(duration),
+                    style: resolution,
+                    seed: "-1",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🎬 Xploit AI Lab — Wan 2.2 Character Animate")
+                .setColor("#9400D3")
+                .setDescription("Animating character with driving video motion via **Wan 2.2 Animate Pipeline**!")
+                .addFields(
+                    { name: "🎥 Driving Video", value: `[View Driving Video](${video.url})`, inline: true },
+                    { name: "🖼️ Target Character", value: `[View Target Frame](${image.url})`, inline: true },
+                    { name: "🎭 Mode", value: `\`${mode}\``, inline: true },
+                    { name: "⏱️ Duration", value: `\`${duration}s\``, inline: true },
+                    { name: "📺 Resolution", value: `\`${resolution}\``, inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~1 - 2 Minutes`", inline: true },
+                )
+                .setFooter({ text: "⚡ Wan 2.2 Animate • Primary with Auto Fallback • Dropping video in this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("Wan Animate error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /viggle
+    if (commandName === "viggle") {
+        const video = interaction.options.getAttachment("video");
+        const character = interaction.options.getAttachment("character");
+        const seed = interaction.options.getInteger("seed");
+
+        if (!video || !video.url || !character || !character.url) {
+            return interaction.reply({ content: "❌ Please attach both a motion reference video (.mp4) and character image.", ephemeral: true });
+        }
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "viggle",
+                    prompt: video.url,
+                    image_url: character.url,
+                    steps: "20",
+                    duration: "0",
+                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🕺 Xploit AI Lab — Viggle Character Animate")
+                .setColor("#32CD32")
+                .setDescription("Transferring motion to custom character via **Viggle AI Neural Engine**!")
+                .addFields(
+                    { name: "🎥 Motion Video", value: `[View Motion Video](${video.url})`, inline: true },
+                    { name: "👤 Character", value: `[View Character Image](${character.url})`, inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`42 (Default)`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~1 - 2 Minutes`", inline: true },
+                )
+                .setFooter({ text: "⚡ Viggle Character Dance & Motion Transfer • Dropping in this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("Viggle error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /hq-video
+    if (commandName === "hq-video") {
+        const image = interaction.options.getAttachment("image");
+        const prompt = interaction.options.getString("prompt") || "make this image come alive, cinematic motion, smooth animation, 4k ultra realistic";
+        const duration = interaction.options.getString("duration") || "3.5";
+        const fps = interaction.options.getString("fps") || "16";
+        const upscale = interaction.options.getBoolean("upscale") ?? true;
+        const seed = interaction.options.getInteger("seed");
+
+        if (!image || !image.url) {
+            return interaction.reply({ content: "❌ Please attach an image to animate.", ephemeral: true });
+        }
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "hq-video",
+                    prompt: prompt,
+                    image_url: image.url,
+                    steps: fps,
+                    duration: duration,
+                    style: upscale ? "true" : "false",
+                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🎥 Xploit AI Lab — HighQualityVideo Engine")
+                .setColor("#FF1493")
+                .setDescription("Generating smooth high-framerate video via **HighQualityVideo Pipeline**!")
+                .addFields(
+                    { name: "🎞️ Motion Prompt", value: `\`${prompt.length > 150 ? prompt.slice(0, 147) + "..." : prompt}\``, inline: false },
+                    { name: "🖼️ Base Frame", value: `[View Image](${image.url})`, inline: true },
+                    { name: "⏱️ Duration", value: `\`${duration}s\``, inline: true },
+                    { name: "⚡ Smoothness / FPS", value: `\`${fps} FPS\``, inline: true },
+                    { name: "🔍 4K Upscale", value: upscale ? "`Active (UltraSharp)`" : "`Off`", inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~1 - 2 Minutes`", inline: true },
+                )
+                .setFooter({ text: "⚡ HighQualityVideo Engine • Dropping video in this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("HQ Video error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /dream-video
+    if (commandName === "dream-video") {
+        const image = interaction.options.getAttachment("image");
+        const prompt = interaction.options.getString("prompt") || "Make this image come alive with smooth, realistic motion.";
+        const cameraMotion = interaction.options.getString("camera_motion") || "Slow Push In";
+        const motionStyle = interaction.options.getString("motion_style") || "Cinematic";
+        const duration = interaction.options.getString("duration") || "3.5";
+        const aspectRatio = interaction.options.getString("aspect_ratio") || "Auto (keep source ratio)";
+        const seed = interaction.options.getInteger("seed");
+
+        if (!image || !image.url) {
+            return interaction.reply({ content: "❌ Please attach an image to animate.", ephemeral: true });
+        }
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "dream-video",
+                    prompt: prompt,
+                    image_url: image.url,
+                    steps: cameraMotion,
+                    duration: duration,
+                    style: JSON.stringify({
+                        motion_style: motionStyle,
+                        aspect_ratio: aspectRatio,
+                    }),
+                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🎬 Xploit AI Lab — Dream Wan 2.2 Turbo Video")
+                .setColor("#1E90FF")
+                .setDescription("Generating cinematic video with custom camera trajectory via **Dream Wan 2.2 AOTI Engine**!")
+                .addFields(
+                    { name: "🎥 Motion Prompt", value: `\`${prompt.length > 150 ? prompt.slice(0, 147) + "..." : prompt}\``, inline: false },
+                    { name: "🖼️ Base Frame", value: `[View Image](${image.url})`, inline: true },
+                    { name: "📹 Camera Motion", value: `\`${cameraMotion}\``, inline: true },
+                    { name: "🎨 Motion Style", value: `\`${motionStyle}\``, inline: true },
+                    { name: "⏱️ Duration", value: `\`${duration}s\``, inline: true },
+                    { name: "📐 Aspect Ratio", value: `\`${aspectRatio}\``, inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~1 - 2 Minutes`", inline: true },
+                )
+                .setFooter({ text: "⚡ Dream Wan 2.2 FP8-DA AOTI Video Engine • Dropping in this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("Dream Video error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

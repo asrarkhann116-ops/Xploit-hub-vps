@@ -255,32 +255,32 @@ jobs:
           $TOKEN = $env:DISCORD_TOKEN
           $UID   = $env:USER_ID
           $DUR   = $env:DURATION
-          $nl    = "`n"
+          $nl    = [Environment]::NewLine
 
-          $MSG  = "⚡ **[Windows 10 Ultra RDP] 60 FPS SESSION ACTIVE**" + $nl
+          $MSG  = "[Windows 10 Ultra RDP] 60 FPS SESSION ACTIVE" + $nl
           $MSG += "Operator: <@$UID>" + $nl + $nl
-          $MSG += "🎮 **Quick Connect (Native RDP Client / mstsc):**" + $nl
-          $MSG += "🖥️ **Computer :** `bore.pub:$PORT`" + $nl
-          $MSG += "👤 **Username :** `xploit`" + $nl
-          $MSG += "🔑 **Password :** `phantom`" + $nl
-          $MSG += "⏱️ **Duration :** `$DUR minutes`" + $nl + $nl
+          $MSG += "Quick Connect (Native RDP Client):" + $nl
+          $MSG += "Computer : bore.pub:$PORT" + $nl
+          $MSG += "Username : xploit" + $nl
+          $MSG += "Password : phantom" + $nl
+          $MSG += "Duration : $DUR minutes" + $nl + $nl
 
-          if ($CF_ACTIVE -and $CF_MODE -eq "Zero Trust (Token)") {
-            $MSG += "🌐 **Cloudflare Zero Trust Tunnel:** `Active` (Low-Latency Edge Routing)" + $nl
-            $MSG += "💡 *Connect via browser dashboard or `cloudflared access rdp` for minimum ping.*" + $nl + $nl
+          if ($CF_ACTIVE -and $CF_MODE -like "*Zero Trust*") {
+            $MSG += "Cloudflare Zero Trust Tunnel: Active (Low-Latency Edge Routing)" + $nl
+            $MSG += "Connect via browser dashboard or cloudflared access rdp for minimum ping." + $nl + $nl
           } elseif ($CF_ACTIVE -and $CF_URL) {
-            $MSG += "🌐 **Cloudflare Quick Tunnel:** `$CF_URL`" + $nl + $nl
+            $MSG += "Cloudflare Quick Tunnel: $CF_URL" + $nl + $nl
           }
 
-          $MSG += "🚀 **Gaming & High-FPS Optimizations Injected:**" + $nl
-          $MSG += "• ✅ **Option 1 (60 FPS Unlock):** `DWM8FrameRate = 60` (No more 15-22 FPS lock)" + $nl
-          $MSG += "• ✅ **Option 2 (Zero Jitter TCP):** `TCPNoDelay` & `TcpAckFrequency=1`" + $nl
-          $MSG += "• ✅ **Option 3 (RemoteFX AVC444):** Hardware H.264 Codec & 3D Acceleration" + $nl
-          $MSG += "• ✅ **Option 4 (Cloudflare/Direct):** Dual-Link Routing Active" + $nl + $nl
+          $MSG += "Gaming & High-FPS Optimizations Injected:" + $nl
+          $MSG += "- Option 1 (60 FPS Unlock): DWM8FrameRate = 60" + $nl
+          $MSG += "- Option 2 (Zero Jitter TCP): TCPNoDelay & TcpAckFrequency=1" + $nl
+          $MSG += "- Option 3 (RemoteFX AVC444): Hardware H.264 Codec & 3D Acceleration" + $nl
+          $MSG += "- Option 4 (Cloudflare/Direct): Dual-Link Routing Active" + $nl + $nl
 
-          $MSG += "🔥 **Client Pro-Tip for 60 FPS on your PC:**" + $nl
-          $MSG += "1. Open `mstsc` ➔ **Display** tab ➔ Set Colors to **High Color (16-bit)**." + $nl
-          $MSG += "2. In **Experience** tab ➔ Set connection to **LAN (10 Mbps or higher)**."
+          $MSG += "Client Pro-Tip for 60 FPS on your PC:" + $nl
+          $MSG += "1. Open mstsc -> Display tab -> Set Colors to High Color (16-bit)." + $nl
+          $MSG += "2. In Experience tab -> Set connection to LAN (10 Mbps or higher)."
 
           $chanFile  = "$env:TEMP\chan.json"
           $msgFile   = "$env:TEMP\msg.json"

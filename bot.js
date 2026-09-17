@@ -45,6 +45,7 @@ const AI_COMMAND_CHANNELS = {
     "breeze": "1549263004229697556",
     "breeze-tts": "1549263004229697556",
     "step-music": "1549870041057595413",
+    "triposplat": "1549946164709687316",
 };
 
 const AI_LAB_COMMANDS = new Set([
@@ -65,6 +66,7 @@ const AI_LAB_COMMANDS = new Set([
     "breeze",
     "breeze-tts",
     "step-music",
+    "triposplat",
 ]);
 
 const client = new Client({
@@ -752,13 +754,15 @@ const commands = [
                     { name: "⚡ Off (Direct generation — fastest)", value: "off" },
                 ),
         )
-        .addNumberOption((o) =>
+        .addStringOption((o) =>
             o
-                .setName("cfg_scale")
-                .setDescription("CFG guidance scale (default: 1.0, range: 0.1 - 5.0)")
+                .setName("quality")
+                .setDescription("Render quality steps (default: 16 - Fast Studio)")
                 .setRequired(false)
-                .setMinValue(0.1)
-                .setMaxValue(5.0),
+                .addChoices(
+                    { name: "⚡ Fast Studio (16 Steps)", value: "16" },
+                    { name: "💎 Ultra High-Fidelity (32 Steps)", value: "32" },
+                ),
         )
         .addIntegerOption((o) =>
             o
@@ -774,7 +778,6 @@ const commands = [
                 .addChoices(
                     { name: "🎧 MP3 (320kbps Studio Master)", value: "mp3" },
                     { name: "💎 FLAC (Lossless Master)", value: "flac" },
-                    { name: "📻 OGG (Opus High Efficiency)", value: "ogg" },
                 ),
         ),
     new SlashCommandBuilder()
@@ -880,6 +883,59 @@ const commands = [
             o
                 .setName("seed")
                 .setDescription("Seed number for reproducible generation (default: 42)")
+                .setRequired(false),
+        ),
+    new SlashCommandBuilder()
+        .setName("triposplat")
+        .setDescription("🧊 TripoSplat — Ultra-Fast 3D Gaussian Splatting Generator (Image to 3D Model)")
+        .addAttachmentOption((o) =>
+            o
+                .setName("image")
+                .setDescription("Source image to transform into a 3D Gaussian Splat model")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("quality")
+                .setDescription("3D Gaussian point density (default: 262k - High Detail)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "⚡ Fast Preview (65,536 Gaussians)", value: "65536" },
+                    { name: "⚖️ Balanced (131,072 Gaussians)", value: "131072" },
+                    { name: "💎 High Detail (262,144 Gaussians)", value: "262144" },
+                    { name: "🔥 Ultra-Dense 4K (524,288 Gaussians)", value: "524288" },
+                ),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("steps")
+                .setDescription("Sampling steps (default: 20, range: 10-50)")
+                .setRequired(false)
+                .setMinValue(10)
+                .setMaxValue(50),
+        )
+        .addNumberOption((o) =>
+            o
+                .setName("guidance")
+                .setDescription("Guidance scale / image adherence (default: 3.0, range: 1.0 - 8.0)")
+                .setRequired(false)
+                .setMinValue(1.0)
+                .setMaxValue(8.0),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("format")
+                .setDescription("3D output format (default: PLY standard 3D file)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "📦 PLY (Standard 3D Gaussian Splat / Point Cloud)", value: "ply" },
+                    { name: "🌐 SPLAT (Compact WebGPU 3D Splatting File)", value: "splat" },
+                ),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Seed number for reproducible 3D generation (default: 42)")
                 .setRequired(false),
         ),
 ].map((c) => c.toJSON());
@@ -1738,7 +1794,7 @@ client.on("interactionCreate", async (interaction) => {
                         prompt: prompt,
                         image_url: lyrics || (instrumental ? "[instrumental]" : ""),
                         steps: "full",
-                        duration: "1.0",
+                        duration: "16",
                         seed: seed !== null && seed !== undefined ? String(seed) : "-1",
                         style: "mp3",
                         user_id: interaction.user.id,
@@ -1812,7 +1868,7 @@ client.on("interactionCreate", async (interaction) => {
         const prompt = interaction.options.getString("prompt");
         const lyrics = interaction.options.getString("lyrics") || "";
         const cot = interaction.options.getString("cot") || "full";
-        const cfgScale = interaction.options.getNumber("cfg_scale") ?? 1.0;
+        const quality = interaction.options.getString("quality") || "16";
         const seed = interaction.options.getInteger("seed");
         const format = interaction.options.getString("format") || "mp3";
 
@@ -1829,7 +1885,7 @@ client.on("interactionCreate", async (interaction) => {
                     prompt: prompt,
                     image_url: lyrics,
                     steps: cot,
-                    duration: String(cfgScale),
+                    duration: quality,
                     seed: seed !== null && seed !== undefined ? String(seed) : "-1",
                     style: format,
                     user_id: interaction.user.id,
@@ -1843,9 +1899,9 @@ client.on("interactionCreate", async (interaction) => {
                 .setDescription("Composing full studio track with **YuE 2 (3B) Neural Music Pipeline**!")
                 .addFields(
                     { name: "🎼 Style / Prompt", value: `\`${prompt.length > 150 ? prompt.slice(0, 147) + "..." : prompt}\``, inline: false },
-                    { name: "📝 Lyrics", value: lyrics ? `\`${lyrics.length > 100 ? lyrics.slice(0, 97) + "..." : lyrics}\`` : "`Auto-Composed / Instrumental`", inline: false },
-                    { name: "🧠 CoT Mode", value: `\`${cot.toUpperCase()}\``, inline: true },
-                    { name: "🎛️ CFG Scale", value: `\`${cfgScale}\``, inline: true },
+                    { name: "📝 Lyrics", value: lyrics ? `\`${lyrics.length > 100 ? lyrics.slice(0, 97) + "..." : lyrics}\`` : "`Auto-Composed / Vocal Mode`", inline: false },
+                    { name: "🧠 Planning Mode", value: `\`${cot.toUpperCase()}\``, inline: true },
+                    { name: "⚡ Render Quality", value: quality === "32" ? "`32 Steps (Ultra High-Fidelity)`" : "`16 Steps (Fast Studio)`", inline: true },
                     { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
                     { name: "📦 Format", value: `\`${format.toUpperCase()}\``, inline: true },
                     { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
@@ -1996,6 +2052,66 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
             console.error("StepAudio Music error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /triposplat
+    if (commandName === "triposplat") {
+        const attachment = interaction.options.getAttachment("image");
+        const quality = interaction.options.getString("quality") || "262144";
+        const steps = interaction.options.getInteger("steps") || 20;
+        const guidance = interaction.options.getNumber("guidance") ?? 3.0;
+        const format = interaction.options.getString("format") || "ply";
+        const seed = interaction.options.getInteger("seed");
+
+        if (!attachment || !attachment.url) {
+            return interaction.reply({ content: "❌ Please attach a source image to turn into 3D.", ephemeral: true });
+        }
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "triposplat",
+                    prompt: quality,
+                    image_url: attachment.url,
+                    steps: String(steps),
+                    duration: String(guidance),
+                    style: format,
+                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🧊 Xploit AI Lab — TripoSplat 3D Gaussian Splatting")
+                .setColor("#00CED1")
+                .setDescription("Generating high-fidelity **3D Gaussian Splat model** via **TripoSplat Neural Engine**!")
+                .addFields(
+                    { name: "🖼️ Source Image", value: `[View Uploaded Image](${attachment.url})`, inline: false },
+                    { name: "🌐 Point Density", value: `\`${Number(quality).toLocaleString()} Gaussians\``, inline: true },
+                    { name: "⚡ Steps", value: `\`${steps} Steps\``, inline: true },
+                    { name: "🎯 Guidance Scale", value: `\`${guidance}\``, inline: true },
+                    { name: "📦 3D Format", value: `\`${format.toUpperCase()}\``, inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~15 - 30 Seconds`", inline: true },
+                )
+                .setFooter({ text: "⚡ TripoSplat 3D Engine • Model will be uploaded directly to this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("TripoSplat error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

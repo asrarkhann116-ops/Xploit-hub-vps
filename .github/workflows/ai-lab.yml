@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music / yue-music / step-music / breeze-tts)'
+        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music / yue-music / step-music / breeze-tts / triposplat)'
         required: true
         default: 'zimage'
       prompt:
@@ -1339,23 +1339,24 @@ jobs:
 
           elif action in ("yue-music", "yue"):
               print(f"[*] Composing studio-grade AI Music with YuE 2 (3B)...")
-              req_format = style_val.lower() if style_val and style_val.lower() in ("flac", "ogg", "mp3") else "mp3"
+              # Format requested: style_val can be 'mp3' or 'flac' (or format passed via style_val)
+              raw_fmt = style_val.lower() if style_val else "mp3"
+              req_format = "flac" if "flac" in raw_fmt else "mp3"
               audio_output_path = f"/tmp/ai_lab/output.{req_format}"
               output_path = audio_output_path
 
-              style_prompt = prompt.strip() if prompt else "Cyber metal, English, aggressive male vocals, distorted guitars, double-kick drums"
+              style_prompt = prompt.strip() if prompt else "Dreamy synth-pop, warm female lead vocal, pulsing bass, shimmering synths"
               lyrics_text = image_url.strip() if image_url and image_url.strip() else ""
 
-              # CoT mode ('full', 'melody', 'off')
+              # CoT / Planning mode ('full', 'melody', 'off')
               cot_mode = steps_val.lower() if steps_val and steps_val.lower() in ("full", "melody", "off") else "full"
 
-              # CFG scale
-              try:
-                  cfg_scale = float(duration_val) if duration_val else 1.0
-                  if cfg_scale <= 0 or cfg_scale > 10:
-                      cfg_scale = 1.0
-              except:
-                  cfg_scale = 1.0
+              # Render quality for mrfakename/yue2-3b ('16' or '32', default '16')
+              # passed via duration_val or default to '16'
+              if duration_val and duration_val.strip() in ("16", "32"):
+                  render_quality = duration_val.strip()
+              else:
+                  render_quality = "16"
 
               # Seed
               if seed_val and seed_val != "-1":
@@ -1367,67 +1368,70 @@ jobs:
                   rand_seed = random.randint(1, 10**6)
               final_seed = rand_seed
 
-              print(f"[*] YuE 2 Config: Style='{style_prompt[:60]}...' | CoT={cot_mode} | CFG={cfg_scale} | Seed={rand_seed} | Format={req_format}")
+              print(f"[*] YuE 2 Config: Style='{style_prompt[:60]}...' | Planning={cot_mode} | Quality={render_quality} | Seed={rand_seed} | Format={req_format}")
               yue_success = False
 
-              # Space 1: Primary - directedbykobyperez/YuE2-Create
+              # Space 1: Primary - mrfakename/yue2-3b
               try:
                   from gradio_client import Client
-                  print(f"[*] Connecting to Primary YuE2 Space: directedbykobyperez/YuE2-Create...")
-                  client = Client("directedbykobyperez/YuE2-Create")
-                  print(f"[*] Generating song via YuE 2 (cot={cot_mode}, cfg={cfg_scale}, seed={rand_seed})...")
+                  print(f"[*] Connecting to Primary YuE2 Space: mrfakename/yue2-3b...")
+                  client = Client("mrfakename/yue2-3b")
+                  # Primary takes: style, lyrics, planning_mode ('full','melody','off'), render_quality ('16','32'), seed (int)
+                  primary_lyrics = lyrics_text if lyrics_text else "[verse]\nneon rain on silver glass\nshadows shift and moments pass\n[chorus]\nwe are the rhythm in the dark\na single beat, an endless spark"
+                  print(f"[*] Submitting to mrfakename/yue2-3b (/generate_song, planning_mode={cot_mode}, render_quality={render_quality}, seed={rand_seed})...")
                   result = client.predict(
                       style=style_prompt,
-                      lyrics=lyrics_text,
-                      cot=cot_mode,
+                      lyrics=primary_lyrics,
+                      planning_mode=cot_mode,
+                      render_quality=render_quality,
                       seed=rand_seed,
-                      cfg_scale=cfg_scale,
-                      api_name="/generate"
+                      api_name="/generate_song"
                   )
-                  print(f"[+] YuE 2 Generation returned: {result}")
+                  print(f"[+] Primary YuE2 Generation returned: {result}")
                   chosen_path = None
-                  if isinstance(result, (list, tuple)) and len(result) >= 4:
+                  # returns [MP3 file, FLAC file, score]
+                  if isinstance(result, (list, tuple)) and len(result) >= 2:
                       if req_format == "flac":
-                          chosen_path = extract_path(result[1]) or extract_path(result[2]) or extract_path(result[0])
-                      elif req_format == "ogg":
-                          chosen_path = extract_path(result[3]) or extract_path(result[2]) or extract_path(result[0])
+                          chosen_path = extract_path(result[1]) or extract_path(result[0])
                       else:
-                          chosen_path = extract_path(result[2]) or extract_path(result[0])
+                          chosen_path = extract_path(result[0]) or extract_path(result[1])
                   if not chosen_path:
                       chosen_path = extract_path(result)
 
                   if chosen_path and os.path.exists(chosen_path):
                       import shutil
                       shutil.copyfile(chosen_path, audio_output_path)
-                      print(f"[+] YuE 2 Music Generation Complete! Saved to {audio_output_path}")
+                      print(f"[+] Primary YuE2 Music Complete! Output written ({os.path.getsize(audio_output_path)} bytes)")
                       yue_success = True
                   else:
-                      print(f"[-] YuE 2 output path not resolved: {result}")
+                      print(f"[-] Primary YuE2 output path not resolved: {result}")
                       renew_tor_ip()
               except Exception as e:
                   print(f"[-] Primary YuE2 Space error: {e}")
                   renew_tor_ip()
 
-              # Space 2: Fallback - mrfakename/yue2-3b
+              # Space 2: Fallback - directedbykobyperez/YuE2-Create
+              # Safely strips mrfakename-specific options (render_quality) so it won't crash
               if not yue_success:
                   try:
-                      print(f"[*] Trying Secondary YuE2 Space: mrfakename/yue2-3b...")
-                      client = Client("mrfakename/yue2-3b")
-                      fallback_lyrics = lyrics_text if lyrics_text else "[verse]\nnothing here but static skies\nwe ride the current till it dies"
+                      print(f"[*] 🔄 Triggering YuE2 Fallback: directedbykobyperez/YuE2-Create...")
+                      client = Client("directedbykobyperez/YuE2-Create")
+                      fallback_lyrics = lyrics_text if lyrics_text else ""
                       result = client.predict(
                           style=style_prompt,
                           lyrics=fallback_lyrics,
-                          planning_mode=cot_mode,
-                          render_quality="16",
+                          cot=cot_mode,
                           seed=rand_seed,
-                          api_name="/generate_song"
+                          cfg_scale=1.0,
+                          api_name="/generate"
                       )
+                      print(f"[+] Fallback YuE2 Generation returned: {result}")
                       chosen_path = None
-                      if isinstance(result, (list, tuple)) and len(result) >= 2:
+                      if isinstance(result, (list, tuple)) and len(result) >= 4:
                           if req_format == "flac":
-                              chosen_path = extract_path(result[1]) or extract_path(result[0])
+                              chosen_path = extract_path(result[1]) or extract_path(result[2]) or extract_path(result[0])
                           else:
-                              chosen_path = extract_path(result[0])
+                              chosen_path = extract_path(result[2]) or extract_path(result[0])
                       if not chosen_path:
                           chosen_path = extract_path(result)
 
@@ -1440,7 +1444,7 @@ jobs:
                           print(f"[-] Fallback YuE2 output path not resolved: {result}")
                           renew_tor_ip()
                   except Exception as e2:
-                      print(f"[-] Secondary YuE2 Space error: {e2}")
+                      print(f"[-] Fallback YuE2 Space error: {e2}")
                       renew_tor_ip()
 
           elif action == "step-music":
@@ -1967,6 +1971,105 @@ jobs:
                   except Exception as fb_err:
                       print(f"[-] Breeze final fallback error: {fb_err}")
 
+          elif action in ("triposplat", "tripo", "tripo-3d"):
+              print(f"[*] Initializing 3D Gaussian Splatting Engine with TripoSplat...")
+              import requests
+              from gradio_client import Client, handle_file
+
+              if not image_url:
+                  raise ValueError("TripoSplat requires an input image URL!")
+
+              input_img_path = "/tmp/ai_lab/input_tripo.png"
+              try:
+                  r_img = requests.get(image_url, timeout=30)
+                  with open(input_img_path, "wb") as f_in:
+                      f_in.write(r_img.content)
+                  print(f"[+] Downloaded source image ({os.path.getsize(input_img_path)} bytes)")
+              except Exception as e_dl:
+                  raise RuntimeError(f"Failed to download image from {image_url}: {e_dl}")
+
+              try:
+                  steps = int(steps_val) if steps_val and str(steps_val).isdigit() else 20
+              except:
+                  steps = 20
+
+              try:
+                  guidance_scale = float(duration_val) if duration_val else 3.0
+              except:
+                  guidance_scale = 3.0
+
+              try:
+                  if prompt and str(prompt).strip().isdigit():
+                      num_gaussians = int(str(prompt).strip())
+                  else:
+                      num_gaussians = 262144
+              except:
+                  num_gaussians = 262144
+
+              req_format = "splat" if style_val and "splat" in style_val.lower() else "ply"
+
+              if seed_val and seed_val != "-1":
+                  try:
+                      rand_seed = int(seed_val)
+                  except:
+                      rand_seed = 42
+              else:
+                  rand_seed = random.randint(1, 10**6)
+              final_seed = rand_seed
+
+              output_model_path = f"/tmp/ai_lab/output.{req_format}"
+              output_path = output_model_path
+
+              print(f"[*] TripoSplat Config: Gaussians={num_gaussians} | Steps={steps} | Guidance={guidance_scale} | Format={req_format} | Seed={rand_seed}")
+
+              hf_tok = os.environ.get("HF_TOKEN") or None
+              tripo_success = False
+
+              # Primary space + public mirrors
+              spaces_to_try = [
+                  "VAST-AI/TripoSplat",
+                  "marcmagn1/TripoSplat",
+                  "akhaliq/TripoSplat"
+              ]
+
+              for space_name in spaces_to_try:
+                  if tripo_success:
+                      break
+                  try:
+                      print(f"[*] Connecting to TripoSplat Space: {space_name}...")
+                      client = Client(space_name, token=hf_tok, httpx_kwargs={"timeout": 180.0})
+                      print(f"[*] Submitting /generate to {space_name}...")
+                      result = client.predict(
+                          image=handle_file(input_img_path),
+                          seed=rand_seed,
+                          steps=steps,
+                          guidance_scale=guidance_scale,
+                          num_gaussians=num_gaussians,
+                          output_format=req_format,
+                          api_name="/generate"
+                      )
+                      print(f"[+] {space_name} returned: {result}")
+                      chosen_path = None
+                      if isinstance(result, (list, tuple)) and len(result) >= 3:
+                          chosen_path = extract_path(result[2]) or extract_path(result[1])
+                      if not chosen_path:
+                          chosen_path = extract_path(result)
+
+                      if chosen_path and os.path.exists(chosen_path):
+                          import shutil
+                          shutil.copyfile(chosen_path, output_model_path)
+                          print(f"[+] TripoSplat 3D Model Complete! Saved to {output_model_path} ({os.path.getsize(output_model_path)} bytes)")
+                          tripo_success = True
+                          break
+                      else:
+                          print(f"[-] Could not resolve model path from: {result}")
+                          renew_tor_ip()
+                  except Exception as e_tripo:
+                      print(f"[-] TripoSplat error on {space_name}: {e_tripo}")
+                      renew_tor_ip()
+
+              if not tripo_success:
+                  print("[-] All TripoSplat spaces failed or rate-limited.")
 
                     # Send generated artifact to user's DM & server audit log channel (1506768429107908719)
           if os.path.exists(output_path):
@@ -1974,6 +2077,14 @@ jobs:
               if action in ("wan-video", "minimax-h3"):
                   filename = "xploit_video.mp4"
                   mimetype = "video/mp4"
+              elif action in ("triposplat", "tripo", "tripo-3d"):
+                  ext = os.path.splitext(output_path)[1].lower()
+                  if ext == ".splat":
+                      filename = "xploit_triposplat.splat"
+                      mimetype = "application/octet-stream"
+                  else:
+                      filename = "xploit_triposplat.ply"
+                      mimetype = "application/x-ply"
               elif action in ("kokoro-tts", "qwen-voice", "minimax-music", "yue-music", "yue", "step-music", "breeze-tts", "breeze"):
                   ext = os.path.splitext(output_path)[1].lower()
                   if ext == ".flac":
@@ -2082,6 +2193,8 @@ jobs:
                           mode_label = mode.upper()
                           inst_line = f"\n🎨 **Instruction:** `{instruction[:100]}`" if instruction else ""
                           content = f"🎙️ **XPLOIT NEXT-GEN AI LAB — BREEZE TTS 2**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `Breeze TTS 2 Neural Pipeline`\n🗣️ **Text:** `{prompt}`\n⚙️ **Mode:** `{mode_label}`{inst_line}\n🎛️ **CFG Scale:** `{cfg_scale}`{seed_line}"
+                      elif action in ("triposplat", "tripo", "tripo-3d"):
+                          content = f"🧊 **XPLOIT NEXT-GEN AI LAB — TRIPOSPLAT 3D GAUSSIAN ENGINE**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `TripoSplat (VAST-AI) 3D Generator`\n📦 **Format:** `{req_format.upper()}` | 🌐 **Gaussians:** `{num_gaussians:,}`\n⚡ **Steps:** `{steps}` | 🎯 **Guidance Scale:** `{guidance_scale}`{seed_line}\n💡 *Tip: Open `.ply` or `.splat` files in 3D viewers like SuperSplat (playcanvas.com/supersplat) or GSplat!*"
                       else:
                           content = f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()}**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `{action.upper()}`\n📝 **Input:** `{prompt}`{seed_line}"
                       dest_url = f"https://discord.com/api/v10/channels/{dest_id}/messages"

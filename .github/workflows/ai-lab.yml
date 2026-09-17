@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music / yue-music / step-music / breeze-tts / triposplat)'
+        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music / yue-music / step-music / breeze-tts / triposplat / openvoice / auk / wan-animate / viggle / hq-video / dream-video)'
         required: true
         default: 'zimage'
       prompt:
@@ -2071,10 +2071,433 @@ jobs:
               if not tripo_success:
                   print("[-] All TripoSplat spaces failed or rate-limited.")
 
+          elif action == "openvoice":
+              print(f"[*] Synthesizing speech with OpenVoice V2 Instant Cloning...")
+              import requests
+              from gradio_client import Client, handle_file
+
+              text_prompt = prompt.strip() if prompt else "Hello from Xploit AI Lab"
+              style_preset = steps_val if steps_val else "en_us"
+              ref_audio_url = image_url.strip() if image_url else ""
+
+              audio_output_path = "/tmp/ai_lab/output.mp3"
+              output_path = audio_output_path
+
+              ref_local_path = "/tmp/ai_lab/ref_openvoice.mp3"
+              if ref_audio_url:
+                  r_ref = requests.get(ref_audio_url, timeout=30)
+                  with open(ref_local_path, "wb") as f_ref:
+                      f_ref.write(r_ref.content)
+                  print(f"[+] Downloaded reference audio ({os.path.getsize(ref_local_path)} bytes)")
+              else:
+                  raise ValueError("OpenVoice requires a reference audio file to clone!")
+
+              try:
+                  client = Client("myshell-ai/OpenVoiceV2", httpx_kwargs={"timeout": 120.0})
+                  print(f"[*] Submitting to OpenVoiceV2 (text='{text_prompt[:50]}...', style={style_preset})...")
+                  res = client.predict(
+                      text_prompt=text_prompt,
+                      style=style_preset,
+                      reference_audio=handle_file(ref_local_path),
+                      agree=True,
+                      fn_index=1
+                  )
+                  print(f"[+] OpenVoice returned: {res}")
+                  chosen_audio = None
+                  if isinstance(res, (list, tuple)) and len(res) >= 2:
+                      chosen_audio = extract_path(res[1]) or extract_path(res[0])
+                  if not chosen_audio:
+                      chosen_audio = extract_path(res)
+
+                  if chosen_audio and os.path.exists(chosen_audio):
+                      import shutil
+                      shutil.copyfile(chosen_audio, audio_output_path)
+                      print(f"[+] OpenVoice V2 Complete! Saved to {audio_output_path}")
+                  else:
+                      print("[-] Could not extract audio file from OpenVoice output")
+              except Exception as e_ov:
+                  print(f"[-] OpenVoice error: {e_ov}")
+
+          elif action == "auk":
+              print(f"[*] Running Tencent AuK Audio Understanding & Inpainting...")
+              import requests
+              from gradio_client import Client, handle_file
+
+              instruction = prompt.strip() if prompt else "Enhance audio quality"
+              audio_url = image_url.strip() if image_url else ""
+              variant = steps_val if steps_val in ("AuK (Base)", "AuK-Flash ⚡") else "AuK (Base)"
+
+              try:
+                  gen_sec = float(duration_val) if duration_val else 0.0
+              except:
+                  gen_sec = 0.0
+
+              try:
+                  cfg_val = float(style_val) if style_val else 2.0
+              except:
+                  cfg_val = 2.0
+
+              if seed_val and seed_val != "-1":
+                  try:
+                      rand_seed = int(seed_val)
+                  except:
+                      rand_seed = 42
+              else:
+                  rand_seed = 42
+              final_seed = rand_seed
+
+              audio_output_path = "/tmp/ai_lab/output.wav"
+              output_path = audio_output_path
+
+              input_audio_path = "/tmp/ai_lab/input_auk.wav"
+              if audio_url:
+                  r_aud = requests.get(audio_url, timeout=30)
+                  with open(input_audio_path, "wb") as f_aud:
+                      f_aud.write(r_aud.content)
+                  print(f"[+] Downloaded input audio ({os.path.getsize(input_audio_path)} bytes)")
+              else:
+                  raise ValueError("AuK requires an input audio file!")
+
+              hf_tok = os.environ.get("HF_TOKEN") or None
+              try:
+                  client = Client("tencent/AuK", token=hf_tok, httpx_kwargs={"timeout": 180.0})
+                  print(f"[*] Submitting to AuK (variant={variant}, cfg={cfg_val}, gen_sec={gen_sec})...")
+                  res = client.predict(
+                      use_pe=True,
+                      variant=variant,
+                      audio=handle_file(input_audio_path),
+                      instruction=instruction,
+                      gen_seconds=gen_sec,
+                      nfe=32,
+                      cfg=cfg_val,
+                      seed=rand_seed,
+                      api_name="/run_generate_with_pe"
+                  )
+                  print(f"[+] AuK returned: {res}")
+                  chosen_audio = extract_path(res)
+                  if chosen_audio and os.path.exists(chosen_audio):
+                      import shutil
+                      shutil.copyfile(chosen_audio, audio_output_path)
+                      print(f"[+] Tencent AuK Audio Complete! Saved to {audio_output_path}")
+                  else:
+                      print("[-] Could not extract audio from AuK")
+              except Exception as e_auk:
+                  print(f"[-] AuK error: {e_auk}")
+
+          elif action == "wan-animate":
+              print(f"[*] Running Wan 2.2 Character Animation & Motion Pipeline...")
+              import requests
+              from gradio_client import Client, handle_file
+
+              driving_video_url = prompt.strip() if prompt else ""
+              target_image_url = image_url.strip() if image_url else ""
+              mode_val = steps_val if steps_val else "Character Swap"
+
+              try:
+                  dur_val = float(duration_val) if duration_val else 2.0
+              except:
+                  dur_val = 2.0
+
+              res_choice = style_val if style_val else "Low Res"
+
+              video_output_path = "/tmp/ai_lab/output.mp4"
+              output_path = video_output_path
+
+              input_vid = "/tmp/ai_lab/driving_video.mp4"
+              input_img = "/tmp/ai_lab/target_frame.png"
+
+              r_v = requests.get(driving_video_url, timeout=45)
+              with open(input_vid, "wb") as f_v:
+                  f_v.write(r_v.content)
+
+              r_i = requests.get(target_image_url, timeout=30)
+              with open(input_img, "wb") as f_i:
+                  f_i.write(r_i.content)
+
+              hf_tok = os.environ.get("HF_TOKEN") or None
+              wan_anim_success = False
+
+              # Space 1: Primary - alexnasa/Wan2.2-Animate-ZEROGPU
+              try:
+                  print("[*] Connecting to Primary: alexnasa/Wan2.2-Animate-ZEROGPU...")
+                  client = Client("alexnasa/Wan2.2-Animate-ZEROGPU", token=hf_tok, httpx_kwargs={"timeout": 300.0})
+                  res = client.predict(
+                      input_video=handle_file(input_vid),
+                      max_duration_s=dur_val,
+                      edited_frame=handle_file(input_img),
+                      rc_str=mode_val,
+                      resolution_choice=res_choice,
+                      api_name="/animate_scene"
+                  )
+                  print(f"[+] alexnasa/Wan2.2-Animate returned: {res}")
+                  chosen_vid = None
+                  if isinstance(res, (list, tuple)) and len(res) >= 1:
+                      chosen_vid = extract_path(res[0])
+                  if not chosen_vid:
+                      chosen_vid = extract_path(res)
+                  if chosen_vid and os.path.exists(chosen_vid):
+                      import shutil
+                      shutil.copyfile(chosen_vid, video_output_path)
+                      print(f"[+] Primary Wan Animate Complete! Saved to {video_output_path}")
+                      wan_anim_success = True
+              except Exception as e_p:
+                  print(f"[-] Primary Wan Animate error: {e_p}")
+                  renew_tor_ip()
+
+              # Space 2: Fallback - hugging-apps/wan2-2-animate-2-14b
+              if not wan_anim_success:
+                  try:
+                      print("[*] 🔄 Triggering Fallback: hugging-apps/wan2-2-animate-2-14b...")
+                      client = Client("hugging-apps/wan2-2-animate-2-14b", token=hf_tok, httpx_kwargs={"timeout": 300.0})
+                      res = client.predict(
+                          image=handle_file(input_img),
+                          driving_video=handle_file(input_vid),
+                          prompt="animate this character naturally with smooth cinematic motion",
+                          max_seconds=dur_val,
+                          height=720,
+                          width=1280,
+                          num_inference_steps=20,
+                          guidance_scale=3.5,
+                          sample_shift=3.0,
+                          negative_prompt="blurry, distorted, low quality, glitch",
+                          seed=42,
+                          api_name="/animate"
+                      )
+                      print(f"[+] Fallback Wan Animate returned: {res}")
+                      chosen_vid = extract_path(res)
+                      if chosen_vid and os.path.exists(chosen_vid):
+                          import shutil
+                          shutil.copyfile(chosen_vid, video_output_path)
+                          print(f"[+] Fallback Wan Animate Complete! Saved to {video_output_path}")
+                          wan_anim_success = True
+                  except Exception as e_fb:
+                      print(f"[-] Fallback Wan Animate error: {e_fb}")
+
+          elif action == "viggle":
+              print(f"[*] Running Viggle AI Character Animation & Motion Dance Engine...")
+              import requests
+              from gradio_client import Client, handle_file
+
+              driving_video_url = prompt.strip() if prompt else ""
+              character_image_url = image_url.strip() if image_url else ""
+
+              if seed_val and seed_val != "-1":
+                  try:
+                      rand_seed = int(seed_val)
+                  except:
+                      rand_seed = 42
+              else:
+                  rand_seed = 42
+              final_seed = rand_seed
+
+              video_output_path = "/tmp/ai_lab/output.mp4"
+              output_path = video_output_path
+
+              input_vid = "/tmp/ai_lab/viggle_motion.mp4"
+              input_char = "/tmp/ai_lab/viggle_char.png"
+
+              r_v = requests.get(driving_video_url, timeout=45)
+              with open(input_vid, "wb") as f_v:
+                  f_v.write(r_v.content)
+
+              r_c = requests.get(character_image_url, timeout=30)
+              with open(input_char, "wb") as f_c:
+                  f_c.write(r_c.content)
+
+              hf_tok = os.environ.get("HF_TOKEN") or None
+              try:
+                  client = Client("Viggle/viggle-animate", token=hf_tok, httpx_kwargs={"timeout": 240.0})
+                  print("[*] Viggle: Step 1 - /prepare...")
+                  prep = client.predict(
+                      video=handle_file(input_vid),
+                      character=handle_file(input_char),
+                      painted="",
+                      api_name="/prepare"
+                  )
+                  print(f"[+] Viggle prepare returned: {prep}")
+
+                  print(f"[*] Viggle: Step 2 - /render (seed={rand_seed})...")
+                  render_res = client.predict(
+                      seed=rand_seed,
+                      api_name="/render"
+                  )
+                  print(f"[+] Viggle render returned: {render_res}")
+
+                  print("[*] Viggle: Step 3 - /finish...")
+                  fin_res = client.predict(api_name="/finish")
+                  print(f"[+] Viggle finish returned: {fin_res}")
+
+                  chosen_vid = extract_path(fin_res)
+                  if not chosen_vid and isinstance(prep, (list, tuple)) and len(prep) >= 2:
+                      chosen_vid = extract_path(prep[1])
+
+                  if chosen_vid and os.path.exists(chosen_vid):
+                      import shutil
+                      shutil.copyfile(chosen_vid, video_output_path)
+                      print(f"[+] Viggle Animate Complete! Saved to {video_output_path}")
+                  else:
+                      print("[-] Could not extract Viggle video")
+              except Exception as e_viggle:
+                  print(f"[-] Viggle error: {e_viggle}")
+
+          elif action == "hq-video":
+              print(f"[*] Generating High-FPS Video with HighQualityVideoGeneration...")
+              import requests
+              from gradio_client import Client, handle_file
+
+              prompt_text = prompt.strip() if prompt else "make this image come alive, cinematic motion, smooth animation"
+              img_url = image_url.strip() if image_url else ""
+              fps_mul = steps_val if steps_val in ("16", "32", "64", "128") else "16"
+
+              try:
+                  dur_sec = float(duration_val) if duration_val else 3.5
+              except:
+                  dur_sec = 3.5
+
+              upscale_flag = True if style_val.lower() == "true" else False
+
+              if seed_val and seed_val != "-1":
+                  try:
+                      rand_seed = int(seed_val)
+                  except:
+                      rand_seed = 42
+              else:
+                  rand_seed = random.randint(1, 10**6)
+              final_seed = rand_seed
+
+              video_output_path = "/tmp/ai_lab/output.mp4"
+              output_path = video_output_path
+
+              input_frame = "/tmp/ai_lab/hq_frame.png"
+              r_frame = requests.get(img_url, timeout=30)
+              with open(input_frame, "wb") as f_f:
+                  f_f.write(r_frame.content)
+
+              hf_tok = os.environ.get("HF_TOKEN") or None
+              try:
+                  client = Client("someone-in-the-world/HighQualityVideoGeneration", token=hf_tok, httpx_kwargs={"timeout": 240.0})
+                  print(f"[*] Submitting to HighQualityVideoGeneration (fps={fps_mul}, dur={dur_sec}, upscale={upscale_flag})...")
+                  res = client.predict(
+                      input_image=handle_file(input_frame),
+                      last_image=handle_file(input_frame),
+                      prompt=prompt_text,
+                      negative_prompt="worst quality, low quality, glitch, blur, text, watermark",
+                      duration_seconds=dur_sec,
+                      steps=6,
+                      guidance_scale=1.0,
+                      seed=rand_seed,
+                      randomize_seed=False,
+                      frame_multiplier=fps_mul,
+                      upscale_output=upscale_flag,
+                      api_name="/generate_video"
+                  )
+                  print(f"[+] HighQualityVideo returned: {res}")
+                  chosen_vid = None
+                  if isinstance(res, (list, tuple)) and len(res) >= 1:
+                      chosen_vid = extract_path(res[1]) or extract_path(res[0])
+                  if not chosen_vid:
+                      chosen_vid = extract_path(res)
+
+                  if chosen_vid and os.path.exists(chosen_vid):
+                      import shutil
+                      shutil.copyfile(chosen_vid, video_output_path)
+                      print(f"[+] HighQualityVideo Complete! Saved to {video_output_path}")
+                  else:
+                      print("[-] Could not extract HQ video path")
+              except Exception as e_hq:
+                  print(f"[-] HighQualityVideo error: {e_hq}")
+
+          elif action == "dream-video":
+              print(f"[*] Generating Cinematic Video with Dream Wan 2.2 FP8-DA AOTI Engine...")
+              import requests, json
+              from gradio_client import Client, handle_file
+
+              prompt_text = prompt.strip() if prompt else "Make this image come alive with smooth, realistic motion."
+              img_url = image_url.strip() if image_url else ""
+              cam_motion = steps_val if steps_val else "Slow Push In"
+
+              try:
+                  dur_sec = float(duration_val) if duration_val else 3.5
+              except:
+                  dur_sec = 3.5
+
+              style_dict = {}
+              try:
+                  style_dict = json.loads(style_val) if style_val else {}
+              except:
+                  pass
+
+              motion_style = style_dict.get("motion_style", "Cinematic")
+              aspect_ratio = style_dict.get("aspect_ratio", "Auto (keep source ratio)")
+
+              if seed_val and seed_val != "-1":
+                  try:
+                      rand_seed = int(seed_val)
+                  except:
+                      rand_seed = 42
+              else:
+                  rand_seed = random.randint(1, 10**6)
+              final_seed = rand_seed
+
+              video_output_path = "/tmp/ai_lab/output.mp4"
+              output_path = video_output_path
+
+              input_frame = "/tmp/ai_lab/dream_frame.png"
+              r_frame = requests.get(img_url, timeout=30)
+              with open(input_frame, "wb") as f_f:
+                  f_f.write(r_frame.content)
+
+              hf_tok = os.environ.get("HF_TOKEN") or None
+              try:
+                  client = Client("dream2589632147/Dream-wan2-2-fp8da-aoti-preview-2", token=hf_tok, httpx_kwargs={"timeout": 240.0})
+                  print(f"[*] Submitting to Dream Wan 2.2 (cam={cam_motion}, style={motion_style}, dur={dur_sec})...")
+                  res = client.predict(
+                      first_image=handle_file(input_frame),
+                      last_image=handle_file(input_frame),
+                      generation_mode="Single Image",
+                      prompt=prompt_text,
+                      motion_style=motion_style,
+                      camera_motion=cam_motion,
+                      motion_strength="Medium",
+                      preserve_identity=True,
+                      enhance_prompt=True,
+                      aspect_ratio=aspect_ratio,
+                      duration_seconds=dur_sec,
+                      output_fps="16",
+                      quality_profile="Balanced",
+                      steps=6,
+                      negative_prompt="worst quality, low quality, glitch, blurry, static frame, deformed",
+                      video_quality=7,
+                      seed=rand_seed,
+                      randomize_seed=False,
+                      guidance_scale=1.0,
+                      guidance_scale_2=1.0,
+                      scheduler_name="UniPCMultistep",
+                      flow_shift=3.0,
+                      safe_mode=True,
+                      show_preview=True,
+                      api_name="/generate_video"
+                  )
+                  print(f"[+] Dream Wan 2.2 returned: {res}")
+                  chosen_vid = None
+                  if isinstance(res, (list, tuple)) and len(res) >= 2:
+                      chosen_vid = extract_path(res[1]) or extract_path(res[0])
+                  if not chosen_vid:
+                      chosen_vid = extract_path(res)
+
+                  if chosen_vid and os.path.exists(chosen_vid):
+                      import shutil
+                      shutil.copyfile(chosen_vid, video_output_path)
+                      print(f"[+] Dream Wan 2.2 Complete! Saved to {video_output_path}")
+                  else:
+                      print("[-] Could not extract Dream Wan video path")
+              except Exception as e_dream:
+                  print(f"[-] Dream Wan 2.2 error: {e_dream}")
+
                     # Send generated artifact to user's DM & server audit log channel (1506768429107908719)
           if os.path.exists(output_path):
               headers = {"Authorization": f"Bot {discord_token}"}
-              if action in ("wan-video", "minimax-h3"):
+              if action in ("wan-video", "minimax-h3", "wan-animate", "viggle", "hq-video", "dream-video"):
                   filename = "xploit_video.mp4"
                   mimetype = "video/mp4"
               elif action in ("triposplat", "tripo", "tripo-3d"):
@@ -2085,6 +2508,13 @@ jobs:
                   else:
                       filename = "xploit_triposplat.ply"
                       mimetype = "application/x-ply"
+              elif action == "openvoice":
+                  ext = os.path.splitext(output_path)[1].lower()
+                  filename = f"xploit_openvoice{ext if ext else '.mp3'}"
+                  mimetype = "audio/mpeg" if ext == ".mp3" else "audio/wav"
+              elif action == "auk":
+                  filename = "xploit_auk.wav"
+                  mimetype = "audio/wav"
               elif action in ("kokoro-tts", "qwen-voice", "minimax-music", "yue-music", "yue", "step-music", "breeze-tts", "breeze"):
                   ext = os.path.splitext(output_path)[1].lower()
                   if ext == ".flac":
@@ -2195,6 +2625,18 @@ jobs:
                           content = f"🎙️ **XPLOIT NEXT-GEN AI LAB — BREEZE TTS 2**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `Breeze TTS 2 Neural Pipeline`\n🗣️ **Text:** `{prompt}`\n⚙️ **Mode:** `{mode_label}`{inst_line}\n🎛️ **CFG Scale:** `{cfg_scale}`{seed_line}"
                       elif action in ("triposplat", "tripo", "tripo-3d"):
                           content = f"🧊 **XPLOIT NEXT-GEN AI LAB — TRIPOSPLAT 3D GAUSSIAN ENGINE**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `TripoSplat (VAST-AI) 3D Generator`\n📦 **Format:** `{req_format.upper()}` | 🌐 **Gaussians:** `{num_gaussians:,}`\n⚡ **Steps:** `{steps}` | 🎯 **Guidance Scale:** `{guidance_scale}`{seed_line}\n💡 *Tip: Open `.ply` or `.splat` files in 3D viewers like SuperSplat (playcanvas.com/supersplat) or GSplat!*"
+                      elif action == "openvoice":
+                          content = f"🎙️ **XPLOIT NEXT-GEN AI LAB — OPENVOICE V2 CLONING**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `MyShell OpenVoice V2 Instant Voice Clone`\n🗣️ **Text:** `{prompt}`\n🌍 **Style / Accent:** `{steps_val.upper()}`{seed_line}"
+                      elif action == "auk":
+                          content = f"🎧 **XPLOIT NEXT-GEN AI LAB — TENCENT AUK AUDIO STUDIO**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `Tencent AuK Neural Audio Inpainting`\n🎨 **Instruction:** `{prompt}`\n⚙️ **Variant:** `{steps_val}` | 🎛️ **CFG Scale:** `{style_val}`{seed_line}"
+                      elif action == "wan-animate":
+                          content = f"🎬 **XPLOIT NEXT-GEN AI LAB — WAN 2.2 ANIMATE**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `Wan 2.2 Character Animation & Motion Pipeline`\n🎭 **Mode:** `{steps_val}` | ⏱️ **Duration:** `{duration_val}s` | 📺 **Resolution:** `{style_val}`"
+                      elif action == "viggle":
+                          content = f"🕺 **XPLOIT NEXT-GEN AI LAB — VIGGLE CHARACTER ANIMATE**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `Viggle AI Character Motion & Dance Transfer`{seed_line}"
+                      elif action == "hq-video":
+                          content = f"🎥 **XPLOIT NEXT-GEN AI LAB — HIGH QUALITY VIDEO GENERATION**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `HighQualityVideo 4K Multi-Frame FPS Engine`\n🎞️ **Prompt:** `{prompt}`\n⏱️ **Duration:** `{duration_val}s` | ⚡ **FPS:** `{steps_val}` | 🔍 **4K Upscale:** `{style_val}`{seed_line}"
+                      elif action == "dream-video":
+                          content = f"🎬 **XPLOIT NEXT-GEN AI LAB — DREAM WAN 2.2 AOTI VIDEO**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `Dream Wan 2.2 FP8-DA AOTI Engine`\n🎥 **Prompt:** `{prompt}`\n📹 **Camera:** `{steps_val}` | ⏱️ **Duration:** `{duration_val}s`{seed_line}"
                       else:
                           content = f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()}**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `{action.upper()}`\n📝 **Input:** `{prompt}`{seed_line}"
                       dest_url = f"https://discord.com/api/v10/channels/{dest_id}/messages"

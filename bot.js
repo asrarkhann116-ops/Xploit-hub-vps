@@ -29,6 +29,7 @@ const aiLabCooldowns = new Map();
 const AI_COMMAND_CHANNELS = {
     "zimage": "1549262502972620921",
     "qwen-edit": "1549262544047440043",
+    "qwen21-unrestricted": "1552094478569963611",
     "flux-klein": "1549262578138615889",
     "krea": "1549262620710666270",
     "krea-2": "1549262620710666270",
@@ -56,6 +57,7 @@ const AI_COMMAND_CHANNELS = {
 const AI_LAB_COMMANDS = new Set([
     "zimage",
     "qwen-edit",
+    "qwen21-unrestricted",
     "flux-klein",
     "wan-video",
     "krea-2",
@@ -401,6 +403,66 @@ const commands = [
             o
                 .setName("seed")
                 .setDescription("Seed number (default: random)")
+                .setRequired(false),
+        ),
+
+    new SlashCommandBuilder()
+        .setName("qwen21-unrestricted")
+        .setDescription("🔥 Qwen-Image-2.1 Uncensored GGUF Studio — Multi-Mode Image Gen & Editing")
+        .addStringOption((o) =>
+            o
+                .setName("prompt")
+                .setDescription("Image description or editing instruction (Unrestricted)")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("mode")
+                .setDescription("Generation mode (default: Create an image)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "🎨 Create an image (Text-to-Image)", value: "Create an image" },
+                    { name: "✏️ Edit an image (Image-to-Image)", value: "Edit an image" },
+                    { name: "🪄 Transparent PNG (Cutout)", value: "Transparent PNG" },
+                ),
+        )
+        .addAttachmentOption((o) =>
+            o
+                .setName("reference")
+                .setDescription("Reference image (required for Edit mode & Transparent PNG)")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("ratio")
+                .setDescription("Aspect Ratio / Canvas shape")
+                .setRequired(false)
+                .addChoices(
+                    { name: "Square · 1:1 (1024x1024)", value: "Square · 1:1 (1024x1024)" },
+                    { name: "Landscape · 16:9 (1344x768)", value: "Landscape · 16:9 (1344x768)" },
+                    { name: "Portrait · 9:16 (768x1344)", value: "Portrait · 9:16 (768x1344)" },
+                    { name: "Landscape · 4:3 (1152x864)", value: "Landscape · 4:3 (1152x864)" },
+                    { name: "Portrait · 3:4 (864x1152)", value: "Portrait · 3:4 (864x1152)" },
+                ),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("steps")
+                .setDescription("Inference steps (default: 40, recommended for quality. Use 10-20 for fast preview)")
+                .setRequired(false)
+                .setMinValue(4)
+                .setMaxValue(40),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Seed number (default: random)")
+                .setRequired(false),
+        )
+        .addBooleanOption((o) =>
+            o
+                .setName("randomize_seed")
+                .setDescription("Randomize seed? (default: true)")
                 .setRequired(false),
         ),
 
@@ -1650,6 +1712,76 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
             console.error("Qwen-Edit error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /qwen21-unrestricted
+    if (commandName === "qwen21-unrestricted") {
+        const prompt = interaction.options.getString("prompt");
+        const mode = interaction.options.getString("mode") || "Create an image";
+        const reference = interaction.options.getAttachment("reference");
+        const ratio = interaction.options.getString("ratio") || "Square · 1:1 (1024x1024)";
+        const steps = interaction.options.getInteger("steps") || 40;
+        const seed = interaction.options.getInteger("seed");
+        const randomizeSeed = interaction.options.getBoolean("randomize_seed") ?? true;
+
+        // Edit mode & Transparent PNG require reference image
+        if ((mode === "Edit an image" || mode === "Transparent PNG") && (!reference || !reference.url)) {
+            return interaction.reply({ 
+                content: `❌ **${mode}** requires a reference image! Please attach an image.`, 
+                ephemeral: true 
+            });
+        }
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "qwen21-unrestricted",
+                    prompt: prompt,
+                    image_url: reference ? reference.url : "",
+                    steps: String(steps),
+                    style: mode,
+                    duration: ratio,
+                    seed: seed !== null && seed !== undefined ? String(seed) : (randomizeSeed ? "-1" : "42"),
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🔥 Xploit AI Lab — Qwen-Image-2.1 Uncensored GGUF Studio")
+                .setColor("#FF6B35")
+                .setDescription("Dispatching to **Qwen-Image-2.1 GGUF Unrestricted Engine** with **Multi-Mode Support**!")
+                .addFields(
+                    { name: "📝 Prompt", value: `\`${prompt}\``, inline: false },
+                    { name: "🎨 Mode", value: `\`${mode}\``, inline: true },
+                    { name: "📐 Aspect Ratio", value: `\`${ratio}\``, inline: true },
+                    { name: "⚡ Inference Steps", value: `\`${steps} Steps\``, inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : (randomizeSeed ? "`Randomized`" : "`42 (Default)`"), inline: true },
+                    { name: "🧠 Model", value: "`Qwen-Image-2.1-Uncensored-GGUF (7B)`", inline: true },
+                    { name: "🖥️ Host Node", value: "`arudradey HF Space (ZeroGPU)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~1-2 Minutes`", inline: true },
+                )
+                .setFooter({ text: "🔥 Qwen-Image-2.1 Uncensored GGUF • Zero Restrictions • Dropping in this channel." })
+                .setTimestamp();
+
+            if (reference && reference.url) {
+                embed.setThumbnail(reference.url);
+                embed.addFields({ name: "🖼️ Reference Image", value: `[View Original](${reference.url})`, inline: false });
+            }
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("Qwen21-Unrestricted error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

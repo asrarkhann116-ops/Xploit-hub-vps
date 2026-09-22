@@ -714,6 +714,82 @@ jobs:
                       print(f"[-] FLUX.2 Klein 9B-KV error: {err_kv}")
                       renew_tor_ip()
 
+          elif action == "qwen21-unrestricted":
+              print(f"[*] Connecting to Qwen-Image-2.1-Uncensored-GGUF Studio for prompt: {prompt}")
+              from gradio_client import Client, handle_file
+              import random
+              
+              output_path = "/tmp/ai_lab/output.png"
+              
+              # Parse mode from style_val
+              mode = style_val if style_val else "Create an image"
+              
+              # Parse aspect ratio from duration_val
+              aspect_ratio = duration_val if duration_val else "Square · 1:1 (1024x1024)"
+              
+              # Parse seed
+              if seed_val and seed_val != "-1":
+                  try:
+                      gen_seed = int(seed_val)
+                      randomize_seed = False
+                  except:
+                      gen_seed = 42
+                      randomize_seed = True
+              else:
+                  gen_seed = 42
+                  randomize_seed = True
+              final_seed = gen_seed
+              
+              # Download reference image if image_url provided (for Edit mode or Transparent PNG)
+              reference_img = None
+              if image_url and image_url.startswith("http"):
+                  try:
+                      input_img_path = "/tmp/ai_lab/input_qwen21.png"
+                      resp = requests.get(image_url, timeout=15)
+                      with open(input_img_path, "wb") as f:
+                          f.write(resp.content)
+                      reference_img = input_img_path
+                      print(f"[*] Reference image downloaded for {mode}")
+                  except Exception as e:
+                      print(f"[-] Reference image download error: {e}")
+              
+              print(f"[*] Qwen21 Configuration: Mode={mode} | Ratio={aspect_ratio} | Steps={steps} | Seed={gen_seed} | Randomize={randomize_seed}")
+              
+              try:
+                  client = Client("arudradey/qwen-image-2.1-uncensored-gguf")
+                  result = client.predict(
+                      prompt=prompt,
+                      mode=mode,
+                      reference=handle_file(reference_img) if reference_img else None,
+                      aspect_ratio=aspect_ratio,
+                      steps=float(steps) if steps else 40.0,
+                      seed=gen_seed,
+                      randomize_seed=randomize_seed,
+                      api_name="/generate"
+                  )
+                  
+                  # result = (generated_output, download_full_resolution_png, seed, generation_details)
+                  if result and isinstance(result, tuple) and len(result) >= 2:
+                      # Try generated_output first (index 0)
+                      gen_output = result[0]
+                      if isinstance(gen_output, str) and os.path.exists(gen_output):
+                          Image.open(gen_output).save(output_path, format="PNG")
+                          print("[+] Qwen-Image-2.1 Uncensored Generation Complete!")
+                      # Try full resolution PNG (index 1)
+                      elif len(result) > 1 and isinstance(result[1], str) and os.path.exists(result[1]):
+                          Image.open(result[1]).save(output_path, format="PNG")
+                          print("[+] Qwen-Image-2.1 Uncensored Generation Complete (Full Res)!")
+                      
+                      # Extract actual used seed from result[2]
+                      if len(result) > 2 and result[2] is not None:
+                          try:
+                              final_seed = int(result[2])
+                          except:
+                              pass
+              except Exception as err:
+                  print(f"[-] Qwen21-Unrestricted error: {err}")
+                  renew_tor_ip()
+
           elif action == "wan-video":
               print(f"[*] Connecting to Wan 2.2 Uncensored Video Space (STCM Missionary AOTI)...")
               from gradio_client import Client, handle_file

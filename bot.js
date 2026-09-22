@@ -1760,18 +1760,18 @@ client.on("interactionCreate", async (interaction) => {
             const embed = new EmbedBuilder()
                 .setTitle("🔥 Xploit AI Lab — Qwen-Image-2.1 Uncensored GGUF Studio")
                 .setColor("#FF6B35")
-                .setDescription("Dispatching to **Qwen-Image-2.1 GGUF Unrestricted Engine** with **Multi-Mode Support**!")
+                .setDescription("Dispatching to **Qwen-Image-2.1 GGUF Unrestricted Engine** with **Multi-Mode Support & Zero Censorship**!")
                 .addFields(
                     { name: "📝 Prompt", value: `\`${prompt}\``, inline: false },
                     { name: "🎨 Mode", value: `\`${mode}\``, inline: true },
                     { name: "📐 Aspect Ratio", value: `\`${ratio}\``, inline: true },
                     { name: "⚡ Inference Steps", value: `\`${steps} Steps\``, inline: true },
                     { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : (randomizeSeed ? "`Randomized`" : "`42 (Default)`"), inline: true },
-                    { name: "🧠 Model", value: "`Qwen-Image-2.1-Uncensored-GGUF (7B)`", inline: true },
-                    { name: "🖥️ Host Node", value: "`arudradey HF Space (ZeroGPU)`", inline: true },
-                    { name: "⏳ Est. Render", value: "`~1-2 Minutes`", inline: true },
+                    { name: "🧠 Model Architecture", value: "`Qwen-Image-2.1-Uncensored-GGUF (7B)`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~2 Minutes`", inline: true },
                 )
-                .setFooter({ text: "🔥 Qwen-Image-2.1 Uncensored GGUF • Zero Restrictions • Dropping in this channel." })
+                .setFooter({ text: "⚡ Running on Localhost Dedicated Node (70GB Cluster) • Zero Restrictions • Dropping in this channel." })
                 .setTimestamp();
 
             if (reference && reference.url) {

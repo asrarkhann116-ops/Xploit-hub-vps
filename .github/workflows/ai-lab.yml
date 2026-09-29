@@ -1158,12 +1158,9 @@ jobs:
               scheduler_api = scheduler_mapping.get(scheduler_val, "UniPCMultistep")
               
               frame_mult = os.environ.get("FRAME_MULTIPLIER", "32")
-              try:
-                  frame_mult_int = int(frame_mult)
-                  if frame_mult_int not in [16, 32, 64, 128]:
-                      frame_mult_int = 32
-              except:
-                  frame_mult_int = 32
+              # Keep as string - API expects Literal['16', '32', '64', '128']
+              if frame_mult not in ["16", "32", "64", "128"]:
+                  frame_mult = "32"
               
               safe_mode_str = os.environ.get("SAFE_MODE", "false").lower()
               safe_mode_bool = safe_mode_str in ["true", "1", "yes"]
@@ -1262,7 +1259,7 @@ jobs:
                       quality=10 if quality_val == "high" else 6,
                       scheduler=scheduler_api,
                       flow_shift=3.0,
-                      frame_multiplier=frame_mult_int,
+                      frame_multiplier=frame_mult,  # Keep as string (API expects string)
                       safe_mode=safe_mode_bool,
                       # Built-in LoRA Presets (3 slots with high/low scale)
                       lora1_preset=lora1_api,

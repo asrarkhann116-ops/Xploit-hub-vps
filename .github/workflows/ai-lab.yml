@@ -35,6 +35,58 @@ on:
         description: 'LoRA Style Adapter for Qwen Edit'
         required: false
         default: 'Ultrarealistic-Portrait'
+      last_image_url:
+        description: 'Last Frame Image URL (for pixel-perfect trajectory guidance)'
+        required: false
+        default: ''
+      guidance_scale:
+        description: 'Guidance Scale (for pixel-perfect)'
+        required: false
+        default: '2.5'
+      quality:
+        description: 'Output Quality (for pixel-perfect)'
+        required: false
+        default: 'normal'
+      scheduler:
+        description: 'Scheduler Algorithm (for pixel-perfect)'
+        required: false
+        default: 'euler'
+      frame_multiplier:
+        description: 'Frame Multiplier (for pixel-perfect)'
+        required: false
+        default: '32'
+      safe_mode:
+        description: 'Safe Mode Toggle (for pixel-perfect)'
+        required: false
+        default: 'false'
+      lora_preset_1:
+        description: 'LoRA Preset Slot 1 (for pixel-perfect)'
+        required: false
+        default: 'none'
+      lora_preset_2:
+        description: 'LoRA Preset Slot 2 (for pixel-perfect)'
+        required: false
+        default: 'none'
+      lora_preset_3:
+        description: 'LoRA Preset Slot 3 (for pixel-perfect)'
+        required: false
+        default: 'none'
+      custom_lora_1:
+        description: 'Custom LoRA 1 URL (for pixel-perfect)'
+        required: false
+        default: ''
+      custom_lora_1_weight:
+        description: 'Custom LoRA 1 Weight (for pixel-perfect)'
+        required: false
+        default: '1.0'
+      custom_lora_2:
+        description: 'Custom LoRA 2 URL (for pixel-perfect)'
+        required: false
+        default: ''
+      custom_lora_2_weight:
+        description: 'Custom LoRA 2 Weight (for pixel-perfect)'
+        required: false
+        default: '1.0'
 
 jobs:
   ai-generate:
@@ -73,6 +125,19 @@ jobs:
           DURATION: ${{ github.event.inputs.duration }}
           SEED: ${{ github.event.inputs.seed }}
           STYLE: ${{ github.event.inputs.style }}
+          LAST_IMAGE_URL: ${{ github.event.inputs.last_image_url }}
+          GUIDANCE_SCALE: ${{ github.event.inputs.guidance_scale }}
+          QUALITY: ${{ github.event.inputs.quality }}
+          SCHEDULER: ${{ github.event.inputs.scheduler }}
+          FRAME_MULTIPLIER: ${{ github.event.inputs.frame_multiplier }}
+          SAFE_MODE: ${{ github.event.inputs.safe_mode }}
+          LORA_PRESET_1: ${{ github.event.inputs.lora_preset_1 }}
+          LORA_PRESET_2: ${{ github.event.inputs.lora_preset_2 }}
+          LORA_PRESET_3: ${{ github.event.inputs.lora_preset_3 }}
+          CUSTOM_LORA_1: ${{ github.event.inputs.custom_lora_1 }}
+          CUSTOM_LORA_1_WEIGHT: ${{ github.event.inputs.custom_lora_1_weight }}
+          CUSTOM_LORA_2: ${{ github.event.inputs.custom_lora_2 }}
+          CUSTOM_LORA_2_WEIGHT: ${{ github.event.inputs.custom_lora_2_weight }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           mkdir -p /tmp/ai_lab
@@ -1074,7 +1139,7 @@ jobs:
                   video_duration = 3.5
 
               try:
-                  guidance = float(os.environ.get("INPUT_GUIDANCE_SCALE", "2.5"))
+                  guidance = float(os.environ.get("GUIDANCE_SCALE", "2.5"))
                   if guidance < 1.0:
                       guidance = 1.0
                   elif guidance > 5.0:
@@ -1082,9 +1147,9 @@ jobs:
               except:
                   guidance = 2.5
 
-              quality_val = os.environ.get("INPUT_QUALITY", "normal")
-              scheduler_val = os.environ.get("INPUT_SCHEDULER", "euler")
-              frame_mult = os.environ.get("INPUT_FRAME_MULTIPLIER", "32")
+              quality_val = os.environ.get("QUALITY", "normal")
+              scheduler_val = os.environ.get("SCHEDULER", "euler")
+              frame_mult = os.environ.get("FRAME_MULTIPLIER", "32")
               try:
                   frame_mult_int = int(frame_mult)
                   if frame_mult_int not in [16, 32, 64, 128]:
@@ -1092,24 +1157,24 @@ jobs:
               except:
                   frame_mult_int = 32
               
-              safe_mode_str = os.environ.get("INPUT_SAFE_MODE", "false").lower()
+              safe_mode_str = os.environ.get("SAFE_MODE", "false").lower()
               safe_mode_bool = safe_mode_str in ["true", "1", "yes"]
 
-              lora_preset_1 = os.environ.get("INPUT_LORA_PRESET_1", "none")
-              lora_preset_2 = os.environ.get("INPUT_LORA_PRESET_2", "none")
-              lora_preset_3 = os.environ.get("INPUT_LORA_PRESET_3", "none")
-              custom_lora_1 = os.environ.get("INPUT_CUSTOM_LORA_1", "")
-              custom_lora_2 = os.environ.get("INPUT_CUSTOM_LORA_2", "")
+              lora_preset_1 = os.environ.get("LORA_PRESET_1", "none")
+              lora_preset_2 = os.environ.get("LORA_PRESET_2", "none")
+              lora_preset_3 = os.environ.get("LORA_PRESET_3", "none")
+              custom_lora_1 = os.environ.get("CUSTOM_LORA_1", "")
+              custom_lora_2 = os.environ.get("CUSTOM_LORA_2", "")
               try:
-                  custom_lora_1_weight = float(os.environ.get("INPUT_CUSTOM_LORA_1_WEIGHT", "1.0"))
+                  custom_lora_1_weight = float(os.environ.get("CUSTOM_LORA_1_WEIGHT", "1.0"))
               except:
                   custom_lora_1_weight = 1.0
               try:
-                  custom_lora_2_weight = float(os.environ.get("INPUT_CUSTOM_LORA_2_WEIGHT", "1.0"))
+                  custom_lora_2_weight = float(os.environ.get("CUSTOM_LORA_2_WEIGHT", "1.0"))
               except:
                   custom_lora_2_weight = 1.0
 
-              last_image_url = os.environ.get("INPUT_LAST_IMAGE_URL", "")
+              last_image_url = os.environ.get("LAST_IMAGE_URL", "")
 
               if seed_val and seed_val != "-1":
                   try:

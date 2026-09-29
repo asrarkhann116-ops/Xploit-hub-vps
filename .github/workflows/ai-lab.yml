@@ -1303,14 +1303,27 @@ jobs:
                       video_component=True,
                       api_name="/generate_video"
                   )
-                  vid_path = extract_path(result)
+                  print(f"[DEBUG] API Result Type: {type(result)}")
+                  print(f"[DEBUG] API Result Full: {result}")
+                  
+                  # API returns tuple: [video_file, download_file, seed]
+                  # Extract video from first element (index 0)
+                  if isinstance(result, (list, tuple)) and len(result) >= 1:
+                      vid_path = extract_path(result[0])  # First element is the video
+                      print(f"[DEBUG] Extracted from result[0]: {vid_path}")
+                  else:
+                      vid_path = extract_path(result)
+                      print(f"[DEBUG] Extracted from full result: {vid_path}")
+                  
                   if vid_path and os.path.exists(vid_path):
                       import shutil
                       shutil.copyfile(vid_path, video_output_path)
                       print("[+] Perfect Pixel Engine 1.0 Video Complete!")
                       ppe_success = True
                   else:
-                      print(f"[-] Perfect Pixel Engine path not resolved from result: {result}")
+                      print(f"[-] Perfect Pixel Engine path not resolved")
+                      print(f"[-] Result structure: {result}")
+                      print(f"[-] Extracted path: {vid_path}")
               except Exception as e:
                   print(f"[-] Perfect Pixel Engine error: {e}")
                   print(f"[-] Perfect Pixel Engine FAILED. Exclusive model unavailable.")

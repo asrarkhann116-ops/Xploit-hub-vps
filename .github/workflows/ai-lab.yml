@@ -1262,7 +1262,7 @@ jobs:
                       quality=10 if quality_val == "high" else 6,
                       scheduler=scheduler_api,
                       flow_shift=3.0,
-                      frame_multiplier=str(frame_mult_int),
+                      frame_multiplier=frame_mult_int,
                       safe_mode=safe_mode_bool,
                       # Built-in LoRA Presets (3 slots with high/low scale)
                       lora1_preset=lora1_api,

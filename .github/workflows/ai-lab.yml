@@ -1226,7 +1226,20 @@ jobs:
                   print(f"[*] Connecting to boroll2347/Wan_2.2_I2V_14B_Custom_Lora_hqdefault (Duration={video_duration}s)...")
                   client = Client("boroll2347/Wan_2.2_I2V_14B_Custom_Lora_hqdefault")
                   
-                  # Full API call with all required custom LoRA parameters
+                  # Convert LoRA preset names (user-friendly -> API format)
+                  lora1_api = "(None)"
+                  lora2_api = "(None)"
+                  lora3_api = "(None)"
+                  
+                  # Prepare my1-5 repo strings (Required, cannot be empty)
+                  # Use placeholder "Hello!!" for unused slots as per API docs
+                  my1_repo_val = custom_lora_1 if custom_lora_1 else "Hello!!"
+                  my2_repo_val = custom_lora_2 if custom_lora_2 else "Hello!!"
+                  my3_repo_val = "Hello!!"
+                  my4_repo_val = "Hello!!"
+                  my5_repo_val = "Hello!!"
+                  
+                  # Full API call with ALL 50 parameters (as per docs)
                   result = client.predict(
                       input_image=handle_file(input_img_path),
                       last_image=handle_file(last_img_path) if has_last_image else None,
@@ -1238,28 +1251,48 @@ jobs:
                       guidance_scale_2=guidance,
                       seed=rand_seed,
                       randomize_seed=True,
-                      quality=6 if quality_val == "high" else 4,
+                      quality=10 if quality_val == "high" else 6,
                       scheduler=scheduler_val,
                       flow_shift=3.0,
-                      frame_multiplier=frame_mult_int,
+                      frame_multiplier=str(frame_mult_int),
                       safe_mode=safe_mode_bool,
+                      # Built-in LoRA Presets (3 slots with high/low scale)
+                      lora1_preset=lora1_api,
+                      lora1_high_scale=1.0,
+                      lora1_low_scale=1.0,
+                      lora2_preset=lora2_api,
+                      lora2_high_scale=1.0,
+                      lora2_low_scale=1.0,
+                      lora3_preset=lora3_api,
+                      lora3_high_scale=1.0,
+                      lora3_low_scale=1.0,
+                      # Custom LoRA Repos (5 slots - Required, use "Hello!!" placeholder)
+                      my1_repo=my1_repo_val,
+                      my1_high="(None)",
+                      my1_hs=custom_lora_1_weight if custom_lora_1 else 1.0,
+                      my1_low="(None)",
+                      my1_ls=1.0,
+                      my2_repo=my2_repo_val,
+                      my2_high="(None)",
+                      my2_hs=custom_lora_2_weight if custom_lora_2 else 1.0,
+                      my2_low="(None)",
+                      my2_ls=1.0,
+                      my3_repo=my3_repo_val,
+                      my3_high="(None)",
+                      my3_hs=1.0,
+                      my3_low="(None)",
+                      my3_ls=1.0,
+                      my4_repo=my4_repo_val,
+                      my4_high="(None)",
+                      my4_hs=1.0,
+                      my4_low="(None)",
+                      my4_ls=1.0,
+                      my5_repo=my5_repo_val,
+                      my5_high="(None)",
+                      my5_hs=1.0,
+                      my5_low="(None)",
+                      my5_ls=1.0,
                       video_component=True,
-                      # Custom LoRA parameters (required by this space)
-                      my1_repo=custom_lora_1 if custom_lora_1 else "",
-                      my1_filename="",
-                      my1_weight=custom_lora_1_weight if custom_lora_1 else 1.0,
-                      my2_repo=custom_lora_2 if custom_lora_2 else "",
-                      my2_filename="",
-                      my2_weight=custom_lora_2_weight if custom_lora_2 else 1.0,
-                      my3_repo="",
-                      my3_filename="",
-                      my3_weight=1.0,
-                      my4_repo="",
-                      my4_filename="",
-                      my4_weight=1.0,
-                      my5_repo="",
-                      my5_filename="",
-                      my5_weight=1.0,
                       api_name="/generate_video"
                   )
                   vid_path = extract_path(result)

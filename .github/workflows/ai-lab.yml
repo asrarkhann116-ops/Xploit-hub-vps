@@ -1052,6 +1052,166 @@ jobs:
                       renew_tor_ip()
 
 
+          elif action == "pixel-perfect":
+              print(f"[*] Connecting to Perfect Pixel Engine 1.0 (boroll2347/Wan_2.2_I2V_14B_Custom_Lora_hqdefault)...")
+              from gradio_client import Client, handle_file
+              import random
+
+              video_output_path = "/tmp/ai_lab/output.mp4"
+              output_path = video_output_path
+              input_img_path = "/tmp/ai_lab/input.png"
+              last_img_path = "/tmp/ai_lab/last.png"
+              
+              # Parse parameters from GitHub Actions inputs
+              # Duration: Max 13 seconds (override default 3.5)
+              try:
+                  video_duration = float(duration_val) if duration_val else 3.5
+                  if video_duration < 1.0:
+                      video_duration = 1.0
+                  elif video_duration > 13.0:
+                      video_duration = 13.0
+              except Exception:
+                  video_duration = 3.5
+
+              try:
+                  guidance = float(os.environ.get("INPUT_GUIDANCE_SCALE", "2.5"))
+                  if guidance < 1.0:
+                      guidance = 1.0
+                  elif guidance > 5.0:
+                      guidance = 5.0
+              except:
+                  guidance = 2.5
+
+              quality_val = os.environ.get("INPUT_QUALITY", "normal")
+              scheduler_val = os.environ.get("INPUT_SCHEDULER", "euler")
+              frame_mult = os.environ.get("INPUT_FRAME_MULTIPLIER", "32")
+              try:
+                  frame_mult_int = int(frame_mult)
+                  if frame_mult_int not in [16, 32, 64, 128]:
+                      frame_mult_int = 32
+              except:
+                  frame_mult_int = 32
+              
+              safe_mode_str = os.environ.get("INPUT_SAFE_MODE", "false").lower()
+              safe_mode_bool = safe_mode_str in ["true", "1", "yes"]
+
+              lora_preset_1 = os.environ.get("INPUT_LORA_PRESET_1", "none")
+              lora_preset_2 = os.environ.get("INPUT_LORA_PRESET_2", "none")
+              lora_preset_3 = os.environ.get("INPUT_LORA_PRESET_3", "none")
+              custom_lora_1 = os.environ.get("INPUT_CUSTOM_LORA_1", "")
+              custom_lora_2 = os.environ.get("INPUT_CUSTOM_LORA_2", "")
+              try:
+                  custom_lora_1_weight = float(os.environ.get("INPUT_CUSTOM_LORA_1_WEIGHT", "1.0"))
+              except:
+                  custom_lora_1_weight = 1.0
+              try:
+                  custom_lora_2_weight = float(os.environ.get("INPUT_CUSTOM_LORA_2_WEIGHT", "1.0"))
+              except:
+                  custom_lora_2_weight = 1.0
+
+              last_image_url = os.environ.get("INPUT_LAST_IMAGE_URL", "")
+
+              if seed_val and seed_val != "-1":
+                  try:
+                      rand_seed = int(seed_val)
+                  except:
+                      rand_seed = random.randint(1, 9999999)
+              else:
+                  rand_seed = random.randint(1, 9999999)
+              final_seed = rand_seed
+              ppe_success = False
+
+              print(f"[*] Perfect Pixel Engine Config: Duration={video_duration}s | Steps={steps} | Guidance={guidance} | Seed={rand_seed}")
+              print(f"[*] Quality={quality_val} | Scheduler={scheduler_val} | FrameMult={frame_mult_int} | SafeMode={safe_mode_bool}")
+              print(f"[*] LoRA Stack: P1={lora_preset_1} | P2={lora_preset_2} | P3={lora_preset_3}")
+              if custom_lora_1:
+                  print(f"[*] Custom LoRA 1: {custom_lora_1} (Weight: {custom_lora_1_weight})")
+              if custom_lora_2:
+                  print(f"[*] Custom LoRA 2: {custom_lora_2} (Weight: {custom_lora_2_weight})")
+
+              # Download input image
+              has_image = bool(image_url and image_url.startswith("http"))
+              if has_image:
+                  try:
+                      resp = requests.get(image_url, timeout=15)
+                      with open(input_img_path, "wb") as f:
+                          f.write(resp.content)
+                  except Exception as e:
+                      print(f"[-] Input image download error: {e}")
+                      has_image = False
+
+              # Download last_image if provided
+              has_last_image = False
+              if last_image_url and last_image_url.startswith("http"):
+                  try:
+                      resp_last = requests.get(last_image_url, timeout=15)
+                      with open(last_img_path, "wb") as f:
+                          f.write(resp_last.content)
+                      has_last_image = True
+                      print(f"[+] Last frame image downloaded for trajectory guidance")
+                  except Exception as e:
+                      print(f"[-] Last image download error: {e}")
+
+              if not has_image or not os.path.exists(input_img_path):
+                  print(f"[-] ERROR: No valid input image provided for Perfect Pixel Engine!")
+                  sys.exit(1)
+
+              # Primary Space: boroll2347/Wan_2.2_I2V_14B_Custom_Lora_hqdefault (Perfect Pixel Engine 1.0)
+              try:
+                  print(f"[*] Connecting to boroll2347/Wan_2.2_I2V_14B_Custom_Lora_hqdefault (Duration={video_duration}s)...")
+                  client = Client("boroll2347/Wan_2.2_I2V_14B_Custom_Lora_hqdefault")
+                  
+                  # Build LoRA preset list (3 presets max from API)
+                  lora_presets = []
+                  if lora_preset_1 != "none":
+                      lora_presets.append(lora_preset_1)
+                  if lora_preset_2 != "none":
+                      lora_presets.append(lora_preset_2)
+                  if lora_preset_3 != "none":
+                      lora_presets.append(lora_preset_3)
+                  
+                  # Build custom LoRA list (5 slots max from API, we use 2)
+                  custom_loras = []
+                  if custom_lora_1:
+                      custom_loras.append({"path": custom_lora_1, "weight": custom_lora_1_weight})
+                  if custom_lora_2:
+                      custom_loras.append({"path": custom_lora_2, "weight": custom_lora_2_weight})
+
+                  result = client.predict(
+                      input_image=handle_file(input_img_path),
+                      last_image=handle_file(last_img_path) if has_last_image else None,
+                      prompt=prompt,
+                      steps=steps if steps <= 12 else 6,
+                      duration_seconds=video_duration,
+                      guidance_scale=guidance,
+                      seed=rand_seed,
+                      quality=quality_val,
+                      scheduler=scheduler_val,
+                      frame_multiplier=frame_mult_int,
+                      safe_mode=safe_mode_bool,
+                      lora_presets=lora_presets if lora_presets else [],
+                      custom_loras=custom_loras if custom_loras else [],
+                      api_name="/generate_video"
+                  )
+                  vid_path = extract_path(result)
+                  if vid_path and os.path.exists(vid_path):
+                      import shutil
+                      shutil.copyfile(vid_path, video_output_path)
+                      print("[+] Perfect Pixel Engine 1.0 Video Complete!")
+                      ppe_success = True
+                  else:
+                      print(f"[-] Perfect Pixel Engine path not resolved from result: {result}")
+                      renew_tor_ip()
+              except Exception as e:
+                  print(f"[-] Perfect Pixel Engine error: {e}")
+                  renew_tor_ip()
+
+              # No fallback: Perfect Pixel Engine is exclusive, no generic fallbacks
+              if not ppe_success:
+                  print(f"[-] Perfect Pixel Engine FAILED. No fallback available for this premium model.")
+                  sys.exit(1)
+
+
           elif action == "krea-2":
               print(f"[*] Connecting to Primary: MarkTheArtist/Spicy-krea2 (Unrestricted Photorealism)...")
               from gradio_client import Client

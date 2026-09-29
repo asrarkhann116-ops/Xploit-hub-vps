@@ -34,6 +34,7 @@ const AI_COMMAND_CHANNELS = {
     "krea": "1549262620710666270",
     "krea-2": "1549262620710666270",
     "wan-video": "1549262663874252951",
+    "pixel-perfect": "1554594071979491448",
     "minimax": "1549262751958827130",
     "minimax-h3": "1549262751958827130",
     "music": "1549262789753704449",
@@ -60,6 +61,7 @@ const AI_LAB_COMMANDS = new Set([
     "qwen21-unrestricted",
     "flux-klein",
     "wan-video",
+    "pixel-perfect",
     "krea-2",
     "krea",
     "minimax",
@@ -563,6 +565,165 @@ const commands = [
                 .setName("seed")
                 .setDescription("Seed number (default: random)")
                 .setRequired(false),
+        ),
+
+    new SlashCommandBuilder()
+        .setName("pixel-perfect")
+        .setDescription("🎥 Perfect Pixel Engine 1.0 — Premium Custom LoRA I2V 14B (13-Second Max Studio Quality)")
+        .addAttachmentOption((o) =>
+            o
+                .setName("input_image")
+                .setDescription("Primary input image to animate into video")
+                .setRequired(true),
+        )
+        .addAttachmentOption((o) =>
+            o
+                .setName("last_image")
+                .setDescription("Optional: Last frame image for trajectory guidance")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("prompt")
+                .setDescription("Motion/scene prompt (e.g. 'cinematic camera dolly, particles drift, ultra hd 4k')")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("duration")
+                .setDescription("Video duration in seconds (max 13s)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "3.5s (Fast Turbo)", value: "3.5" },
+                    { name: "5.0s (Standard HD)", value: "5" },
+                    { name: "6.5s (Extended)", value: "6.5" },
+                    { name: "8.0s (Long Play)", value: "8" },
+                    { name: "10.0s (Ultra Studio)", value: "10" },
+                    { name: "13.0s (Maximum Studio)", value: "13" },
+                ),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("steps")
+                .setDescription("Inference steps (default: 6, range: 4-12)")
+                .setRequired(false)
+                .setMinValue(4)
+                .setMaxValue(12),
+        )
+        .addNumberOption((o) =>
+            o
+                .setName("guidance_scale")
+                .setDescription("Prompt adherence strength (default: 2.5, range: 1.0-5.0)")
+                .setRequired(false)
+                .setMinValue(1.0)
+                .setMaxValue(5.0),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Seed number (default: random)")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("quality")
+                .setDescription("Output quality preset")
+                .setRequired(false)
+                .addChoices(
+                    { name: "Normal (Balanced)", value: "normal" },
+                    { name: "High (Detailed)", value: "high" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("scheduler")
+                .setDescription("Diffusion scheduler algorithm")
+                .setRequired(false)
+                .addChoices(
+                    { name: "Euler", value: "euler" },
+                    { name: "DDIM", value: "ddim" },
+                    { name: "DPM Solver", value: "dpm_solver" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("frame_multiplier")
+                .setDescription("Frame density/temporal resolution")
+                .setRequired(false)
+                .addChoices(
+                    { name: "16 (Economy)", value: "16" },
+                    { name: "32 (Standard)", value: "32" },
+                    { name: "64 (High Fidelity)", value: "64" },
+                    { name: "128 (Ultra Smooth)", value: "128" },
+                ),
+        )
+        .addBooleanOption((o) =>
+            o
+                .setName("safe_mode")
+                .setDescription("Enable safe content filter? (default: false)")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("lora_preset_1")
+                .setDescription("LoRA Preset Slot 1: Specialist Style Enhancement")
+                .setRequired(false)
+                .addChoices(
+                    { name: "None", value: "none" },
+                    { name: "Cinematic Film Look", value: "cinematic" },
+                    { name: "Anime Enhanced", value: "anime" },
+                    { name: "Photorealistic Boost", value: "photorealistic" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("lora_preset_2")
+                .setDescription("LoRA Preset Slot 2: Motion & Camera Dynamics")
+                .setRequired(false)
+                .addChoices(
+                    { name: "None", value: "none" },
+                    { name: "Smooth Camera Motion", value: "camera_smooth" },
+                    { name: "Dynamic Movement", value: "dynamic" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("lora_preset_3")
+                .setDescription("LoRA Preset Slot 3: Lighting & Atmosphere")
+                .setRequired(false)
+                .addChoices(
+                    { name: "None", value: "none" },
+                    { name: "Studio Lighting", value: "studio_light" },
+                    { name: "Atmospheric Depth", value: "atmosphere" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("custom_lora_1")
+                .setDescription("Custom LoRA URL/Path Slot 1 (advanced users)")
+                .setRequired(false),
+        )
+        .addNumberOption((o) =>
+            o
+                .setName("custom_lora_1_weight")
+                .setDescription("Custom LoRA 1 weight (default: 1.0, range: 0.0-2.0)")
+                .setRequired(false)
+                .setMinValue(0.0)
+                .setMaxValue(2.0),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("custom_lora_2")
+                .setDescription("Custom LoRA URL/Path Slot 2 (advanced users)")
+                .setRequired(false),
+        )
+        .addNumberOption((o) =>
+            o
+                .setName("custom_lora_2_weight")
+                .setDescription("Custom LoRA 2 weight (default: 1.0, range: 0.0-2.0)")
+                .setRequired(false)
+                .setMinValue(0.0)
+                .setMaxValue(2.0),
         ),
 
     new SlashCommandBuilder()
@@ -1895,6 +2056,104 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
             console.error("Wan-Video error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /pixel-perfect
+    if (commandName === "pixel-perfect") {
+        const inputImage = interaction.options.getAttachment("input_image");
+        const lastImage = interaction.options.getAttachment("last_image");
+        const prompt = interaction.options.getString("prompt") || "cinematic camera motion, smooth transitions, ultra high definition 4k quality";
+        const duration = interaction.options.getString("duration") || "3.5";
+        const steps = interaction.options.getInteger("steps") || 6;
+        const guidanceScale = interaction.options.getNumber("guidance_scale") || 2.5;
+        const seed = interaction.options.getInteger("seed");
+        const quality = interaction.options.getString("quality") || "normal";
+        const scheduler = interaction.options.getString("scheduler") || "euler";
+        const frameMultiplier = interaction.options.getString("frame_multiplier") || "32";
+        const safeMode = interaction.options.getBoolean("safe_mode") ?? false;
+        const loraPreset1 = interaction.options.getString("lora_preset_1") || "none";
+        const loraPreset2 = interaction.options.getString("lora_preset_2") || "none";
+        const loraPreset3 = interaction.options.getString("lora_preset_3") || "none";
+        const customLora1 = interaction.options.getString("custom_lora_1") || "";
+        const customLora1Weight = interaction.options.getNumber("custom_lora_1_weight") || 1.0;
+        const customLora2 = interaction.options.getString("custom_lora_2") || "";
+        const customLora2Weight = interaction.options.getNumber("custom_lora_2_weight") || 1.0;
+
+        if (!inputImage || !inputImage.url) {
+            return interaction.reply({ content: "❌ Please attach a primary input image to animate.", ephemeral: true });
+        }
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "pixel-perfect",
+                    prompt: prompt,
+                    image_url: inputImage.url,
+                    last_image_url: lastImage?.url || "",
+                    steps: String(steps),
+                    duration: duration,
+                    guidance_scale: String(guidanceScale),
+                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
+                    quality: quality,
+                    scheduler: scheduler,
+                    frame_multiplier: frameMultiplier,
+                    safe_mode: String(safeMode),
+                    lora_preset_1: loraPreset1,
+                    lora_preset_2: loraPreset2,
+                    lora_preset_3: loraPreset3,
+                    custom_lora_1: customLora1,
+                    custom_lora_1_weight: String(customLora1Weight),
+                    custom_lora_2: customLora2,
+                    custom_lora_2_weight: String(customLora2Weight),
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const loraInfo = [];
+            if (loraPreset1 !== "none") loraInfo.push(`Preset 1: ${loraPreset1}`);
+            if (loraPreset2 !== "none") loraInfo.push(`Preset 2: ${loraPreset2}`);
+            if (loraPreset3 !== "none") loraInfo.push(`Preset 3: ${loraPreset3}`);
+            if (customLora1) loraInfo.push(`Custom 1 (${customLora1Weight}x)`);
+            if (customLora2) loraInfo.push(`Custom 2 (${customLora2Weight}x)`);
+            const loraDisplay = loraInfo.length > 0 ? loraInfo.join(" | ") : "None";
+
+            const embed = new EmbedBuilder()
+                .setTitle("🎥 Xploit AI Lab — Perfect Pixel Engine 1.0")
+                .setColor("#9B59B6")
+                .setDescription("Dispatching to **Perfect Pixel Engine 1.0** — Premium Custom LoRA I2V 14B with **13-Second Max Studio Quality**!")
+                .addFields(
+                    { name: "🎬 Motion Prompt", value: `\`${prompt}\``, inline: false },
+                    { name: "🖼️ Input Frame", value: `[View Original](${inputImage.url})`, inline: true },
+                    { name: "🎞️ Last Frame", value: lastImage ? `[View](${lastImage.url})` : "`Not Provided`", inline: true },
+                    { name: "⏱️ Duration", value: `\`${duration} Seconds\` (Max 13s)`, inline: true },
+                    { name: "⚡ Steps", value: `\`${steps} Steps\``, inline: true },
+                    { name: "🎯 Guidance", value: `\`${guidanceScale}\``, inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
+                    { name: "🎨 Quality", value: `\`${quality}\``, inline: true },
+                    { name: "📊 Frame Multiplier", value: `\`${frameMultiplier}\``, inline: true },
+                    { name: "🔧 Scheduler", value: `\`${scheduler}\``, inline: true },
+                    { name: "🎭 LoRA Stack", value: `\`${loraDisplay}\``, inline: false },
+                    { name: "🖥️ Host Node", value: "`Localhost Cluster (70GB VRAM)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~3-5 Minutes`", inline: true },
+                )
+                .setThumbnail(inputImage.url)
+                .setFooter({ text: "⚡ Running on Localhost Dedicated Node (70GB Cluster) • Please wait ~3-5 minutes. Dropping in this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("Pixel-Perfect error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

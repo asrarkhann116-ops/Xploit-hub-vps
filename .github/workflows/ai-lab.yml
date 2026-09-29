@@ -2827,7 +2827,7 @@ jobs:
                     # Send generated artifact to user's DM & server audit log channel (1506768429107908719)
           if os.path.exists(output_path):
               headers = {"Authorization": f"Bot {discord_token}"}
-              if action in ("wan-video", "minimax-h3", "wan-animate", "viggle", "hq-video", "dream-video"):
+              if action in ("wan-video", "pixel-perfect", "minimax-h3", "wan-animate", "viggle", "hq-video", "dream-video"):
                   filename = "xploit_video.mp4"
                   mimetype = "video/mp4"
               elif action in ("triposplat", "tripo", "tripo-3d"):

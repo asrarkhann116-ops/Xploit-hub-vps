@@ -1149,6 +1149,14 @@ jobs:
 
               quality_val = os.environ.get("QUALITY", "normal")
               scheduler_val = os.environ.get("SCHEDULER", "euler")
+              # Map user-friendly scheduler names to API values
+              scheduler_mapping = {
+                  "euler": "FlowMatchEulerDiscrete",
+                  "ddim": "DEISMultistep",
+                  "dpm_solver": "DPMSolverMultistep"
+              }
+              scheduler_api = scheduler_mapping.get(scheduler_val, "UniPCMultistep")
+              
               frame_mult = os.environ.get("FRAME_MULTIPLIER", "32")
               try:
                   frame_mult_int = int(frame_mult)
@@ -1252,7 +1260,7 @@ jobs:
                       seed=rand_seed,
                       randomize_seed=True,
                       quality=10 if quality_val == "high" else 6,
-                      scheduler=scheduler_val,
+                      scheduler=scheduler_api,
                       flow_shift=3.0,
                       frame_multiplier=str(frame_mult_int),
                       safe_mode=safe_mode_bool,

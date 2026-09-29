@@ -1226,7 +1226,7 @@ jobs:
                   print(f"[*] Connecting to boroll2347/Wan_2.2_I2V_14B_Custom_Lora_hqdefault (Duration={video_duration}s)...")
                   client = Client("boroll2347/Wan_2.2_I2V_14B_Custom_Lora_hqdefault")
                   
-                  # Simplified API call matching standard Wan 2.2 structure
+                  # Full API call with all required custom LoRA parameters
                   result = client.predict(
                       input_image=handle_file(input_img_path),
                       last_image=handle_file(last_img_path) if has_last_image else None,
@@ -1244,6 +1244,22 @@ jobs:
                       frame_multiplier=frame_mult_int,
                       safe_mode=safe_mode_bool,
                       video_component=True,
+                      # Custom LoRA parameters (required by this space)
+                      my1_repo=custom_lora_1 if custom_lora_1 else "",
+                      my1_filename="",
+                      my1_weight=custom_lora_1_weight if custom_lora_1 else 1.0,
+                      my2_repo=custom_lora_2 if custom_lora_2 else "",
+                      my2_filename="",
+                      my2_weight=custom_lora_2_weight if custom_lora_2 else 1.0,
+                      my3_repo="",
+                      my3_filename="",
+                      my3_weight=1.0,
+                      my4_repo="",
+                      my4_filename="",
+                      my4_weight=1.0,
+                      my5_repo="",
+                      my5_filename="",
+                      my5_weight=1.0,
                       api_name="/generate_video"
                   )
                   vid_path = extract_path(result)
@@ -1254,83 +1270,9 @@ jobs:
                       ppe_success = True
                   else:
                       print(f"[-] Perfect Pixel Engine path not resolved from result: {result}")
-                      renew_tor_ip()
               except Exception as e:
                   print(f"[-] Perfect Pixel Engine error: {e}")
-                  renew_tor_ip()
-
-              # Fallback 1: STCM/wan2-2-fp8da-aoti-preview-2c-missionary (Unrestricted FP8DA AOTI)
-              if not ppe_success:
-                  try:
-                      print(f"[*] Fallback 1: STCM/wan2-2-fp8da-aoti-preview-2c-missionary (Duration={video_duration}s)...")
-                      client = Client("STCM/wan2-2-fp8da-aoti-preview-2c-missionary")
-                      result = client.predict(
-                          input_image=handle_file(input_img_path),
-                          last_image=handle_file(last_img_path) if has_last_image else None,
-                          prompt=prompt,
-                          steps=steps if steps <= 12 else 6,
-                          negative_prompt="blurry, distorted, low quality, static, artifacts",
-                          duration_seconds=video_duration,
-                          guidance_scale=guidance,
-                          guidance_scale_2=guidance,
-                          seed=rand_seed,
-                          randomize_seed=True,
-                          quality=6,
-                          scheduler=scheduler_val,
-                          flow_shift=3.0,
-                          frame_multiplier=frame_mult_int,
-                          safe_mode=safe_mode_bool,
-                          video_component=True,
-                          api_name="/generate_video"
-                      )
-                      vid_path = extract_path(result)
-                      if vid_path and os.path.exists(vid_path):
-                          import shutil
-                          shutil.copyfile(vid_path, video_output_path)
-                          print("[+] Perfect Pixel Engine Video Complete via STCM Fallback!")
-                          ppe_success = True
-                  except Exception as e_stcm:
-                      print(f"[-] STCM Fallback error: {e_stcm}")
-                      renew_tor_ip()
-
-              # Fallback 2: r3gm/wan2-2-fp8da-aoti-preview
-              if not ppe_success:
-                  try:
-                      print(f"[*] Fallback 2: r3gm/wan2-2-fp8da-aoti-preview (Duration={video_duration}s)...")
-                      client = Client("r3gm/wan2-2-fp8da-aoti-preview")
-                      result = client.predict(
-                          input_image=handle_file(input_img_path),
-                          last_image=handle_file(last_img_path) if has_last_image else None,
-                          prompt=prompt,
-                          steps=steps if steps <= 12 else 6,
-                          negative_prompt="blurry, distorted, low quality, static, artifacts",
-                          duration_seconds=video_duration,
-                          guidance_scale=guidance,
-                          guidance_scale_2=guidance,
-                          seed=rand_seed,
-                          randomize_seed=True,
-                          quality=6,
-                          scheduler=scheduler_val,
-                          flow_shift=3.0,
-                          frame_multiplier=frame_mult_int,
-                          video_component=True,
-                          safe_mode=safe_mode_bool,
-                          enable_safety_checker=safe_mode_bool,
-                          api_name="/generate_video"
-                      )
-                      vid_path = extract_path(result)
-                      if vid_path and os.path.exists(vid_path):
-                          import shutil
-                          shutil.copyfile(vid_path, video_output_path)
-                          print("[+] Perfect Pixel Engine Video Complete via r3gm Fallback!")
-                          ppe_success = True
-                  except Exception as e_r3gm:
-                      print(f"[-] r3gm Fallback error: {e_r3gm}")
-                      renew_tor_ip()
-
-              # No more fallbacks - if all fail, exit
-              if not ppe_success:
-                  print(f"[-] Perfect Pixel Engine FAILED after all fallback attempts.")
+                  print(f"[-] Perfect Pixel Engine FAILED. Exclusive model unavailable.")
                   sys.exit(1)
 
 

@@ -1541,6 +1541,7 @@ async function updateLiveMessage() {
 
         const embed = new EmbedBuilder()
             .setTitle("🛰️ Xploit HUB — Live Cluster Status")
+            .setDescription(clusterLines ? clusterLines.substring(0, 4090) : "✅ All clusters idle.")
             .setColor(free > 0 ? "#00FF00" : "#FF0000")
             .addFields(
                 {
@@ -1549,8 +1550,7 @@ async function updateLiveMessage() {
                     inline: true,
                 },
                 { name: "🟢 Free Slots", value: `\`${free}\``, inline: true },
-                { name: "⚡ Clusters", value: `\`${WORKER_POOL.length}\``, inline: true },
-                { name: "💻 Cluster Operations", value: clusterLines || "✅ All clusters idle." },
+                { name: "⚡ Clusters", value: `\`${WORKER_POOL.length}\``, inline: true }
             )
             .setFooter({ text: `Auto-updates every 30s | ${WORKER_POOL.length} cluster(s) active` })
             .setTimestamp();

@@ -38,7 +38,7 @@ jobs:
             target: "asrarkhann124-boop/Xploit-hub-vps"
           - name: Cluster-9
             token_secret: CLUSTER_9_PAT
-            target: "ayumi706/the-ai-comback"
+            target: "asrarkhann132-afk/maybe-we-need-deployment"
     steps:
       - name: Checkout Mother Repo
         uses: actions/checkout@v4

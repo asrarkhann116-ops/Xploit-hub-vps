@@ -17,15 +17,25 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Cluster-2
-            token_secret: CLUSTER_2_PAT
-            target: "asrarkhann131-star/Xploit-hub-vps"
+
           - name: Cluster-3
             token_secret: CLUSTER_3_PAT
             target: "asrarkhann125-cloud/Xploit-hub-vps"
           - name: Cluster-4
             token_secret: CLUSTER_4_PAT
             target: "asrarkhann127-glitch/Xploit-hub-vps"
+          - name: Cluster-5
+            token_secret: CLUSTER_5_PAT
+            target: "asrarkhann137-debug/xploit-hub-vp"
+          - name: Cluster-6
+            token_secret: CLUSTER_6_PAT
+            target: "asrarkhann120-hue/Xploit-hub-vps"
+          - name: Cluster-7
+            token_secret: CLUSTER_7_PAT
+            target: "asrarkhann128-png/Xploit-hub-vps"
+          - name: Cluster-8
+            token_secret: CLUSTER_8_PAT
+            target: "asrarkhann124-boop/Xploit-hub-vps"
     steps:
       - name: Checkout Mother Repo
         uses: actions/checkout@v4

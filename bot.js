@@ -123,13 +123,14 @@ function getNextWorker() {
     let best = WORKER_POOL[0];
     let bestLoad = Infinity;
     for (const w of WORKER_POOL) {
-        const load = db.sessions.filter(s => s.clusterId === w.id).length;
+        // failedLoad artificially bumps the load of a failing cluster so we don't pick it again immediately
+        const load = db.sessions.filter(s => s.clusterId === w.id).length + (w.failedLoad || 0);
         if (load < bestLoad && load < MAX_PER_CLUSTER) {
             bestLoad = load;
             best = w;
         }
     }
-    return best;
+    return best || WORKER_POOL[0];
 }
 
 // Smart Dispatch Proxy — ALL existing dispatch calls auto-route through this
@@ -139,12 +140,35 @@ const octokit = {
     _nextWorker: null,
     actions: {
         createWorkflowDispatch: async (params) => {
-            const worker = octokit._nextWorker || getNextWorker();
+            let worker = octokit._nextWorker || getNextWorker();
             octokit._nextWorker = null;
-            params.owner = worker.owner;
-            params.repo = worker.repo;
-            octokit._lastWorker = worker;
-            return worker.octokit.actions.createWorkflowDispatch(params);
+            
+            const maxRetries = 4;
+            let attempt = 0;
+            
+            while (attempt < maxRetries) {
+                try {
+                    params.owner = worker.owner;
+                    params.repo = worker.repo;
+                    octokit._lastWorker = worker;
+                    const res = await worker.octokit.actions.createWorkflowDispatch(params);
+                    // On success, reset any penalties
+                    worker.failedLoad = 0;
+                    return res;
+                } catch (error) {
+                    attempt++;
+                    console.error(`[Auto-Heal] Dispatch failed on ${worker.name} (Attempt ${attempt}/${maxRetries}):`, error.message);
+                    
+                    // Penalize this dead cluster so the load balancer ignores it for a while
+                    worker.failedLoad = (worker.failedLoad || 0) + 100;
+                    
+                    if (attempt < maxRetries) {
+                        worker = getNextWorker(); // Pick a new, healthy cluster
+                    } else {
+                        throw error; // All retries exhausted
+                    }
+                }
+            }
         },
     },
 };

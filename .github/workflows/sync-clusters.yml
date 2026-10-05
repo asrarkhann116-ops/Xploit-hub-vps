@@ -42,9 +42,6 @@ jobs:
           - name: Cluster-10
             token_secret: CLUSTER_10_PAT
             target: "lodudeveloper/miniature-spoon"
-          - name: Cluster-11
-            token_secret: CLUSTER_11_PAT
-            target: "mikoLanzo/my-journy-to-the-github"
     steps:
       - name: Checkout Mother Repo
         uses: actions/checkout@v4

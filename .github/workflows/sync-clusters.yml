@@ -36,6 +36,9 @@ jobs:
           - name: Cluster-8
             token_secret: CLUSTER_8_PAT
             target: "asrarkhann124-boop/Xploit-hub-vps"
+          - name: Cluster-9
+            token_secret: CLUSTER_9_PAT
+            target: "ayumi706/the-ai-comback"
     steps:
       - name: Checkout Mother Repo
         uses: actions/checkout@v4

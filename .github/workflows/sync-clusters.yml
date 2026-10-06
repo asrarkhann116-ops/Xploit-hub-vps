@@ -39,15 +39,6 @@ jobs:
           - name: Cluster-9
             token_secret: CLUSTER_9_PAT
             target: "asrarkhann132-afk/maybe-we-need-deployment"
-          - name: Cluster-11
-            token_secret: CLUSTER_11_PAT
-            target: "MrSanzzz/maybe-this-is-best-project"
-          - name: Cluster-12
-            token_secret: CLUSTER_12_PAT
-            target: "lolmentiome/where-is-git-huh"
-          - name: Cluster-13
-            token_secret: CLUSTER_13_PAT
-            target: "dumbahhdev/god-is-great"
     steps:
       - name: Checkout Mother Repo
         uses: actions/checkout@v4

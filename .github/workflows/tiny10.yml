@@ -260,19 +260,44 @@ jobs:
           [System.IO.File]::WriteAllText($chanFile, $chanJson, $utf8NoBOM)
           [System.IO.File]::WriteAllText($msgFile,  $msgJson,  $utf8NoBOM)
 
-          $AUTH   = "Authorization: Bot $TOKEN"
+                    $AUTH   = "Authorization: Bot $TOKEN"
           $dmSent = $false
 
-          $chanResp = curl.exe -s -X POST 'https://discord.com/api/v10/users/@me/channels' `
-            -H $AUTH -H 'Content-Type: application/json' --data "@$chanFile"
-          Write-Host "Chan resp: $chanResp"
-          $CID = ($chanResp | ConvertFrom-Json -ErrorAction SilentlyContinue).id
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            $chanResp = curl.exe -s -X POST 'https://discord.com/api/v10/users/@me/channels' `
+              -H $AUTH -H 'Content-Type: application/json' --data "@$chanFile"
+            Write-Host ("Chan resp attempt " + $attempt + ": " + $chanResp)
+            $chanObj = $chanResp | ConvertFrom-Json -ErrorAction SilentlyContinue
+            if ($chanObj.retry_after) {
+              $waitSec = [math]::Ceiling([double]$chanObj.retry_after) + (Get-Random -Minimum 1 -Maximum 3)
+              Write-Host ("Rate limited on channel create. Sleeping " + $waitSec + "s...")
+              Start-Sleep -Seconds $waitSec
+              continue
+            }
+            $CID = $chanObj.id
+            if ($CID) { break }
+            Start-Sleep -Seconds (Get-Random -Minimum 2 -Maximum 5)
+          }
 
           if ($CID) {
-            $sendResp = curl.exe -s -X POST "https://discord.com/api/v10/channels/$CID/messages" `
-              -H $AUTH -H 'Content-Type: application/json' --data "@$msgFile"
-            Write-Host "DM resp: $sendResp"
-            if ($sendResp -notmatch '"code"') { $dmSent = $true; Write-Host 'DM sent OK.' }
+            for ($attempt = 1; $attempt -le 5; $attempt++) {
+              $sendResp = curl.exe -s -X POST "https://discord.com/api/v10/channels/$CID/messages" `
+                -H $AUTH -H 'Content-Type: application/json' --data "@$msgFile"
+              Write-Host ("DM resp attempt " + $attempt + ": " + $sendResp)
+              $sendObj = $sendResp | ConvertFrom-Json -ErrorAction SilentlyContinue
+              if ($sendObj.retry_after) {
+                $waitSec = [math]::Ceiling([double]$sendObj.retry_after) + (Get-Random -Minimum 1 -Maximum 3)
+                Write-Host ("Rate limited on message send. Sleeping " + $waitSec + "s...")
+                Start-Sleep -Seconds $waitSec
+                continue
+              }
+              if ($sendResp -notmatch '"code"') {
+                $dmSent = $true
+                Write-Host 'DM sent OK.'
+                break
+              }
+              Start-Sleep -Seconds (Get-Random -Minimum 2 -Maximum 5)
+            }
           }
 
           if (-not $dmSent) {

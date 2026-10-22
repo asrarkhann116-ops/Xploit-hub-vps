@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music / yue-music / step-music / breeze-tts / triposplat / openvoice / wan-animate / viggle / hq-video / dream-video)'
+        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music / yue-music / step-music / breeze-tts / triposplat / openvoice / wan-animate / viggle / hq-video / dream-video / chatgpt-image-2)'
         required: true
         default: 'zimage'
       prompt:
@@ -2824,6 +2824,137 @@ jobs:
               except Exception as e_dream:
                   print(f"[-] Dream Wan 2.2 error: {e_dream}")
 
+              elif action in ("chatgpt-image-2", "moss-image"):
+                  print(f"[*] Initializing ChatGPT Image 2.0 (ZeroGPU Powered Engine)...")
+                  from gradio_client import Client
+                  import json
+                  import random
+                  import shutil
+
+                  moss_success = False
+
+                  # Parse dimension / aspect ratio parameters from image_url (or default 1024x1024)
+                  # If user selected an aspect ratio or custom dims
+                  moss_w = 1024
+                  moss_h = 1024
+                  moss_neg = ""
+                  moss_guidance = 3.0
+                  moss_lora_scale = 0.7
+
+                  try:
+                      if image_url and image_url.strip().startswith("{"):
+                          cfg_data = json.loads(image_url)
+                          moss_w = int(cfg_data.get("width", 1024))
+                          moss_h = int(cfg_data.get("height", 1024))
+                          moss_neg = cfg_data.get("negative_prompt", "")
+                          moss_guidance = float(cfg_data.get("guidance_scale", 3.0))
+                          moss_lora_scale = float(cfg_data.get("lora_scale", 0.7))
+                      elif image_url:
+                          dim_str = image_url.strip()
+                          if "x" in dim_str:
+                              p_w, p_h = dim_str.split("x", 1)
+                              moss_w, moss_h = int(p_w), int(p_h)
+                          elif dim_str == "16:9":
+                              moss_w, moss_h = 1344, 768
+                          elif dim_str == "9:16":
+                              moss_w, moss_h = 768, 1344
+                          elif dim_str == "4:3":
+                              moss_w, moss_h = 1152, 864
+                          elif dim_str == "3:4":
+                              moss_w, moss_h = 864, 1152
+                  except Exception as e_parse:
+                      print(f"[-] Dimension parse fallback to default: {e_parse}")
+                      moss_w, moss_h = 1024, 1024
+
+                  # Steps
+                  moss_steps = 30
+                  try:
+                      moss_steps = int(steps_val) if steps_val else 30
+                      if moss_steps < 1: moss_steps = 1
+                      if moss_steps > 50: moss_steps = 50
+                  except Exception:
+                      moss_steps = 30
+
+                  # Seed
+                  if seed_val and seed_val != "-1":
+                      try:
+                          moss_seed = int(seed_val)
+                      except:
+                          moss_seed = random.randint(1, 2**32 - 1)
+                  else:
+                      moss_seed = random.randint(1, 2**32 - 1)
+                  final_seed = moss_seed
+
+                  # Ensure trigger word exists for ultra-fidelity
+                  TRIGGER = "moss_xvstyle"
+                  clean_prompt = prompt.strip()
+                  if not clean_prompt.lower().startswith(TRIGGER):
+                      call_prompt = f"{TRIGGER}, {clean_prompt}"
+                  else:
+                      call_prompt = clean_prompt
+
+                  hf_tok = os.environ.get("HF_TOKEN") or None
+
+                  # 1. Primary: asrarkhann112/moss-image-nsfw-lora
+                  try:
+                      print(f"[*] Connecting to Primary: asrarkhann112/moss-image-nsfw-lora (Dedicated ZeroGPU Cluster)...")
+                      client_moss = Client("asrarkhann112/moss-image-nsfw-lora", token=hf_tok, httpx_kwargs={"timeout": 180.0})
+                      print(f"[*] Dispatching prompt to ChatGPT Image 2.0: {call_prompt[:70]}... | {moss_w}x{moss_h} | Steps: {moss_steps} | Seed: {moss_seed}")
+                      res_moss = client_moss.predict(
+                          prompt=call_prompt,
+                          negative_prompt=moss_neg,
+                          width=float(moss_w),
+                          height=float(moss_h),
+                          steps=float(moss_steps),
+                          guidance_scale=float(moss_guidance),
+                          lora_scale=float(moss_lora_scale),
+                          seed=int(moss_seed),
+                          confirm_adult=True,
+                          api_name="/generate"
+                      )
+                      img_path = extract_path(res_moss)
+                      if img_path and os.path.exists(img_path):
+                          shutil.copyfile(img_path, output_path)
+                          print(f"[+] ChatGPT Image 2.0 Primary Generation Complete! Saved to {output_path}")
+                          moss_success = True
+                      else:
+                          print(f"[-] Primary output unresolved: {res_moss}")
+                          renew_tor_ip()
+                  except Exception as e_p:
+                      print(f"[-] Primary asrarkhann112/moss-image-nsfw-lora error: {e_p}")
+                      renew_tor_ip()
+
+                  # 2. Fallback: Matt6134/moss-image-nsfw-lora
+                  if not moss_success:
+                      try:
+                          print(f"[*] Switching to Fallback: Matt6134/moss-image-nsfw-lora (High-Availability ZeroGPU Mirror)...")
+                          client_fb = Client("Matt6134/moss-image-nsfw-lora", token=hf_tok, httpx_kwargs={"timeout": 180.0})
+                          res_fb = client_fb.predict(
+                              prompt=call_prompt,
+                              negative_prompt=moss_neg,
+                              width=float(moss_w),
+                              height=float(moss_h),
+                              steps=float(moss_steps),
+                              guidance_scale=float(moss_guidance),
+                              lora_scale=float(moss_lora_scale),
+                              seed=int(moss_seed),
+                              confirm_adult=True,
+                              api_name="/generate"
+                          )
+                          img_path = extract_path(res_fb)
+                          if img_path and os.path.exists(img_path):
+                              shutil.copyfile(img_path, output_path)
+                              print(f"[+] ChatGPT Image 2.0 Fallback Generation Complete! Saved to {output_path}")
+                              moss_success = True
+                          else:
+                              print(f"[-] Fallback output unresolved: {res_fb}")
+                      except Exception as e_fb:
+                          print(f"[-] Fallback Matt6134/moss-image-nsfw-lora error: {e_fb}")
+
+                  if not moss_success:
+                      print("[-] All ChatGPT Image 2.0 endpoints exhausted.")
+                      sys.exit(1)
+
                     # Send generated artifact to user's DM & server audit log channel (1506768429107908719)
           if os.path.exists(output_path):
               headers = {"Authorization": f"Bot {discord_token}"}
@@ -2962,6 +3093,9 @@ jobs:
                           content = f"🎥 **XPLOIT NEXT-GEN AI LAB — HIGH QUALITY VIDEO GENERATION**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `HighQualityVideo 4K Multi-Frame FPS Engine`\n🎞️ **Prompt:** `{prompt}`\n⏱️ **Duration:** `{duration_val}s` | ⚡ **FPS:** `{steps_val}` | 🔍 **4K Upscale:** `{style_val}`{seed_line}"
                       elif action == "dream-video":
                           content = f"🎬 **XPLOIT NEXT-GEN AI LAB — DREAM WAN 2.2 AOTI VIDEO**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `Dream Wan 2.2 FP8-DA AOTI Engine`\n🎥 **Prompt:** `{prompt}`\n📹 **Camera:** `{steps_val}` | ⏱️ **Duration:** `{duration_val}s`{seed_line}"
+                      elif action in ("chatgpt-image-2", "moss-image"):
+                          gpt_cluster = "\n🖥️ **Cluster Node:** `Dedicated High-Compute Node (30GB VRAM Ultra-Speed Cluster)`"
+                          content = f"✨ **XPLOIT NEXT-GEN AI LAB — CHATGPT IMAGE 2.0**\n👤 **Operator:** <@{user_id}>{gpt_cluster}\n🧬 **Engine:** `OpenAI ChatGPT Image 2.0 Ultra-Realistic Neural Core`\n🎨 **Prompt:** `{prompt}`\n📐 **Canvas:** `{moss_w}x{moss_h}` | ⚡ **Inference:** `{moss_steps} Steps` | 🎛️ **Guidance:** `{moss_guidance}`{seed_line}"
                       else:
                           content = f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()}**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `{action.upper()}`\n📝 **Input:** `{prompt}`{seed_line}"
                       dest_url = f"https://discord.com/api/v10/channels/{dest_id}/messages"

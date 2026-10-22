@@ -53,6 +53,7 @@ const AI_COMMAND_CHANNELS = {
     "viggle": "1549950029999902820",
     "hq-video": "1549950167908753478",
     "dream-video": "1549951104253435924",
+    "chatgpt-image-2": "1562818787512680559",
 };
 
 const AI_LAB_COMMANDS = new Set([
@@ -81,6 +82,7 @@ const AI_LAB_COMMANDS = new Set([
     "viggle",
     "hq-video",
     "dream-video",
+    "chatgpt-image-2",
 ]);
 
 const client = new Client({
@@ -1435,6 +1437,64 @@ const commands = [
             o
                 .setName("seed")
                 .setDescription("Seed number (default: random)")
+                .setRequired(false),
+        ),
+    new SlashCommandBuilder()
+        .setName("chatgpt-image-2")
+        .setDescription("✨ OpenAI ChatGPT Image 2.0 (Ultra-Realistic Neural Photorealism & Multi-Aspect)")
+        .addStringOption((o) =>
+            o
+                .setName("prompt")
+                .setDescription("Describe the image you want ChatGPT Image 2 to render")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("aspect_ratio")
+                .setDescription("Canvas Aspect Ratio / Resolution (default: 1:1 Square 1024x1024)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "1:1 Square (1024x1024)", value: "1:1" },
+                    { name: "16:9 Landscape (1344x768)", value: "16:9" },
+                    { name: "9:16 Portrait (768x1344)", value: "9:16" },
+                    { name: "4:3 Cinematic (1152x864)", value: "4:3" },
+                    { name: "3:4 Poster (864x1152)", value: "3:4" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("negative_prompt")
+                .setDescription("Elements to avoid (default: empty)")
+                .setRequired(false),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("steps")
+                .setDescription("Inference steps (default: 30, range: 1-50)")
+                .setRequired(false)
+                .setMinValue(1)
+                .setMaxValue(50),
+        )
+        .addNumberOption((o) =>
+            o
+                .setName("guidance_scale")
+                .setDescription("Guidance scale / CFG (default: 3.0, range: 0-10)")
+                .setRequired(false)
+                .setMinValue(0)
+                .setMaxValue(10),
+        )
+        .addNumberOption((o) =>
+            o
+                .setName("lora_scale")
+                .setDescription("Styling LoRA strength (default: 0.7, range: 0.0-1.5)")
+                .setRequired(false)
+                .setMinValue(0.0)
+                .setMaxValue(1.5),
+        )
+        .addIntegerOption((o) =>
+            o
+                .setName("seed")
+                .setDescription("Random seed (-1 or leave empty for random)")
                 .setRequired(false),
         ),
 ].map((c) => c.toJSON());
@@ -3099,6 +3159,87 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
             console.error("Dream Video error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /chatgpt-image-2
+    if (commandName === "chatgpt-image-2") {
+        const prompt = interaction.options.getString("prompt");
+        const aspectRatio = interaction.options.getString("aspect_ratio") || "1:1";
+        const negativePrompt = interaction.options.getString("negative_prompt") || "";
+        const steps = interaction.options.getInteger("steps") || 30;
+        const guidanceScale = interaction.options.getNumber("guidance_scale") ?? 3.0;
+        const loraScale = interaction.options.getNumber("lora_scale") ?? 0.7;
+        const seed = interaction.options.getInteger("seed");
+
+        // Map aspect ratio to dimensions
+        let width = 1024;
+        let height = 1024;
+        if (aspectRatio === "16:9") {
+            width = 1344;
+            height = 768;
+        } else if (aspectRatio === "9:16") {
+            width = 768;
+            height = 1344;
+        } else if (aspectRatio === "4:3") {
+            width = 1152;
+            height = 864;
+        } else if (aspectRatio === "3:4") {
+            width = 864;
+            height = 1152;
+        }
+
+        const configPayload = JSON.stringify({
+            width,
+            height,
+            negative_prompt: negativePrompt,
+            guidance_scale: guidanceScale,
+            lora_scale: loraScale,
+        });
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "chatgpt-image-2",
+                    prompt: prompt,
+                    image_url: configPayload,
+                    steps: String(steps),
+                    duration: "",
+                    seed: seed !== null && seed !== undefined ? String(seed) : "-1",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("✨ Xploit AI Lab — OpenAI ChatGPT Image 2.0")
+                .setColor("#10A37F")
+                .setDescription("Dispatching to **ChatGPT Image 2.0 Neural Engine** with Real-time Diffusion & High-Fidelity Sampling!")
+                .addFields(
+                    { name: "🎨 Prompt", value: `\`${prompt.length > 250 ? prompt.slice(0, 247) + "..." : prompt}\``, inline: false },
+                    { name: "📐 Canvas", value: `\`${aspectRatio} (${width}x${height})\``, inline: true },
+                    { name: "⚡ Inference Steps", value: `\`${steps} Steps\``, inline: true },
+                    { name: "🎛️ Guidance (CFG)", value: `\`${guidanceScale}\``, inline: true },
+                    { name: "🧬 Neural Style LoRA", value: `\`${loraScale}\``, inline: true },
+                    { name: "🎲 Seed", value: seed !== null && seed !== undefined ? `\`${seed}\`` : "`Randomized`", inline: true },
+                    { name: "🖥️ Host Node", value: "`Dedicated Supercomputer (30GB VRAM Ultra-Speed Cluster)`", inline: true },
+                    { name: "⏳ Est. Render", value: "`~20 - 45 Seconds`", inline: true },
+                )
+                .setFooter({ text: "⚡ Powered by OpenAI ChatGPT Image 2.0 • 30GB VRAM High-Compute Node • Dropping in this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("ChatGPT Image 2 error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

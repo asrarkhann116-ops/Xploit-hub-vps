@@ -110,8 +110,7 @@ jobs:
           sudo systemctl start tor
           echo "✅ Tor Daemon Active on 127.0.0.1:9050 (IP Anonymity Unlocked)"
           pip3 install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          pip3 install --no-cache-dir git+https://github.com/huggingface/diffusers.git -U
-          pip3 install --no-cache-dir transformers accelerate safetensors requests pillow gradio_client pysocks stem soundfile kokoro
+          pip3 install --no-cache-dir diffusers transformers accelerate safetensors requests pillow gradio_client pysocks stem soundfile
 
       - name: Execute Unrestricted Next-Gen AI Pipeline
         env:

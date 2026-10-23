@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music / yue-music / step-music / breeze-tts / triposplat / openvoice / wan-animate / viggle / hq-video / dream-video / chatgpt-image-2)'
+        description: 'AI Action Type (zimage / qwen-edit / flux-klein / wan-video / krea-2 / minimax-h3 / kokoro-tts / qwen-voice / minimax-music / yue-music / step-music / breeze-tts / triposplat / openvoice / wan-animate / viggle / hq-video / dream-video / chatgpt-image-2 / drama-3)'
         required: true
         default: 'zimage'
       prompt:
@@ -2825,6 +2825,82 @@ jobs:
               except Exception as e_dream:
                   print(f"[-] Dream Wan 2.2 error: {e_dream}")
 
+          elif action == "drama-3":
+              print(f"[*] Initializing Fish Audio Drama 3 Neural TTS Engine...")
+              from gradio_client import Client
+              import json
+              import shutil
+
+              drama_success = False
+              drama_mode = "Surprise"
+              drama_character = "Narrator"
+              drama_description = ""
+              drama_scene = ""
+              drama_voice_slot = "clone1"
+              drama_transcript = ""
+              drama_temperature = 1.0
+              drama_top_p = 0.9
+              drama_top_k = 0
+
+              try:
+                  if image_url and image_url.strip().startswith("{"):
+                      cfg = json.loads(image_url)
+                      drama_mode = cfg.get("mode", "Surprise")
+                      drama_character = cfg.get("character", "Narrator")
+                      drama_description = cfg.get("description", "")
+                      drama_scene = cfg.get("scene", "")
+                      drama_voice_slot = cfg.get("voice_slot", "clone1")
+                      drama_transcript = cfg.get("transcript", "")
+                      drama_temperature = float(cfg.get("temperature", 1.0))
+                      drama_top_p = float(cfg.get("top_p", 0.9))
+                      drama_top_k = float(cfg.get("top_k", 0))
+              except Exception as e_cfg:
+                  print(f"[-] Drama-3 config parse fallback: {e_cfg}")
+
+              # Map Discord mode labels to Drama-3 API mode strings
+              mode_map = {"Surprise": "Surprise", "Design": "Design", "Clone": "Clone"}
+              api_mode = mode_map.get(drama_mode, "Surprise")
+
+              output_path = "/tmp/ai_lab/drama3_output.wav"
+
+              try:
+                  hf_tok = os.environ.get("HF_TOKEN") or None
+                  print(f"[*] Connecting to fishaudio/Drama-3 (ZeroGPU)...")
+                  client_drama = Client("fishaudio/Drama-3", token=hf_tok, httpx_kwargs={"timeout": 240.0})
+                  print(f"[*] Dispatching: mode={api_mode} | char={drama_character} | temp={drama_temperature} | top_p={drama_top_p} | top_k={drama_top_k}")
+                  res_drama = client_drama.predict(
+                      text=prompt,
+                      mode=api_mode,
+                      voice=drama_voice_slot,
+                      transcript=drama_transcript,
+                      name=drama_character,
+                      description=drama_description,
+                      scene=drama_scene,
+                      temperature=drama_temperature,
+                      top_p=drama_top_p,
+                      top_k=drama_top_k,
+                      api_name="/perform"
+                  )
+                  print(f"[*] Drama-3 raw result: {res_drama}")
+                  # Result is (audio_path_or_m3u8, metrics_str, dropdown_update)
+                  audio_result = res_drama[0] if isinstance(res_drama, (list, tuple)) else res_drama
+                  audio_src = extract_path(audio_result) if not isinstance(audio_result, str) else audio_result
+
+                  if audio_src and os.path.exists(audio_src):
+                      shutil.copyfile(audio_src, output_path)
+                      print(f"[+] Drama-3 audio saved: {output_path}")
+                      drama_success = True
+                  else:
+                      print(f"[-] Drama-3 audio path not found: {audio_src}")
+                      renew_tor_ip()
+              except Exception as e_drama:
+                  print(f"[-] Drama-3 error: {e_drama}")
+                  renew_tor_ip()
+
+              if not drama_success:
+                  print("[-] Drama-3 generation failed.")
+                  sys.exit(1)
+
           elif action in ("chatgpt-image-2", "moss-image"):
               print(f"[*] Initializing ChatGPT Image 2.0 (ZeroGPU Powered Engine)...")
               from gradio_client import Client
@@ -2974,6 +3050,10 @@ jobs:
                   ext = os.path.splitext(output_path)[1].lower()
                   filename = f"xploit_openvoice{ext if ext else '.mp3'}"
                   mimetype = "audio/mpeg" if ext == ".mp3" else "audio/wav"
+              elif action == "drama-3":
+                  ext = os.path.splitext(output_path)[1].lower()
+                  filename = f"xploit_drama3{ext if ext else '.wav'}"
+                  mimetype = "audio/wav" if ext in (".wav", "") else "audio/mpeg"
               elif action in ("kokoro-tts", "qwen-voice", "minimax-music", "yue-music", "yue", "step-music", "breeze-tts", "breeze"):
                   ext = os.path.splitext(output_path)[1].lower()
                   if ext == ".flac":
@@ -3097,6 +3177,19 @@ jobs:
                       elif action in ("chatgpt-image-2", "moss-image"):
                           gpt_cluster = "\n🖥️ **Cluster Node:** `Dedicated High-Compute Node (30GB VRAM Ultra-Speed Cluster)`"
                           content = f"✨ **XPLOIT NEXT-GEN AI LAB — CHATGPT IMAGE 2.0**\n👤 **Operator:** <@{user_id}>{gpt_cluster}\n🧬 **Engine:** `OpenAI ChatGPT Image 2.0 Ultra-Realistic Neural Core`\n🎨 **Prompt:** `{prompt}`\n📐 **Canvas:** `{moss_w}x{moss_h}` | ⚡ **Inference:** `{moss_steps} Steps` | 🎛️ **Guidance:** `{moss_guidance}`{seed_line}"
+                      elif action == "drama-3":
+                          d3_mode_label = drama_mode if drama_success else "Surprise"
+                          d3_char = drama_character if drama_success else "Narrator"
+                          d3_temp = drama_temperature if drama_success else 1.0
+                          d3_top_p = drama_top_p if drama_success else 0.9
+                          content = (
+                              f"\U0001f3ad **XPLOIT NEXT-GEN AI LAB \u2014 FISH AUDIO DRAMA 3**\n"
+                              f"\U0001f464 **Operator:** <@{user_id}>{cluster_info}\n"
+                              f"\U0001f9ec **Engine:** `Fish Audio Drama 3 ZeroGPU Neural TTS`\n"
+                              f"\U0001f4dc **Script:** `{prompt[:150]}{'...' if len(prompt) > 150 else ''}` \n"
+                              f"\U0001f399 **Mode:** `{d3_mode_label}` | \U0001f464 **Character:** `{d3_char}`\n"
+                              f"\U0001f321 **Temp:** `{d3_temp}` | \U0001f39b **Top-P:** `{d3_top_p}`"
+                          )
                       else:
                           content = f"🎬 **XPLOIT NEXT-GEN AI LAB — {action.upper()}**\n👤 **Operator:** <@{user_id}>{cluster_info}\n🧬 **Engine:** `{action.upper()}`\n📝 **Input:** `{prompt}`{seed_line}"
                       dest_url = f"https://discord.com/api/v10/channels/{dest_id}/messages"

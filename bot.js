@@ -54,6 +54,7 @@ const AI_COMMAND_CHANNELS = {
     "hq-video": "1549950167908753478",
     "dream-video": "1549951104253435924",
     "chatgpt-image-2": "1562818787512680559",
+    "drama-3": "1563295329871335515",
 };
 
 const AI_LAB_COMMANDS = new Set([
@@ -83,6 +84,7 @@ const AI_LAB_COMMANDS = new Set([
     "hq-video",
     "dream-video",
     "chatgpt-image-2",
+    "drama-3",
 ]);
 
 const client = new Client({
@@ -1496,6 +1498,85 @@ const commands = [
                 .setName("seed")
                 .setDescription("Random seed (-1 or leave empty for random)")
                 .setRequired(false),
+        ),
+    new SlashCommandBuilder()
+        .setName("drama-3")
+        .setDescription("🎭 Fish Audio Drama 3 — Neural Character Voice Synthesis & Dramatic Speech Engine")
+        .addStringOption((o) =>
+            o
+                .setName("text")
+                .setDescription("Script / dialogue text to perform (supports emotion tags like [laughs], [sighs])")
+                .setRequired(true),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("mode")
+                .setDescription("Voice mode (default: Surprise — AI picks dramatic voice)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "🎲 Surprise — AI selects a dramatic voice", value: "Surprise" },
+                    { name: "🎨 Design — Custom character voice design", value: "Design" },
+                    { name: "🎤 Clone — Clone an uploaded reference voice", value: "Clone" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("character")
+                .setDescription("Character name (used in Design mode, e.g. Captain, Witch, Hero)")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("description")
+                .setDescription("Voice description (Design mode, e.g. gravelly old male, weathered and slow)")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("scene")
+                .setDescription("Scene context (Design mode, e.g. storm-battered tavern at the harbor)")
+                .setRequired(false),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("voice_slot")
+                .setDescription("Clone voice slot to use (Clone mode only, default: clone1)")
+                .setRequired(false)
+                .addChoices(
+                    { name: "Clone Slot 1", value: "clone1" },
+                    { name: "Clone Slot 2", value: "clone2" },
+                    { name: "Clone Slot 3", value: "clone3" },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName("transcript")
+                .setDescription("What the reference clip says (Clone mode — improves clone accuracy)")
+                .setRequired(false),
+        )
+        .addNumberOption((o) =>
+            o
+                .setName("temperature")
+                .setDescription("Creativity / randomness (default: 1.0, range: 0.3–1.3)")
+                .setRequired(false)
+                .setMinValue(0.3)
+                .setMaxValue(1.3),
+        )
+        .addNumberOption((o) =>
+            o
+                .setName("top_p")
+                .setDescription("Nucleus sampling probability (default: 0.9, range: 0.5–1.0)")
+                .setRequired(false)
+                .setMinValue(0.5)
+                .setMaxValue(1.0),
+        )
+        .addNumberOption((o) =>
+            o
+                .setName("top_k")
+                .setDescription("Top-K candidate tokens (default: 0 = unlimited, range: 0–100)")
+                .setRequired(false)
+                .setMinValue(0)
+                .setMaxValue(100),
         ),
 ].map((c) => c.toJSON());
 
@@ -3240,6 +3321,87 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.editReply({ embeds: [embed] });
         } catch (err) {
             console.error("ChatGPT Image 2 error:", err);
+            return interaction.editReply({
+                content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
+            });
+        }
+    }
+
+    // /drama-3
+    if (commandName === "drama-3") {
+        const text = interaction.options.getString("text");
+        const mode = interaction.options.getString("mode") || "Surprise";
+        const character = interaction.options.getString("character") || "Narrator";
+        const description = interaction.options.getString("description") || "";
+        const scene = interaction.options.getString("scene") || "";
+        const voiceSlot = interaction.options.getString("voice_slot") || "clone1";
+        const transcript = interaction.options.getString("transcript") || "";
+        const temperature = interaction.options.getNumber("temperature") ?? 1.0;
+        const topP = interaction.options.getNumber("top_p") ?? 0.9;
+        const topK = interaction.options.getNumber("top_k") ?? 0;
+
+        const dramaConfig = JSON.stringify({
+            mode,
+            character,
+            description,
+            scene,
+            voice_slot: voiceSlot,
+            transcript,
+            temperature,
+            top_p: topP,
+            top_k: topK,
+        });
+
+        const modeLabels = {
+            Surprise: "🎲 Surprise (AI Voice)",
+            Design: `🎨 Design — ${character}`,
+            Clone: `🎤 Clone — Slot ${voiceSlot}`,
+        };
+
+        await interaction.deferReply({ ephemeral: false });
+
+        try {
+            await octokit.actions.createWorkflowDispatch({
+                owner: REPO_OWNER,
+                repo: REPO_NAME,
+                workflow_id: "ai-lab.yml",
+                ref: "main",
+                inputs: {
+                    action_type: "drama-3",
+                    prompt: text,
+                    image_url: dramaConfig,
+                    steps: "",
+                    duration: "",
+                    seed: "-1",
+                    user_id: interaction.user.id,
+                    channel_id: interaction.channelId,
+                },
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle("🎭 Xploit AI Lab — Fish Audio Drama 3")
+                .setColor("#FF6B35")
+                .setDescription(`Synthesizing dramatic speech via **Fish Audio Drama 3 Neural Engine** — **${modeLabels[mode]}** mode active!`)
+                .addFields(
+                    { name: "📜 Script", value: `\`${text.length > 250 ? text.slice(0, 247) + "..." : text}\``, inline: false },
+                    { name: "🎙️ Voice Mode", value: `\`${modeLabels[mode]}\``, inline: true },
+                    ...(mode === "Design" ? [
+                        { name: "👤 Character", value: `\`${character}\``, inline: true },
+                        ...(description ? [{ name: "🗣️ Voice Style", value: `\`${description.slice(0, 100)}\``, inline: true }] : []),
+                        ...(scene ? [{ name: "🎬 Scene", value: `\`${scene.slice(0, 100)}\``, inline: true }] : []),
+                    ] : []),
+                    ...(mode === "Clone" ? [{ name: "🎤 Clone Slot", value: `\`${voiceSlot}\``, inline: true }] : []),
+                    { name: "🌡️ Temperature", value: `\`${temperature}\``, inline: true },
+                    { name: "🎛️ Top-P", value: `\`${topP}\``, inline: true },
+                    { name: "🔢 Top-K", value: `\`${topK === 0 ? "Unlimited" : topK}\``, inline: true },
+                    { name: "⏳ Est. Render", value: "`~30 - 90 Seconds`", inline: true },
+                )
+                .setFooter({ text: "⚡ Powered by Fish Audio Drama 3 ZeroGPU • Neural TTS Engine • Dropping audio in this channel." })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            console.error("Drama-3 TTS error:", err);
             return interaction.editReply({
                 content: `❌ **Dispatch Error:** ${err.message || "Failed to trigger AI Lab runner"}.`,
             });

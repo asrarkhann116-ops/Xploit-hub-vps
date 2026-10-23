@@ -106,11 +106,10 @@ jobs:
       - name: Setup Bleeding-Edge AI Environment + Tor Anti-RateLimit Engine
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y python3 python3-pip curl jq git tor ffmpeg
+          sudo apt-get install -y --no-install-recommends curl jq git tor
           sudo systemctl start tor
           echo "✅ Tor Daemon Active on 127.0.0.1:9050 (IP Anonymity Unlocked)"
-          pip3 install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          pip3 install --no-cache-dir diffusers transformers accelerate safetensors requests pillow gradio_client pysocks stem soundfile
+          pip3 install --no-cache-dir requests pillow gradio_client pysocks stem soundfile
 
       - name: Execute Unrestricted Next-Gen AI Pipeline
         env:
@@ -146,7 +145,6 @@ jobs:
           import os
           import sys
           import requests
-          import torch
           from PIL import Image
           import io
 
@@ -291,17 +289,21 @@ jobs:
                       continue
 
               if not success:
-                  print("[-] All GPU mirrors busy, triggering direct local 23GB memory pipeline fallback...")
-                  from diffusers import DiffusionPipeline
-                  pipe = DiffusionPipeline.from_pretrained(
-                      "Tongyi-MAI/Z-Image-Turbo",
-                      torch_dtype=torch.float32,
-                      low_cpu_mem_usage=True
-                  )
-                  pipe = bypass_safety(pipe)
-                  pipe.to("cpu")
-                  image = pipe(prompt=prompt, num_inference_steps=steps, guidance_scale=0.0).images[0]
-                  image.save(output_path, format="PNG")
+                  print("[-] All GPU mirrors busy, triggering local fallback...")
+                  try:
+                      import torch
+                      from diffusers import DiffusionPipeline
+                      pipe = DiffusionPipeline.from_pretrained(
+                          "Tongyi-MAI/Z-Image-Turbo",
+                          torch_dtype=torch.float32,
+                          low_cpu_mem_usage=True
+                      )
+                      pipe = bypass_safety(pipe)
+                      pipe.to("cpu")
+                      image = pipe(prompt=prompt, num_inference_steps=steps, guidance_scale=0.0).images[0]
+                      image.save(output_path, format="PNG")
+                  except Exception as e_local:
+                      print(f"[-] Local CPU fallback skipped: {e_local}")
 
           elif action == "qwen-edit":
               print(f"[*] Loading Qwen Rapid AIO for prompt: {prompt}")

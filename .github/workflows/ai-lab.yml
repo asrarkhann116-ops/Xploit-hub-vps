@@ -2917,6 +2917,8 @@ jobs:
               moss_neg = ""
               moss_guidance = 3.0
               moss_lora_scale = 0.7
+              moss_realistic_scale = 1.0
+              DEFAULT_NEGATIVE = "blurry, low quality, distorted, bad anatomy, deformed fingers, extra limbs, CGI, render, 3d, cartoon, airbrushed, plastic skin, oversaturated, watermark"
 
               try:
                   if image_url and image_url.strip().startswith("{"):
@@ -2926,6 +2928,7 @@ jobs:
                       moss_neg = cfg_data.get("negative_prompt", "")
                       moss_guidance = float(cfg_data.get("guidance_scale", 3.0))
                       moss_lora_scale = float(cfg_data.get("lora_scale", 0.7))
+                      moss_realistic_scale = float(cfg_data.get("realistic_scale", 1.0))
                   elif image_url:
                       dim_str = image_url.strip()
                       if "x" in dim_str:
@@ -2942,6 +2945,9 @@ jobs:
               except Exception as e_parse:
                   print(f"[-] Dimension parse fallback to default: {e_parse}")
                   moss_w, moss_h = 1024, 1024
+
+              if not moss_neg or not moss_neg.strip():
+                  moss_neg = DEFAULT_NEGATIVE
 
               # Steps
               moss_steps = 30
@@ -2972,7 +2978,7 @@ jobs:
 
               hf_tok = os.environ.get("HF_TOKEN") or None
 
-              # 1. Primary: asrarkhann112/moss-image-nsfw-lora
+              # Primary (Dedicated ZeroGPU Cluster - No censor, no fallback)
               try:
                   print(f"[*] Connecting to Primary: asrarkhann112/moss-image-nsfw-lora (Dedicated ZeroGPU Cluster)...")
                   client_moss = Client("asrarkhann112/moss-image-nsfw-lora", token=hf_tok, httpx_kwargs={"timeout": 180.0})
@@ -2985,51 +2991,23 @@ jobs:
                       steps=float(moss_steps),
                       guidance_scale=float(moss_guidance),
                       lora_scale=float(moss_lora_scale),
+                      realistic_scale=float(moss_realistic_scale),
+                      add_trigger=True,
                       seed=int(moss_seed),
-                      confirm_adult=True,
                       api_name="/generate"
                   )
                   img_path = extract_path(res_moss)
                   if img_path and os.path.exists(img_path):
                       shutil.copyfile(img_path, output_path)
-                      print(f"[+] ChatGPT Image 2.0 Primary Generation Complete! Saved to {output_path}")
+                      print(f"[+] ChatGPT Image 2.0 Generation Complete! Saved to {output_path}")
                       moss_success = True
                   else:
-                      print(f"[-] Primary output unresolved: {res_moss}")
-                      renew_tor_ip()
+                      print(f"[-] Output unresolved: {res_moss}")
               except Exception as e_p:
                   print(f"[-] Primary asrarkhann112/moss-image-nsfw-lora error: {e_p}")
-                  renew_tor_ip()
-
-              # 2. Fallback: Matt6134/moss-image-nsfw-lora
-              if not moss_success:
-                  try:
-                      print(f"[*] Switching to Fallback: Matt6134/moss-image-nsfw-lora (High-Availability ZeroGPU Mirror)...")
-                      client_fb = Client("Matt6134/moss-image-nsfw-lora", token=hf_tok, httpx_kwargs={"timeout": 180.0})
-                      res_fb = client_fb.predict(
-                          prompt=call_prompt,
-                          negative_prompt=moss_neg,
-                          width=float(moss_w),
-                          height=float(moss_h),
-                          steps=float(moss_steps),
-                          guidance_scale=float(moss_guidance),
-                          lora_scale=float(moss_lora_scale),
-                          seed=int(moss_seed),
-                          confirm_adult=True,
-                          api_name="/generate"
-                      )
-                      img_path = extract_path(res_fb)
-                      if img_path and os.path.exists(img_path):
-                          shutil.copyfile(img_path, output_path)
-                          print(f"[+] ChatGPT Image 2.0 Fallback Generation Complete! Saved to {output_path}")
-                          moss_success = True
-                      else:
-                          print(f"[-] Fallback output unresolved: {res_fb}")
-                  except Exception as e_fb:
-                      print(f"[-] Fallback Matt6134/moss-image-nsfw-lora error: {e_fb}")
 
               if not moss_success:
-                  print("[-] All ChatGPT Image 2.0 endpoints exhausted.")
+                  print("[-] ChatGPT Image 2.0 / MOSS-Image generation failed.")
                   sys.exit(1)
 
                     # Send generated artifact to user's DM & server audit log channel (1506768429107908719)

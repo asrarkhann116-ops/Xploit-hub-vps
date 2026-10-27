@@ -1493,6 +1493,14 @@ const commands = [
                 .setMinValue(0.0)
                 .setMaxValue(1.5),
         )
+        .addNumberOption((o) =>
+            o
+                .setName("realistic_scale")
+                .setDescription("Realistic Snapshot LoRA strength (default: 1.0, range: 0.0-2.0)")
+                .setRequired(false)
+                .setMinValue(0.0)
+                .setMaxValue(2.0),
+        )
         .addIntegerOption((o) =>
             o
                 .setName("seed")
@@ -3254,6 +3262,7 @@ client.on("interactionCreate", async (interaction) => {
         const steps = interaction.options.getInteger("steps") || 30;
         const guidanceScale = interaction.options.getNumber("guidance_scale") ?? 3.0;
         const loraScale = interaction.options.getNumber("lora_scale") ?? 0.7;
+        const realisticScale = interaction.options.getNumber("realistic_scale") ?? 1.0;
         const seed = interaction.options.getInteger("seed");
 
         // Map aspect ratio to dimensions
@@ -3279,6 +3288,7 @@ client.on("interactionCreate", async (interaction) => {
             negative_prompt: negativePrompt,
             guidance_scale: guidanceScale,
             lora_scale: loraScale,
+            realistic_scale: realisticScale,
         });
 
         await interaction.deferReply({ ephemeral: false });

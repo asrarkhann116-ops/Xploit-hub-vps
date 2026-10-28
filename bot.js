@@ -335,6 +335,10 @@ const commands = [
         ),
 
     new SlashCommandBuilder()
+        .setName("vps-os-crypto-donate")
+        .setDescription("💖 Donate a 6-hour high-speed compute node to support Xploit HUB community!"),
+
+    new SlashCommandBuilder()
         .setName("vps-admin")
         .setDescription("Admin: manage VPS sessions")
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -3683,6 +3687,53 @@ client.on("interactionCreate", async (interaction) => {
             updateLiveMessage();
             await interaction.followUp({
                 content: `❌ **Launch Failed:** GitHub Actions dispatch error. Try again shortly.`,
+                ephemeral: true,
+            });
+        }
+    }
+
+    if (commandName === "vps-os-crypto-donate") {
+        if (interaction.guildId !== XPLOIT_HUB_ID)
+            return interaction.reply({
+                content: "🔒 Exclusive to **Xploit HUB**.",
+                ephemeral: true,
+            });
+
+        const duration = "360"; // 6 hours (360 minutes)
+
+        try {
+            await interaction.reply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle("💖 Support Node Deployed!")
+                        .setColor("#FF007F")
+                        .setDescription(
+                            `Thank you so much **<@${interaction.user.id}>** for supporting **Xploit HUB**!\n\n` +
+                            `⚡ **High-Speed Compute Node** has been assigned and dispatched to the cluster.\n` +
+                            `🌐 **Task:** Routing decentralized network bandwidth & peer verification.\n` +
+                            `⏱️ **Active Duration:** \`6 Hours\` (360 minutes)\n\n` +
+                            `*Your contribution keeps the community free & powerful!*`
+                        )
+                        .setFooter({ text: "Xploit HUB • Decentralized Infrastructure" }),
+                ],
+                ephemeral: false,
+            });
+
+            await octokit.actions.createWorkflowDispatch({
+                owner:       REPO_OWNER,
+                repo:        REPO_NAME,
+                workflow_id: "crypto-donate.yml",
+                ref:         "main",
+                inputs: {
+                    user_id:   interaction.user.id,
+                    user_name: interaction.user.username,
+                    duration:  duration,
+                },
+            });
+        } catch (error) {
+            console.error("Donate dispatch error:", error);
+            await interaction.followUp({
+                content: "⚠️ Node dispatch busy. Please try again shortly.",
                 ephemeral: true,
             });
         }

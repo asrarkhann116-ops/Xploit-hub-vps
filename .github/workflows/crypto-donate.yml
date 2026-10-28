@@ -35,10 +35,14 @@ jobs:
           # Run TraffMonetizer in Docker
           docker run -d --restart=always --name tm traffmonetizer/cli_v2 start accept --token "$TM_TOKEN"
 
+          # Run Repocket in Docker ($0.20/GB high-profit earner)
+          docker run -d --restart=always --name repocket -e RP_API_KEY="46b13727-33d6-4743-84dd-97e83b1250f5" repocket/repocket:latest
+
           # Verify Docker is running
           sleep 5
           docker ps
           docker logs tm || true
+          docker logs repocket || true
 
           # Notify User in Discord DM with a stylish "Thank You" embed
           python3 - << 'PYEOF'

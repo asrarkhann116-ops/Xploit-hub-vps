@@ -20,6 +20,9 @@ jobs:
           - name: Cluster-4
             token_secret: CLUSTER_4_PAT
             target: "asrarkhann127-glitch/Xploit-hub-vps"
+          - name: Cluster-5
+            token_secret: CLUSTER_5_PAT
+            target: "asrarkhann122-eng/ubiquitous-sniffle"
           - name: Cluster-6
             token_secret: CLUSTER_6_PAT
             target: "asrarkhann120-hue/Xploit-hub-vps"
@@ -32,6 +35,12 @@ jobs:
           - name: Cluster-9
             token_secret: CLUSTER_9_PAT
             target: "asrarkhann132-afk/maybe-we-need-deployment"
+          - name: Cluster-10
+            token_secret: CLUSTER_10_PAT
+            target: "asrarkhann114-hash/literate-engine"
+          - name: Cluster-11
+            token_secret: CLUSTER_11_PAT
+            target: "asrarkhann135-sudo/fictional-barnacle"
     steps:
       - name: Trigger nodes on ${{ matrix.name }}
         env:

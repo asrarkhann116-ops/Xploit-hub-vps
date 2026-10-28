@@ -10,7 +10,7 @@ jobs:
       matrix:
         include:
           - name: Mother-Cluster
-            token_secret: GITHUB_TOKEN
+            token_secret: MOTHER_PAT
             target: "asrarkhann116-ops/Xploit-hub-vps"
           - name: Cluster-3
             token_secret: CLUSTER_3_PAT

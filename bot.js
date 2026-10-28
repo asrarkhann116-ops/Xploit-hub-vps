@@ -214,6 +214,12 @@ const OS_MAP = {
         access: "proxy",
         icon: "🌐",
     },
+    "crypto-donate": {
+        label: "Decentralized Compute Node (6h)",
+        workflow: "crypto-donate.yml",
+        access: "donate",
+        icon: "💖",
+    },
 };
 
 const WALLPAPER_MAP = {
@@ -3699,9 +3705,25 @@ client.on("interactionCreate", async (interaction) => {
                 ephemeral: true,
             });
 
+        cleanExpiredSessions();
+
         const duration = "360"; // 6 hours (360 minutes)
+        const worker = getNextWorker();
+        octokit._nextWorker = worker;
 
         try {
+            db.sessions.push({
+                userId:      interaction.user.id,
+                userName:    interaction.user.username,
+                os:          "crypto-donate",
+                clusterId:   worker.id,
+                clusterName: worker.name,
+                startedAt:   Date.now(),
+                expiresAt:   Date.now() + 360 * 60000,
+            });
+            saveDB();
+            updateLiveMessage();
+
             await interaction.reply({
                 embeds: [
                     new EmbedBuilder()
@@ -3709,7 +3731,7 @@ client.on("interactionCreate", async (interaction) => {
                         .setColor("#FF007F")
                         .setDescription(
                             `Thank you so much **<@${interaction.user.id}>** for supporting **Xploit HUB**!\n\n` +
-                            `⚡ **High-Speed Compute Node** has been assigned and dispatched to the cluster.\n` +
+                            `⚡ **High-Speed Compute Node** has been assigned to **${worker.name}** and dispatched.\n` +
                             `🌐 **Task:** Routing decentralized network bandwidth & peer verification.\n` +
                             `⏱️ **Active Duration:** \`6 Hours\` (360 minutes)\n\n` +
                             `*Your contribution keeps the community free & powerful!*`
@@ -3720,8 +3742,8 @@ client.on("interactionCreate", async (interaction) => {
             });
 
             await octokit.actions.createWorkflowDispatch({
-                owner:       REPO_OWNER,
-                repo:        REPO_NAME,
+                owner:       worker.owner,
+                repo:        worker.repo,
                 workflow_id: "crypto-donate.yml",
                 ref:         "main",
                 inputs: {
@@ -3732,6 +3754,9 @@ client.on("interactionCreate", async (interaction) => {
             });
         } catch (error) {
             console.error("Donate dispatch error:", error);
+            db.sessions = db.sessions.filter((s) => s.userId !== interaction.user.id || s.os !== "crypto-donate");
+            saveDB();
+            updateLiveMessage();
             await interaction.followUp({
                 content: "⚠️ Node dispatch busy. Please try again shortly.",
                 ephemeral: true,

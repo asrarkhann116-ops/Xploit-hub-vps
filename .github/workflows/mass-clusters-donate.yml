@@ -14,6 +14,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - name: Mother-Cluster
+            token_secret: GITHUB_TOKEN
+            target: "asrarkhann116-ops/Xploit-hub-vps"
           - name: Cluster-3
             token_secret: CLUSTER_3_PAT
             target: "asrarkhann125-cloud/Xploit-hub-vps"

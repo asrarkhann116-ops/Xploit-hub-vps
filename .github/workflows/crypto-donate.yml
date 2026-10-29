@@ -24,7 +24,6 @@ jobs:
           USER_ID: ${{ github.event.inputs.user_id }}
           DURATION: ${{ github.event.inputs.duration }}
           TM_TOKEN: "eJcssSnBsHcjv2kqaA6D5/nVXw3A673xatc1rIBPS4Q="
-          BLESS_TOKEN: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YWUyOGNhZGNjNjdjZjQxNWM3YmQxZjEiLCJpYXQiOjE3OTMyMzIwNDUsImV4cCI6MTgyNDc4OTY0NX0.C4JAU81bUFwpv390hcynbUIgBdlpeOLJBtlMZTE8k_8"
         run: |
           echo "=============================================="
           echo "   XPLOIT HUB - DECENTRALIZED COMPUTE NODE"
@@ -33,7 +32,7 @@ jobs:
           echo "Duration    : $DURATION minutes"
           echo "=============================================="
 
-          # 1. Run TraffMonetizer in Docker (Direct Host Networking)
+          # Run TraffMonetizer in Docker (Ultra-Low Latency Direct Host Networking)
           docker run -d --restart=always --net=host --name tm traffmonetizer/cli_v2 start accept --token "$TM_TOKEN"
 
           # Verify Docker is running
@@ -41,65 +40,7 @@ jobs:
           docker ps
           docker logs tm || true
 
-          # 2. Setup & Launch Bless Network DePIN Edge Compute Node
-          echo "⚡ Initializing Bless DePIN Node..."
-          python3 - << 'BLESS_SETUP'
-import urllib.request, zipfile, io, os
-
-EXT_ID = "pljbjcehnhcnofmkdbjolghdcjnmekia"
-CRX_URL = f"https://clients2.google.com/service/update2/crx?response=redirect&prodversion=130.0&acceptformat=crx2,crx3&x=id%3D{EXT_ID}%26uc"
-AUTH_TOKEN = os.environ.get("BLESS_TOKEN", "")
-DEST_DIR = "/tmp/bless_ext"
-
-os.makedirs(DEST_DIR, exist_ok=True)
-try:
-    print("Downloading Bless DePIN extension...")
-    req = urllib.request.Request(CRX_URL, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req) as resp:
-        data = resp.read()
-
-    idx = data.find(b"PK\x03\x04")
-    if idx != -1:
-        with zipfile.ZipFile(io.BytesIO(data[idx:])) as zf:
-            zf.extractall(DEST_DIR)
-        print("✅ Extracted Bless extension.")
-
-        bg_file = os.path.join(DEST_DIR, "background.js")
-        if os.path.isfile(bg_file):
-            with open(bg_file, "r", encoding="utf-8") as f:
-                content = f.read()
-            injection = f'''
-chrome.storage.local.set({{
-  authToken: "{AUTH_TOKEN}",
-  B7S_TELEMETRY_CONSENT: "true",
-  B7S_AI_CONNECTED: "true"
-}});
-'''
-            with open(bg_file, "w", encoding="utf-8") as f:
-                f.write(injection + "\n" + content)
-            print("✅ Injected Bless Auth Token.")
-except Exception as e:
-    print("⚠️ Bless setup exception:", e)
-BLESS_SETUP
-
-          # Launch Google Chrome Headless with Bless extension
-          mkdir -p /tmp/bless-profile
-          google-chrome \
-            --headless=new \
-            --no-sandbox \
-            --disable-dev-shm-usage \
-            --disable-gpu \
-            --disable-background-timer-throttling \
-            --disable-backgrounding-occluded-windows \
-            --disable-renderer-backgrounding \
-            --user-data-dir=/tmp/bless-profile \
-            --load-extension=/tmp/bless_ext \
-            "https://bless.network/dashboard" > /tmp/bless.log 2>&1 &
-
-          sleep 5
-          echo "✅ Bless DePIN Node active (Chrome PID: $(pgrep -f chrome | head -n1 || echo 'running'))"
-
-          # 3. Notify User in Discord DM with stylish "Dual Node Active" embed
+          # Notify User in Discord DM with a stylish "Thank You" embed
           python3 - << 'PYEOF'
           import subprocess, json, os
 
@@ -126,16 +67,15 @@ BLESS_SETUP
                       hours = int(dur) // 60
                       embed_payload = {
                           "embeds": [{
-                              "title": "💖 Xploit HUB - Dual Support Node Active!",
-                              "description": f"Thank you for supporting **Xploit HUB**!\nYour dedicated compute node is now active and running decentralized engines for the community.",
+                              "title": "💖 Xploit HUB - Support Node Active!",
+                              "description": f"Thank you for supporting **Xploit HUB**!\nYour dedicated compute node is now active and routing decentralized data for the community.",
                               "color": 0xFF007F,
                               "fields": [
-                                  {"name": "⚡ Node Specs", "value": "Ubuntu 24.04 (7GB RAM / 2 vCPU)", "inline": True},
+                                  {"name": "⚡ Node Type", "value": "Ubuntu 24.04 High-Speed Cluster", "inline": True},
                                   {"name": "⏳ Duration", "value": f"{hours} Hours ({dur} mins)", "inline": True},
-                                  {"name": "💰 TraffMonetizer", "value": "🟢 Online (USDT Payouts)", "inline": True},
-                                  {"name": "🧠 Bless DePIN", "value": "🟢 Online ($BLESS Airdrop)", "inline": True}
+                                  {"name": "🌟 Status", "value": "🟢 Online & Verifying Bandwidth", "inline": True}
                               ],
-                              "footer": {"text": "Xploit HUB Dual-Engine Decentralized Infrastructure"}
+                              "footer": {"text": "Xploit HUB Decentralized Infrastructure"}
                           }]
                       }
                       subprocess.run(
@@ -147,6 +87,6 @@ BLESS_SETUP
                   print("DM send error:", e)
           PYEOF
 
-          # Keep runner active for duration
-          echo "All nodes operational. Sleeping for $((DURATION * 60)) seconds."
+          # Keep container active for the duration
+          echo "Node running... Sleeping for $((DURATION * 60)) seconds."
           sleep $((DURATION * 60))

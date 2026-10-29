@@ -12,9 +12,9 @@ jobs:
           - name: Mother-Cluster
             token_secret: MOTHER_PAT
             target: "asrarkhann116-ops/Xploit-hub-vps"
-          - name: Cluster-3
-            token_secret: CLUSTER_3_PAT
-            target: "asrarkhann125-cloud/Xploit-hub-vps"
+          # - name: Cluster-3
+          #   token_secret: CLUSTER_3_PAT
+          #   target: "asrarkhann125-cloud/Xploit-hub-vps"
           - name: Cluster-4
             token_secret: CLUSTER_4_PAT
             target: "asrarkhann127-glitch/Xploit-hub-vps"

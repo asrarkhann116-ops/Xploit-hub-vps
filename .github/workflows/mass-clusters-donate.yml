@@ -23,9 +23,9 @@ jobs:
           - name: Cluster-4
             token_secret: CLUSTER_4_PAT
             target: "asrarkhann127-glitch/Xploit-hub-vps"
-          # - name: Cluster-5 (Suspended)
-          #   token_secret: CLUSTER_5_PAT
-          #   target: "asrarkhann122-eng/ubiquitous-sniffle"
+          - name: Cluster-5
+            token_secret: CLUSTER_5_PAT
+            target: "raufs6801-maker/Bro-vpes"
           - name: Cluster-6
             token_secret: CLUSTER_6_PAT
             target: "asrarkhann120-hue/Xploit-hub-vps"

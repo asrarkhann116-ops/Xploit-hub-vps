@@ -2,8 +2,8 @@ name: ⚡ Keep Alive
 
 on:
   schedule:
-    # Runs every day at 11:37 UTC — looks organic, not top-of-hour
-    - cron: "37 11 * * *"
+    # Runs every 6 hours (00:37, 06:37, 12:37, 18:37 UTC) — organic, not top-of-hour
+    - cron: "37 */6 * * *"
   workflow_dispatch: # manual trigger bhi
 
 permissions:

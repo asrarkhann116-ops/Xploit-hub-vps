@@ -1,0 +1,32 @@
+name: ⚡ Keep Alive
+
+on:
+  schedule:
+    # Runs every day at 11:37 UTC — looks organic, not top-of-hour
+    - cron: "37 11 * * *"
+  workflow_dispatch: # manual trigger bhi
+
+permissions:
+  contents: write
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update heartbeat file
+        run: |
+          mkdir -p .github
+          echo "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" > .github/heartbeat.txt
+
+      - name: Commit & Push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/heartbeat.txt
+          git diff --staged --quiet || git commit -m "chore: heartbeat $(date -u '+%Y-%m-%d')"
+          git push

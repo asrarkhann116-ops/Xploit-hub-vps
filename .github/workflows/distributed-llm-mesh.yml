@@ -167,8 +167,8 @@ jobs:
           fi
 
           echo "[*] Downloading GGUF model: $CHOSEN_MODEL from $DOWNLOAD_URL..."
-          # Use curl with location follow (-L) and resume support (-C -)
-          curl -sSL "$DOWNLOAD_URL" -o model.gguf
+          # Download with live progress bar and speed display
+          curl -fL --progress-bar "$DOWNLOAD_URL" -o model.gguf
 
           # Verify GGUF Magic Header
           MAGIC=$(head -c 4 model.gguf)

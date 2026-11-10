@@ -17,12 +17,6 @@ jobs:
           - name: Mother-Cluster
             token_secret: MOTHER_PAT
             target: "asrarkhann116-ops/Xploit-hub-vps"
-          - name: Cluster-9
-            token_secret: CLUSTER_9_PAT
-            target: "asrarkhann132-afk/maybe-we-need-deployment"
-          - name: Cluster-11
-            token_secret: CLUSTER_11_PAT
-            target: "asrarkhann135-sudo/fictional-barnacle"
           - name: Cluster-12
             token_secret: CLUSTER_12_PAT
             target: "asrarkhann122-eng/ubiquitous-sniffle"

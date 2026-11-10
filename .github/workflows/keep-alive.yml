@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   keep-alive:
@@ -30,3 +31,16 @@ jobs:
           git add .github/heartbeat.txt
           git diff --staged --quiet || git commit -m "chore: heartbeat $(date -u '+%Y-%m-%d')"
           git push
+
+      - name: Auto-Trigger Sync Clusters
+        env:
+          GH_TOKEN: ${{ secrets.MOTHER_PAT || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "⚡ Triggering sync-clusters.yml dispatch..."
+          curl -s -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${REPO}/actions/workflows/sync-clusters.yml/dispatches \
+            -d '{"ref":"main"}' || true
+          echo "✅ Trigger request sent!"

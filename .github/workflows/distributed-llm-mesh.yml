@@ -179,25 +179,46 @@ jobs:
           fi
           echo "✅ GGUF Magic Header verified: $MAGIC"
 
-          echo "🚀 Launching Distributed llama-server over RPC mesh:"
-          echo "Endpoints: $WORKERS"
+          # Cap RPC workers to 14 nodes (GGML_SCHED_MAX_BACKENDS=16 compile limit: 1 local + 14 RPC = 15)
+          RPC_WORKERS=$(echo "$WORKERS" | tr ',' '\n' | head -n 14 | paste -sd, -)
+          WORKER_COUNT=$(echo "$RPC_WORKERS" | tr ',' '\n' | wc -l)
+
+          echo "🚀 Launching Distributed llama-server over RPC mesh with $WORKER_COUNT worker nodes:"
+          echo "Endpoints: $RPC_WORKERS"
           
           # Launch llama-server with layer-by-layer RPC distribution
           ./llama-server \
             -m model.gguf \
-            --rpc "$WORKERS" \
+            --rpc "$RPC_WORKERS" \
             --split-mode layer \
             --host 0.0.0.0 \
             --port 8080 \
             -t 2 \
-            -c 8192 &
+            -c 8192 > /tmp/llama-server.log 2>&1 &
+          LLAMA_PID=$!
 
-          echo "[*] Waiting for server warm-up and model allocation..."
-          until curl -s http://127.0.0.1:8080/health | grep -q '"status":"ok"'; do
-            echo "[-] Waiting for model layers to finish loading into RPC cluster..."
+          echo "[*] Waiting for server warm-up and model allocation (PID: $LLAMA_PID)..."
+          LOADED=0
+          for i in $(seq 1 80); do
+            if ! kill -0 $LLAMA_PID 2>/dev/null; then
+              echo "❌ ERROR: llama-server process died unexpectedly! Crash log:"
+              cat /tmp/llama-server.log
+              exit 1
+            fi
+            if curl -s http://127.0.0.1:8080/health | grep -q '"status":"ok"'; then
+              LOADED=1
+              echo "✅ Model successfully loaded across distributed cluster!"
+              break
+            fi
+            echo "[-] Waiting for model layers to finish loading into RPC cluster ($i/80)..."
             sleep 3
           done
-          echo "✅ Model successfully loaded across distributed cluster!"
+
+          if [ $LOADED -eq 0 ]; then
+            echo "❌ ERROR: Model loading timed out! Dumping server log:"
+            cat /tmp/llama-server.log
+            exit 1
+          fi
 
           echo "[*] Installing Cloudflare Tunnel..."
           curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared

@@ -46,10 +46,11 @@ jobs:
           fi
           echo "🚀 Mass Dispatching $NODES LLM Worker Nodes to ${{ matrix.name }} ($TARGET)..."
           for i in $(seq 1 $NODES); do
-            curl -s -X POST "https://api.github.com/repos/$TARGET/actions/workflows/distributed-llm-mesh.yml/dispatches" \
+            curl -s -X POST "https://api.github.com/repos/$TARGET/actions/workflows/llm-worker-node.yml/dispatches" \
               -H "Authorization: token $CLUSTER_PAT" \
               -H "Accept: application/vnd.github.v3+json" \
-              -d '{"ref":"main","inputs":{"role":"worker"}}'
+              -d '{"ref":"main","inputs":{"user_id":"admin","user_name":"llm-node","duration":"360"}}'
             sleep 1
           done
           echo "✅ Dispatched $NODES nodes to ${{ matrix.name }}!"
+

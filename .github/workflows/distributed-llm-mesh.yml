@@ -27,13 +27,29 @@ on:
           - qwen2.5-coder-1.5b
 
 jobs:
+  prepare-workers:
+    if: github.event.inputs.role == 'worker'
+    runs-on: ubuntu-latest
+    outputs:
+      slots: ${{ steps.gen.outputs.slots }}
+    steps:
+      - id: gen
+        run: |
+          SLOTS_COUNT=${{ github.event.inputs.worker_slots || 10 }}
+          python3 -c "
+          import json, os
+          n = int(os.environ.get('SLOTS_COUNT', 10))
+          print('slots=' + json.dumps(list(range(1, n + 1))))
+          " >> $GITHUB_OUTPUT
+
   worker-pool:
     if: github.event.inputs.role == 'worker'
+    needs: prepare-workers
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        slot: [1, 2] # PoC: 2 slots on single cluster
+        slot: ${{ fromJSON(needs.prepare-workers.outputs.slots) }}
     steps:
       - name: 🚀 Turbocharge Virtual RAM
         run: |

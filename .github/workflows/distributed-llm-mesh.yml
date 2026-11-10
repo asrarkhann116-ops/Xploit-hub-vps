@@ -14,17 +14,17 @@ on:
       worker_slots:
         description: 'Number of worker slots to launch (for matrix)'
         required: false
-        default: '2'
+        default: '10'
       model_name:
-        description: 'Choose Heavy Model to Deploy'
+        description: 'Choose Abliterated (Uncensored) Model'
         required: false
-        default: 'qwen2.5-coder-7b'
+        default: 'qwen3.8-27b-abliterated'
         type: choice
         options:
+          - qwen3.8-27b-abliterated
+          - qwen2.5-coder-32b-abliterated
+          - qwen2.5-coder-7b-abliterated
           - qwen2.5-coder-1.5b
-          - qwen2.5-coder-7b
-          - qwen2.5-coder-14b
-          - qwen2.5-coder-32b
 
 jobs:
   worker-pool:
@@ -140,12 +140,12 @@ jobs:
           tar -xzf llama.tar.gz --strip-components=1
           chmod +x llama-server || true
 
-          if [ "$CHOSEN_MODEL" = "qwen2.5-coder-32b" ]; then
-            DOWNLOAD_URL="https://huggingface.co/unsloth/Qwen2.5-Coder-32B-Instruct-128K-GGUF/resolve/9beb795ed304fb5dbe4e1229bdcf5c483f2d9db8/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf"
-          elif [ "$CHOSEN_MODEL" = "qwen2.5-coder-14b" ]; then
-            DOWNLOAD_URL="https://huggingface.co/bartowski/Qwen2.5-Coder-14B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf"
-          elif [ "$CHOSEN_MODEL" = "qwen2.5-coder-7b" ]; then
-            DOWNLOAD_URL="https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf"
+          if [ "$CHOSEN_MODEL" = "qwen3.8-27b-abliterated" ]; then
+            DOWNLOAD_URL="https://huggingface.co/huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF/resolve/main/qwen3.8-27b-abliterated-q4_k_m.gguf"
+          elif [ "$CHOSEN_MODEL" = "qwen2.5-coder-32b-abliterated" ]; then
+            DOWNLOAD_URL="https://huggingface.co/bartowski/Qwen2.5-Coder-32B-Instruct-abliterated-GGUF/resolve/main/Qwen2.5-Coder-32B-Instruct-abliterated-Q4_K_M.gguf"
+          elif [ "$CHOSEN_MODEL" = "qwen2.5-coder-7b-abliterated" ]; then
+            DOWNLOAD_URL="https://huggingface.co/bartowski/Qwen2.5-Coder-7B-Instruct-abliterated-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf"
           else
             DOWNLOAD_URL="https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf"
           fi

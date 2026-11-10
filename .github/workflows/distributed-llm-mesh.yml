@@ -89,23 +89,26 @@ jobs:
         id: discover
         run: |
           echo "[*] Scanning Tailscale peer status for xploit-worker nodes..."
-          # Poll until at least 1 worker is online
-          for i in {1..30}; do
-            WORKERS=$(tailscale status --json | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    peers = data.get('Peer', {})
-    ips = []
-    for k, p in peers.items():
-        h = p.get('HostName', '')
-        if 'xploit-worker' in h and p.get('Online', False):
-            ip = p.get('TailscaleIPs', [''])[0]
-            if ip: ips.append(f'{ip}:50052')
-    print(','.join(ips))
-except Exception as e:
-    print('')
-")
+          python3 -c "
+          code = '''
+          import sys, json
+          try:
+              data = json.load(sys.stdin)
+              peers = data.get('Peer', {})
+              ips = []
+              for k, p in peers.items():
+                  h = p.get('HostName', '')
+                  if 'xploit-worker' in h and p.get('Online', False):
+                      ip = p.get('TailscaleIPs', [''])[0]
+                      if ip: ips.append(f'{ip}:50052')
+              print(','.join(ips))
+          except Exception:
+              print('')
+          '''
+          open('/tmp/find_workers.py', 'w').write(code)
+          "
+          for i in $(seq 1 30); do
+            WORKERS=$(tailscale status --json | python3 /tmp/find_workers.py)
             if [ -n "$WORKERS" ]; then
               echo "✅ Discovered Online RPC Workers: $WORKERS"
               echo "workers=$WORKERS" >> $GITHUB_OUTPUT

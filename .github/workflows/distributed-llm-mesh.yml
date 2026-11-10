@@ -157,7 +157,7 @@ jobs:
           chmod +x llama-server || true
 
           if [ "$CHOSEN_MODEL" = "qwen3.8-27b-abliterated" ]; then
-            DOWNLOAD_URL="https://huggingface.co/huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF/resolve/main/qwen3.8-27b-abliterated-q4_k_m.gguf"
+            DOWNLOAD_URL="https://huggingface.co/mradermacher/Swift-Qwen3.8-27B-Abliterated-GGUF/resolve/main/Swift-Qwen3.8-27B-Abliterated.Q4_K_M.gguf"
           elif [ "$CHOSEN_MODEL" = "qwen2.5-coder-32b-abliterated" ]; then
             DOWNLOAD_URL="https://huggingface.co/bartowski/Qwen2.5-Coder-32B-Instruct-abliterated-GGUF/resolve/main/Qwen2.5-Coder-32B-Instruct-abliterated-Q4_K_M.gguf"
           elif [ "$CHOSEN_MODEL" = "qwen2.5-coder-7b-abliterated" ]; then
@@ -167,7 +167,17 @@ jobs:
           fi
 
           echo "[*] Downloading GGUF model: $CHOSEN_MODEL from $DOWNLOAD_URL..."
-          curl -sL "$DOWNLOAD_URL" -o model.gguf
+          # Use curl with location follow (-L) and resume support (-C -)
+          curl -sSL "$DOWNLOAD_URL" -o model.gguf
+
+          # Verify GGUF Magic Header
+          MAGIC=$(head -c 4 model.gguf)
+          if [ "$MAGIC" != "GGUF" ]; then
+            echo "❌ ERROR: Downloaded file is not a valid GGUF file! Magic bytes: $MAGIC"
+            cat model.gguf | head -n 10
+            exit 1
+          fi
+          echo "✅ GGUF Magic Header verified: $MAGIC"
 
           echo "🚀 Launching Distributed llama-server over RPC mesh:"
           echo "Endpoints: $WORKERS"

@@ -1,0 +1,163 @@
+name: ⚡ Distributed-LLM-Mesh
+
+on:
+  workflow_dispatch:
+    inputs:
+      role:
+        description: 'Node Role (worker / coordinator)'
+        required: true
+        default: 'worker'
+        type: choice
+        options:
+          - worker
+          - coordinator
+      worker_slots:
+        description: 'Number of worker slots to launch (for matrix)'
+        required: false
+        default: '2'
+      model_url:
+        description: 'HuggingFace direct GGUF model download URL (for Coordinator)'
+        required: false
+        default: 'https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf'
+
+jobs:
+  worker-pool:
+    if: github.event.inputs.role == 'worker'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        slot: [1, 2] # PoC: 2 slots on single cluster
+    steps:
+      - name: 🚀 Turbocharge Virtual RAM
+        run: |
+          sudo swapoff -a || true
+          sudo fallocate -l 16G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=16384
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          echo "✅ 23GB System Address Space Unlocked on Slot ${{ matrix.slot }}"
+
+      - name: 🌐 Connect Tailscale Mesh
+        env:
+          TS_AUTHKEY: "tskey-auth-kXcDp6s2P321CNTRL-F5aZFRYRiDKGukMPBzvBEKZM27iVe7rh"
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+          # Clean hostname without special characters
+          HOSTNAME="xploit-worker-s${{ matrix.slot }}"
+          sudo tailscale up --authkey="${TS_AUTHKEY}" --hostname="${HOSTNAME}" --accept-routes
+          NODE_IP=$(tailscale ip -4)
+          echo "✅ Connected to Tailscale Mesh as ${HOSTNAME} with IP: ${NODE_IP}"
+          echo "NODE_IP=${NODE_IP}" >> $GITHUB_ENV
+
+      - name: ⚙️ Setup & Launch ggml-rpc-server
+        run: |
+          mkdir -p /tmp/llama && cd /tmp/llama
+          TAG="b12255"
+          echo "[*] Downloading llama.cpp release ${TAG}..."
+          curl -sL "https://github.com/ggml-org/llama.cpp/releases/download/${TAG}/llama-${TAG}-bin-ubuntu-x64.tar.gz" -o llama.tar.gz
+          tar -xzf llama.tar.gz --strip-components=1
+          chmod +x ggml-rpc-server || true
+
+          echo "🚀 Starting ggml-rpc-server on 0.0.0.0:50052 (Listening via Tailscale)..."
+          # Run RPC server continuously
+          ./ggml-rpc-server -H 0.0.0.0 -p 50052
+
+  coordinator:
+    if: github.event.inputs.role == 'coordinator'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🚀 Turbocharge Virtual RAM
+        run: |
+          sudo swapoff -a || true
+          sudo fallocate -l 16G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=16384
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+
+      - name: 🌐 Connect Tailscale Mesh
+        env:
+          TS_AUTHKEY: "tskey-auth-kXcDp6s2P321CNTRL-F5aZFRYRiDKGukMPBzvBEKZM27iVe7rh"
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscale up --authkey="${TS_AUTHKEY}" --hostname="xploit-coordinator" --accept-routes
+          COORD_IP=$(tailscale ip -4)
+          echo "✅ Coordinator Live on IP: ${COORD_IP}"
+          echo "COORD_IP=${COORD_IP}" >> $GITHUB_ENV
+
+      - name: 🔍 Discover Active Workers on Mesh
+        id: discover
+        run: |
+          echo "[*] Scanning Tailscale peer status for xploit-worker nodes..."
+          # Poll until at least 1 worker is online
+          for i in {1..30}; do
+            WORKERS=$(tailscale status --json | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    peers = data.get('Peer', {})
+    ips = []
+    for k, p in peers.items():
+        h = p.get('HostName', '')
+        if 'xploit-worker' in h and p.get('Online', False):
+            ip = p.get('TailscaleIPs', [''])[0]
+            if ip: ips.append(f'{ip}:50052')
+    print(','.join(ips))
+except Exception as e:
+    print('')
+")
+            if [ -n "$WORKERS" ]; then
+              echo "✅ Discovered Online RPC Workers: $WORKERS"
+              echo "workers=$WORKERS" >> $GITHUB_OUTPUT
+              break
+            fi
+            echo "[-] Waiting for workers to join Tailscale mesh ($i/30)..."
+            sleep 5
+          done
+
+          if [ -z "$WORKERS" ]; then
+            echo "❌ No workers found in 2.5 minutes!"
+            exit 1
+          fi
+
+      - name: 🧠 Download Model & Launch Distributed Master Server
+        env:
+          MODEL_URL: ${{ github.event.inputs.model_url }}
+          WORKERS: ${{ steps.discover.outputs.workers }}
+        run: |
+          mkdir -p /tmp/llama && cd /tmp/llama
+          TAG="b12255"
+          curl -sL "https://github.com/ggml-org/llama.cpp/releases/download/${TAG}/llama-${TAG}-bin-ubuntu-x64.tar.gz" -o llama.tar.gz
+          tar -xzf llama.tar.gz --strip-components=1
+          chmod +x llama-server || true
+
+          echo "[*] Downloading GGUF model from $MODEL_URL..."
+          curl -sL "$MODEL_URL" -o model.gguf
+
+          echo "🚀 Launching Distributed llama-server over RPC mesh:"
+          echo "Endpoints: $WORKERS"
+          
+          # Launch llama-server with RPC distribution enabled
+          ./llama-server \
+            -m model.gguf \
+            --rpc "$WORKERS" \
+            --host 0.0.0.0 \
+            --port 8080 \
+            -t 2 \
+            -c 4096 &
+
+          echo "[*] Waiting for server warm-up..."
+          sleep 10
+
+          echo "[*] Running verification prompt via OpenAI-compatible endpoint..."
+          curl -s http://127.0.0.1:8080/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "model",
+              "messages": [{"role": "user", "content": "Hello! Confirm if distributed RPC inference is working and introduce yourself in 2 lines."}]
+            }' | python3 -m json.tool
+
+          echo "✅ Master Server Ready and accessible on Tailscale IP: ${COORD_IP}:8080"
+          # Keep alive for testing
+          sleep 1800
+

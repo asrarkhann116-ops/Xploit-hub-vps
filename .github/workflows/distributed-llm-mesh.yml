@@ -149,8 +149,28 @@ jobs:
             -t 2 \
             -c 4096 &
 
-          echo "[*] Waiting for server warm-up..."
-          sleep 10
+          echo "[*] Waiting for server warm-up and model allocation..."
+          until curl -s http://127.0.0.1:8080/health | grep -q '"status":"ok"'; do
+            echo "[-] Waiting for model layers to finish loading into RPC cluster..."
+            sleep 3
+          done
+          echo "✅ Model successfully loaded across distributed cluster!"
+
+          echo "[*] Installing Cloudflare Tunnel..."
+          curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
+          chmod +x /tmp/cloudflared
+
+          echo "🚀 Starting Cloudflare Tunnel for Public Web Access..."
+          /tmp/cloudflared tunnel --url http://127.0.0.1:8080 > /tmp/tunnel.log 2>&1 &
+
+          sleep 5
+          TUNNEL_URL=$(grep -o 'https://[a-zA-Z0-9-]*\.trycloudflare\.com' /tmp/tunnel.log | head -n 1)
+
+          echo "=========================================================="
+          echo "🎉 DISTRIBUTED LLM CLUSTER IS LIVE & PUBLIC!"
+          echo "🔗 Public Web UI & API Link: $TUNNEL_URL"
+          echo "🌐 Tailscale Direct IP     : http://${COORD_IP}:8080"
+          echo "=========================================================="
 
           echo "[*] Running verification prompt via OpenAI-compatible endpoint..."
           curl -s http://127.0.0.1:8080/v1/chat/completions \
@@ -160,7 +180,6 @@ jobs:
               "messages": [{"role": "user", "content": "Hello! Confirm if distributed RPC inference is working and introduce yourself in 2 lines."}]
             }' | python3 -m json.tool
 
-          echo "✅ Master Server Ready and accessible on Tailscale IP: ${COORD_IP}:8080"
           # Keep alive for testing
           sleep 1800
 

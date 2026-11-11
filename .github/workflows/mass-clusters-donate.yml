@@ -32,6 +32,9 @@ jobs:
           - name: Cluster-16
             token_secret: CLUSTER_16_PAT
             target: "asrarkhann145-spec/spec-about-dell-latitude-e6540"
+          - name: Cluster-17
+            token_secret: CLUSTER_17_PAT
+            target: "arvindvincenzo/Xploit-hub-vpsq"
     steps:
       - name: Trigger nodes on ${{ matrix.name }}
         env:

@@ -1,0 +1,66 @@
+name: Xploit-Solver-Node
+on:
+  schedule:
+    # 24/7 self-healing auto-rotation: starts every 5 hours automatically
+    - cron: "0 */5 * * *"
+  workflow_dispatch:
+    inputs:
+      duration_minutes:
+        description: "Duration in minutes (max 360)"
+        required: false
+        default: "350"
+      node_label:
+        description: "Node label prefix"
+        required: false
+        default: "cluster-solver"
+
+jobs:
+  solver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: ⚙️ Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 🌐 Install Google Chrome & Headless Support
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq wget gnupg ca-certificates xvfb
+          wget -qO /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo dpkg -i /tmp/chrome.deb || sudo dpkg -i --force-depends /tmp/chrome.deb || sudo apt-get install -f -y -qq
+          google-chrome --version
+
+      - name: 📦 Install Python Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install seleniumbase curl_cffi requests
+
+      - name: 🚀 Launch Solver Engine
+        env:
+          HUB_URL: ${{ secrets.HUB_URL || 'https://xploithubcapctha-public-repo.onrender.com' }}
+          WORKER_SECRET: ${{ secrets.WORKER_SECRET || 'xpk-worker-secret-777' }}
+          WORKER_ID: "node-${{ github.repository_owner }}-${{ github.run_id }}-${{ github.run_number }}"
+          DURATION_MINUTES: ${{ github.event.inputs.duration_minutes || '350' }}
+          DISPLAY: ":99"
+        run: |
+          echo "========================================================"
+          echo "  Connecting Solver Node to: $HUB_URL"
+          echo "  Worker ID: $WORKER_ID"
+          echo "  Duration: ${DURATION_MINUTES}m"
+          echo "========================================================"
+
+          # Fetch latest dynamic solver engine from Render Hub
+          curl -sSL -f "$HUB_URL/api/worker/engine.py" -o worker.py || {
+            echo "Failed to fetch engine from Hub. Checking fallback..."
+            exit 1
+          }
+
+          # Start virtual framebuffer display for Chrome
+          Xvfb :99 -screen 0 1920x1080x24 &
+          sleep 1
+
+          # Run headless solver
+          python worker.py

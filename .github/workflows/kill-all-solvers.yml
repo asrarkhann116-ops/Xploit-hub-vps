@@ -1,0 +1,63 @@
+name: Kill-All-Solvers
+on:
+  workflow_dispatch:
+
+jobs:
+  kill:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Mother-Cluster
+            token_secret: MOTHER_PAT
+            target: "asrarkhann116-ops/Xploit-hub-vps"
+          - name: Cluster-12
+            token_secret: CLUSTER_12_PAT
+            target: "asrarkhann122-eng/ubiquitous-sniffle"
+          - name: Cluster-13
+            token_secret: CLUSTER_13_PAT
+            target: "asrarkhann119-eng/pxloit-buh-spv"
+          - name: Cluster-14
+            token_secret: CLUSTER_14_PAT
+            target: "asrarkhann136-coder/crook"
+          - name: Cluster-15
+            token_secret: CLUSTER_15_PAT
+            target: "termuxhexrt/Xploit-VPS-System"
+          - name: Cluster-16
+            token_secret: CLUSTER_16_PAT
+            target: "asrarkhann145-spec/spec-about-dell-latitude-e6540"
+          - name: Cluster-17
+            token_secret: CLUSTER_17_PAT
+            target: "arvindvincenzo/Xploit-hub-vpsq"
+    steps:
+      - name: Cancel all running Solver Nodes on ${{ matrix.name }}
+        env:
+          CLUSTER_PAT: ${{ secrets[matrix.token_secret] }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          if [ -z "$CLUSTER_PAT" ]; then
+            echo "⚠️ No PAT for ${{ matrix.name }}, skipping..."
+            exit 0
+          fi
+          echo "🛑 Finding running Solver Nodes on ${{ matrix.name }} ($TARGET)..."
+
+          # Fetch in_progress and queued runs for solver-node.yml
+          RUNS=$(curl -s -H "Authorization: token $CLUSTER_PAT" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$TARGET/actions/workflows/solver-node.yml/runs?per_page=100")
+
+          RUN_IDS=$(echo "$RUNS" | jq -r '.workflow_runs[]? | select(.status=="in_progress" or .status=="queued") | .id')
+
+          if [ -z "$RUN_IDS" ]; then
+            echo "✅ No active Solver Nodes on ${{ matrix.name }}."
+            exit 0
+          fi
+
+          for ID in $RUN_IDS; do
+            echo "Killing Solver run ID: $ID on ${{ matrix.name }}..."
+            curl -s -X POST -H "Authorization: token $CLUSTER_PAT" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/$TARGET/actions/runs/$ID/cancel"
+          done
+          echo "✅ All active Solver Nodes cancelled on ${{ matrix.name }}!"

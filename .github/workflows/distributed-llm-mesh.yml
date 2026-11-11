@@ -194,12 +194,13 @@ jobs:
             --host 0.0.0.0 \
             --port 8080 \
             -t 2 \
-            -c 8192 > /tmp/llama-server.log 2>&1 &
+            -c 4096 > /tmp/llama-server.log 2>&1 &
           LLAMA_PID=$!
 
-          echo "[*] Waiting for server warm-up and model allocation (PID: $LLAMA_PID)..."
+          echo "[*] Waiting for server warm-up and 17.5GB layer distribution across 14 nodes (PID: $LLAMA_PID)..."
           LOADED=0
-          for i in $(seq 1 80); do
+          # Allow up to 15 minutes for 17.5GB network distribution over 14 WireGuard nodes
+          for i in $(seq 1 180); do
             if ! kill -0 $LLAMA_PID 2>/dev/null; then
               echo "❌ ERROR: llama-server process died unexpectedly! Crash log:"
               cat /tmp/llama-server.log
@@ -210,8 +211,14 @@ jobs:
               echo "✅ Model successfully loaded across distributed cluster!"
               break
             fi
-            echo "[-] Waiting for model layers to finish loading into RPC cluster ($i/80)..."
-            sleep 3
+            # Every 10 iterations (~50s), print current progress from server log
+            if [ $((i % 10)) -eq 0 ]; then
+              echo "[-] Loading progress ($i/180):"
+              tail -n 3 /tmp/llama-server.log || true
+            else
+              echo "[-] Distributing layers across RPC nodes ($i/180)..."
+            fi
+            sleep 5
           done
 
           if [ $LOADED -eq 0 ]; then

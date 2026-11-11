@@ -6,13 +6,25 @@ on:
       model_name:
         description: 'Choose Abliterated (Uncensored) Model'
         required: true
-        default: 'qwen3.8-27b-abliterated'
+        default: 'qwen2.5-coder-14b-abliterated'
         type: choice
         options:
+          - qwen2.5-coder-14b-abliterated
           - qwen3.8-27b-abliterated
           - qwen2.5-coder-32b-abliterated
           - qwen2.5-coder-7b-abliterated
           - qwen2.5-coder-1.5b
+      nodes_limit:
+        description: 'Active Compute Nodes (auto: high speed, or max: all 60+ nodes)'
+        required: true
+        default: 'auto'
+        type: choice
+        options:
+          - 'auto'
+          - '4'
+          - '8'
+          - '16'
+          - 'max'
 
 jobs:
   coordinator:
@@ -78,22 +90,33 @@ jobs:
       - name: 🧠 Download Model & Launch Distributed Master Server
         env:
           CHOSEN_MODEL: ${{ github.event.inputs.model_name }}
+          CHOSEN_NODES: ${{ github.event.inputs.nodes_limit }}
           WORKERS: ${{ steps.discover.outputs.workers }}
         run: |
           mkdir -p /tmp/llama && cd /tmp/llama
 
-          if [ "$CHOSEN_MODEL" = "qwen3.8-27b-abliterated" ]; then
+          if [ "$CHOSEN_MODEL" = "qwen2.5-coder-14b-abliterated" ]; then
+            DOWNLOAD_URL="https://huggingface.co/bartowski/Qwen2.5-Coder-14B-Instruct-abliterated-GGUF/resolve/main/Qwen2.5-Coder-14B-Instruct-abliterated-Q4_K_M.gguf"
+            TARGET_NODES=4
+          elif [ "$CHOSEN_MODEL" = "qwen3.8-27b-abliterated" ]; then
             DOWNLOAD_URL="https://huggingface.co/mradermacher/Swift-Qwen3.8-27B-Abliterated-GGUF/resolve/main/Swift-Qwen3.8-27B-Abliterated.Q4_K_M.gguf"
-            TARGET_NODES=64
+            TARGET_NODES=8
           elif [ "$CHOSEN_MODEL" = "qwen2.5-coder-32b-abliterated" ]; then
             DOWNLOAD_URL="https://huggingface.co/bartowski/Qwen2.5-Coder-32B-Instruct-abliterated-GGUF/resolve/main/Qwen2.5-Coder-32B-Instruct-abliterated-Q4_K_M.gguf"
-            TARGET_NODES=64
+            TARGET_NODES=8
           elif [ "$CHOSEN_MODEL" = "qwen2.5-coder-7b-abliterated" ]; then
             DOWNLOAD_URL="https://huggingface.co/bartowski/Qwen2.5-Coder-7B-Instruct-abliterated-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf"
-            TARGET_NODES=28
+            TARGET_NODES=2
           else
             DOWNLOAD_URL="https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf"
-            TARGET_NODES=28
+            TARGET_NODES=2
+          fi
+
+          # Override target nodes if user selected specific limit or max
+          if [ "$CHOSEN_NODES" = "max" ]; then
+            TARGET_NODES=128
+          elif [ -n "$CHOSEN_NODES" ] && [ "$CHOSEN_NODES" != "auto" ]; then
+            TARGET_NODES="$CHOSEN_NODES"
           fi
 
           TOTAL_FOUND=$(echo "$WORKERS" | tr ',' '\n' | wc -l)
@@ -137,36 +160,28 @@ jobs:
           curl -fL --progress-bar "$DOWNLOAD_URL" -o model.gguf &
           DL_PID=$!
 
-          # Setup llama-server: compile custom binary if nodes > 14 to lift 16-backend limit
-          if [ "$ACTIVE_COUNT" -gt 14 ]; then
-            echo "[*] $ACTIVE_COUNT nodes requested (>14 limit): Compiling custom llama-server with RPC & GGML_SCHED_MAX_BACKENDS=128..."
-            git clone --depth 1 https://github.com/ggml-org/llama.cpp.git /tmp/llama-src
-            
-            # Patch hardcoded macro directly in source file
-            sed -i 's/#define GGML_SCHED_MAX_BACKENDS 16/#define GGML_SCHED_MAX_BACKENDS 128/g' /tmp/llama-src/ggml/src/ggml-backend.cpp
-            echo "Patched ggml-backend.cpp:"
-            grep "GGML_SCHED_MAX_BACKENDS" /tmp/llama-src/ggml/src/ggml-backend.cpp | head -n 3
+          # Setup llama-server: always compile with -DGGML_RPC=ON and GGML_SCHED_MAX_BACKENDS=128
+          echo "[*] Compiling custom llama-server with native RPC & 128-backend support..."
+          git clone --depth 1 https://github.com/ggml-org/llama.cpp.git /tmp/llama-src
+          
+          # Patch hardcoded macro directly in source file
+          sed -i 's/#define GGML_SCHED_MAX_BACKENDS 16/#define GGML_SCHED_MAX_BACKENDS 128/g' /tmp/llama-src/ggml/src/ggml-backend.cpp
+          echo "Patched ggml-backend.cpp:"
+          grep "GGML_SCHED_MAX_BACKENDS" /tmp/llama-src/ggml/src/ggml-backend.cpp | head -n 3
 
-            cmake -B /tmp/llama-build -S /tmp/llama-src \
-              -DGGML_RPC=ON \
-              -DCMAKE_C_FLAGS="-DGGML_SCHED_MAX_BACKENDS=128" \
-              -DCMAKE_CXX_FLAGS="-DGGML_SCHED_MAX_BACKENDS=128" \
-              -DGGML_NATIVE=ON \
-              -DGGML_BUILD_TESTS=OFF \
-              -DLLAMA_BUILD_TESTS=OFF \
-              -DLLAMA_BUILD_EXAMPLES=OFF \
-              -DLLAMA_BUILD_SERVER=ON
-            cmake --build /tmp/llama-build --config Release --target llama-server -j $(nproc)
-            cp -r /tmp/llama-build/bin/* /tmp/llama/ 2>/dev/null || true
-            chmod +x /tmp/llama/llama-server
-            echo "✅ Custom 128-backend RPC llama-server compiled successfully!"
-          else
-            echo "[*] <= 14 nodes: Using fast precompiled llama.cpp binary..."
-            TAG="b12255"
-            curl -sL "https://github.com/ggml-org/llama.cpp/releases/download/${TAG}/llama-${TAG}-bin-ubuntu-x64.tar.gz" -o llama.tar.gz
-            tar -xzf llama.tar.gz --strip-components=1
-            chmod +x llama-server || true
-          fi
+          cmake -B /tmp/llama-build -S /tmp/llama-src \
+            -DGGML_RPC=ON \
+            -DCMAKE_C_FLAGS="-DGGML_SCHED_MAX_BACKENDS=128" \
+            -DCMAKE_CXX_FLAGS="-DGGML_SCHED_MAX_BACKENDS=128" \
+            -DGGML_NATIVE=ON \
+            -DGGML_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_SERVER=ON
+          cmake --build /tmp/llama-build --config Release --target llama-server -j $(nproc)
+          cp -r /tmp/llama-build/bin/* /tmp/llama/ 2>/dev/null || true
+          chmod +x /tmp/llama/llama-server
+          echo "✅ Custom 128-backend RPC llama-server compiled successfully!"
           export LD_LIBRARY_PATH=/tmp/llama:$LD_LIBRARY_PATH
 
           echo "[*] Waiting for model download to complete..."

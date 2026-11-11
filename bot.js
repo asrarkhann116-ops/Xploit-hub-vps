@@ -10,17 +10,7 @@ import {
 } from "discord.js";
 import { Octokit } from "@octokit/rest";
 import fs from "fs";
-import http from "http";
 import "dotenv/config";
-
-// Health server for Render / Cloud hosting free tier
-const PORT = process.env.PORT || 10000;
-http.createServer((req, res) => {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", name: "Xploit-Hub-VPS-Bot", live: true }));
-}).listen(PORT, "0.0.0.0", () => {
-    console.log(`⚡ Health server listening on 0.0.0.0:${PORT} for Render Keep-Alive!`);
-});
 
 const XPLOIT_HUB_ID = "1459402620199374872";
 const REPO_OWNER = "asrarkhann116-ops";

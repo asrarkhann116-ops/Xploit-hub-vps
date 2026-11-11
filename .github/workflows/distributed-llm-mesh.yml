@@ -139,11 +139,18 @@ jobs:
 
           # Setup llama-server: compile custom binary if nodes > 14 to lift 16-backend limit
           if [ "$ACTIVE_COUNT" -gt 14 ]; then
-            echo "[*] $ACTIVE_COUNT nodes requested (>14 limit): Compiling custom llama-server with RPC & -DGGML_SCHED_MAX_BACKENDS=128..."
+            echo "[*] $ACTIVE_COUNT nodes requested (>14 limit): Compiling custom llama-server with RPC & GGML_SCHED_MAX_BACKENDS=128..."
             git clone --depth 1 https://github.com/ggml-org/llama.cpp.git /tmp/llama-src
+            
+            # Patch hardcoded macro directly in source file
+            sed -i 's/#define GGML_SCHED_MAX_BACKENDS 16/#define GGML_SCHED_MAX_BACKENDS 128/g' /tmp/llama-src/ggml/src/ggml-backend.cpp
+            echo "Patched ggml-backend.cpp:"
+            grep "GGML_SCHED_MAX_BACKENDS" /tmp/llama-src/ggml/src/ggml-backend.cpp | head -n 3
+
             cmake -B /tmp/llama-build -S /tmp/llama-src \
               -DGGML_RPC=ON \
-              -DGGML_SCHED_MAX_BACKENDS=128 \
+              -DCMAKE_C_FLAGS="-DGGML_SCHED_MAX_BACKENDS=128" \
+              -DCMAKE_CXX_FLAGS="-DGGML_SCHED_MAX_BACKENDS=128" \
               -DGGML_NATIVE=ON \
               -DGGML_BUILD_TESTS=OFF \
               -DLLAMA_BUILD_TESTS=OFF \

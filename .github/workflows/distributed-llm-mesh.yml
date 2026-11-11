@@ -6,10 +6,12 @@ on:
       model_name:
         description: 'Choose Abliterated (Uncensored) Model'
         required: true
-        default: 'qwen2.5-coder-14b-abliterated'
+        default: 'gemma-4-e4b-uncensored'
         type: choice
         options:
-          - qwen2.5-coder-14b-abliterated
+          - gemma-4-e4b-uncensored
+          - gemma-4-e2b-uncensored
+          - qwen2.5-14b-abliterated-v2
           - qwen3.8-27b-abliterated
           - qwen2.5-coder-32b-abliterated
           - qwen2.5-coder-7b-abliterated
@@ -21,6 +23,7 @@ on:
         type: choice
         options:
           - 'auto'
+          - '2'
           - '4'
           - '8'
           - '16'
@@ -95,8 +98,14 @@ jobs:
         run: |
           mkdir -p /tmp/llama && cd /tmp/llama
 
-          if [ "$CHOSEN_MODEL" = "qwen2.5-coder-14b-abliterated" ]; then
-            DOWNLOAD_URL="https://huggingface.co/bartowski/Qwen2.5-Coder-14B-Instruct-abliterated-GGUF/resolve/main/Qwen2.5-Coder-14B-Instruct-abliterated-Q4_K_M.gguf"
+          if [ "$CHOSEN_MODEL" = "gemma-4-e4b-uncensored" ]; then
+            DOWNLOAD_URL="https://huggingface.co/TrevorJS/gemma-4-E4B-it-uncensored-GGUF/resolve/main/gemma-4-E4B-it-uncensored-Q4_K_M.gguf"
+            TARGET_NODES=2
+          elif [ "$CHOSEN_MODEL" = "gemma-4-e2b-uncensored" ]; then
+            DOWNLOAD_URL="https://huggingface.co/TrevorJS/gemma-4-E2B-it-uncensored-GGUF/resolve/main/gemma-4-E2B-it-uncensored-Q4_K_M.gguf"
+            TARGET_NODES=2
+          elif [ "$CHOSEN_MODEL" = "qwen2.5-14b-abliterated-v2" ]; then
+            DOWNLOAD_URL="https://huggingface.co/mradermacher/Qwen2.5-14B-Instruct-abliterated-v2-GGUF/resolve/main/Qwen2.5-14B-Instruct-abliterated-v2.Q4_K_M.gguf"
             TARGET_NODES=4
           elif [ "$CHOSEN_MODEL" = "qwen3.8-27b-abliterated" ]; then
             DOWNLOAD_URL="https://huggingface.co/mradermacher/Swift-Qwen3.8-27B-Abliterated-GGUF/resolve/main/Swift-Qwen3.8-27B-Abliterated.Q4_K_M.gguf"

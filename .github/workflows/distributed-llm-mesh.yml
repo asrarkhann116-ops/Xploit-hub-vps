@@ -81,24 +81,87 @@ jobs:
           WORKERS: ${{ steps.discover.outputs.workers }}
         run: |
           mkdir -p /tmp/llama && cd /tmp/llama
-          TAG="b12255"
-          curl -sL "https://github.com/ggml-org/llama.cpp/releases/download/${TAG}/llama-${TAG}-bin-ubuntu-x64.tar.gz" -o llama.tar.gz
-          tar -xzf llama.tar.gz --strip-components=1
-          chmod +x llama-server || true
 
           if [ "$CHOSEN_MODEL" = "qwen3.8-27b-abliterated" ]; then
             DOWNLOAD_URL="https://huggingface.co/mradermacher/Swift-Qwen3.8-27B-Abliterated-GGUF/resolve/main/Swift-Qwen3.8-27B-Abliterated.Q4_K_M.gguf"
+            TARGET_NODES=64
           elif [ "$CHOSEN_MODEL" = "qwen2.5-coder-32b-abliterated" ]; then
             DOWNLOAD_URL="https://huggingface.co/bartowski/Qwen2.5-Coder-32B-Instruct-abliterated-GGUF/resolve/main/Qwen2.5-Coder-32B-Instruct-abliterated-Q4_K_M.gguf"
+            TARGET_NODES=64
           elif [ "$CHOSEN_MODEL" = "qwen2.5-coder-7b-abliterated" ]; then
             DOWNLOAD_URL="https://huggingface.co/bartowski/Qwen2.5-Coder-7B-Instruct-abliterated-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-abliterated-Q4_K_M.gguf"
+            TARGET_NODES=28
           else
             DOWNLOAD_URL="https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf"
+            TARGET_NODES=28
           fi
 
+          TOTAL_FOUND=$(echo "$WORKERS" | tr ',' '\n' | wc -l)
+          echo "🌐 Total Active Workers Discovered on Mesh: $TOTAL_FOUND"
+
+          # Active Pool: up to TARGET_NODES (1:1 Dedicated Node per Model Layer)
+          RPC_WORKERS=$(echo "$WORKERS" | tr ',' '\n' | head -n "$TARGET_NODES" | paste -sd, -)
+          ACTIVE_COUNT=$(echo "$RPC_WORKERS" | tr ',' '\n' | wc -l)
+
+          # Standby / Reserve Pool: any workers beyond TARGET_NODES
+          RESERVE_WORKERS=$(echo "$WORKERS" | tr ',' '\n' | tail -n +$((TARGET_NODES + 1)) | paste -sd, -)
+          RESERVE_COUNT=0
+          if [ -n "$RESERVE_WORKERS" ]; then
+            RESERVE_COUNT=$(echo "$RESERVE_WORKERS" | tr ',' '\n' | wc -l)
+          fi
+
+          echo "$RPC_WORKERS" | tr ',' '\n' > /tmp/active_workers.txt
+          echo "$RESERVE_WORKERS" | tr ',' '\n' > /tmp/reserve_workers.txt
+
+          echo "=========================================================="
+          echo "⚡ DISTRIBUTED WORKER ALLOCATION:"
+          echo "🔹 Active 1:1 Compute Nodes  : $ACTIVE_COUNT nodes"
+          echo "🔹 Standby / Reserve Backups : $RESERVE_COUNT nodes"
+          echo "=========================================================="
+
+          echo "### ⚡ Distributed LLM Cluster Allocation" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Discovered Workers:** $TOTAL_FOUND nodes" >> $GITHUB_STEP_SUMMARY
+          echo "- **Active 1:1 Layer Nodes:** $ACTIVE_COUNT nodes" >> $GITHUB_STEP_SUMMARY
+          echo "- **Standby Backup Nodes:** $RESERVE_COUNT nodes" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$RESERVE_WORKERS" ]; then
+            echo "<details><summary>Click to view $RESERVE_COUNT Reserve Backup Node IPs</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "$RESERVE_WORKERS" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Start model download in background
           echo "[*] Downloading GGUF model: $CHOSEN_MODEL from $DOWNLOAD_URL..."
-          # Download with live progress bar and speed display
-          curl -fL --progress-bar "$DOWNLOAD_URL" -o model.gguf
+          curl -fL --progress-bar "$DOWNLOAD_URL" -o model.gguf &
+          DL_PID=$!
+
+          # Setup llama-server: compile custom binary if nodes > 14 to lift 16-backend limit
+          if [ "$ACTIVE_COUNT" -gt 14 ]; then
+            echo "[*] $ACTIVE_COUNT nodes requested (>14 limit): Compiling custom llama-server with -DGGML_SCHED_MAX_BACKENDS=128..."
+            git clone --depth 1 https://github.com/ggml-org/llama.cpp.git /tmp/llama-src
+            cmake -B /tmp/llama-build -S /tmp/llama-src \
+              -DGGML_SCHED_MAX_BACKENDS=128 \
+              -DGGML_NATIVE=ON \
+              -DGGML_BUILD_TESTS=OFF \
+              -DLLAMA_BUILD_TESTS=OFF \
+              -DLLAMA_BUILD_EXAMPLES=OFF \
+              -DLLAMA_BUILD_SERVER=ON
+            cmake --build /tmp/llama-build --config Release --target llama-server -j $(nproc)
+            cp /tmp/llama-build/bin/llama-server /tmp/llama/llama-server
+            chmod +x /tmp/llama/llama-server
+            echo "✅ Custom 128-backend llama-server compiled successfully!"
+          else
+            echo "[*] <= 14 nodes: Using fast precompiled llama.cpp binary..."
+            TAG="b12255"
+            curl -sL "https://github.com/ggml-org/llama.cpp/releases/download/${TAG}/llama-${TAG}-bin-ubuntu-x64.tar.gz" -o llama.tar.gz
+            tar -xzf llama.tar.gz --strip-components=1
+            chmod +x llama-server || true
+          fi
+
+          echo "[*] Waiting for model download to complete..."
+          wait $DL_PID
 
           # Verify GGUF Magic Header
           MAGIC=$(head -c 4 model.gguf)
@@ -109,11 +172,7 @@ jobs:
           fi
           echo "✅ GGUF Magic Header verified: $MAGIC"
 
-          # Cap RPC workers to 14 nodes (GGML_SCHED_MAX_BACKENDS=16 compile limit: 1 local + 14 RPC = 15)
-          RPC_WORKERS=$(echo "$WORKERS" | tr ',' '\n' | head -n 14 | paste -sd, -)
-          WORKER_COUNT=$(echo "$RPC_WORKERS" | tr ',' '\n' | wc -l)
-
-          echo "🚀 Launching Distributed llama-server over RPC mesh with $WORKER_COUNT worker nodes:"
+          echo "🚀 Launching Distributed llama-server over RPC mesh with $ACTIVE_COUNT worker nodes:"
           echo "Endpoints: $RPC_WORKERS"
           
           # Launch llama-server with layer-by-layer RPC distribution and clean model alias
@@ -128,7 +187,7 @@ jobs:
             -c 4096 > /tmp/llama-server.log 2>&1 &
           LLAMA_PID=$!
 
-          echo "[*] Waiting for server warm-up and 17.5GB layer distribution across 14 nodes (PID: $LLAMA_PID)..."
+          echo "[*] Waiting for server warm-up and 17.5GB layer distribution across $ACTIVE_COUNT nodes (PID: $LLAMA_PID)..."
           LOADED=0
           # Allow up to 15 minutes for 17.5GB network distribution over 14 WireGuard nodes
           for i in $(seq 1 180); do

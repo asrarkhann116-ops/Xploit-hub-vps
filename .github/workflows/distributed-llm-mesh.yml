@@ -3,21 +3,9 @@ name: ⚡ Distributed-LLM-Mesh
 on:
   workflow_dispatch:
     inputs:
-      role:
-        description: 'Node Role (worker / coordinator)'
-        required: true
-        default: 'worker'
-        type: choice
-        options:
-          - worker
-          - coordinator
-      worker_slots:
-        description: 'Number of worker slots to launch (for matrix)'
-        required: false
-        default: '10'
       model_name:
         description: 'Choose Abliterated (Uncensored) Model'
-        required: false
+        required: true
         default: 'qwen3.8-27b-abliterated'
         type: choice
         options:
@@ -27,75 +15,17 @@ on:
           - qwen2.5-coder-1.5b
 
 jobs:
-  prepare-workers:
-    if: github.event.inputs.role == 'worker'
-    runs-on: ubuntu-latest
-    outputs:
-      slots: ${{ steps.gen.outputs.slots }}
-    steps:
-      - id: gen
-        run: |
-          SLOTS_COUNT=${{ github.event.inputs.worker_slots || 10 }}
-          python3 -c "
-          import json, os
-          n = int(os.environ.get('SLOTS_COUNT', 10))
-          print('slots=' + json.dumps(list(range(1, n + 1))))
-          " >> $GITHUB_OUTPUT
-
-  worker-pool:
-    if: github.event.inputs.role == 'worker'
-    needs: prepare-workers
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        slot: ${{ fromJSON(needs.prepare-workers.outputs.slots) }}
-    steps:
-      - name: 🚀 Turbocharge Virtual RAM
-        run: |
-          sudo swapoff -a || true
-          sudo fallocate -l 16G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=16384
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          echo "✅ 23GB System Address Space Unlocked on Slot ${{ matrix.slot }}"
-
-      - name: 🌐 Connect Tailscale Mesh
-        env:
-          TS_AUTHKEY: "tskey-auth-kXcDp6s2P321CNTRL-F5aZFRYRiDKGukMPBzvBEKZM27iVe7rh"
-        run: |
-          curl -fsSL https://tailscale.com/install.sh | sh
-          # Clean hostname without special characters
-          HOSTNAME="xploit-worker-s${{ matrix.slot }}"
-          sudo tailscale up --authkey="${TS_AUTHKEY}" --hostname="${HOSTNAME}" --accept-routes
-          NODE_IP=$(tailscale ip -4)
-          echo "✅ Connected to Tailscale Mesh as ${HOSTNAME} with IP: ${NODE_IP}"
-          echo "NODE_IP=${NODE_IP}" >> $GITHUB_ENV
-
-      - name: ⚙️ Setup & Launch ggml-rpc-server
-        run: |
-          mkdir -p /tmp/llama && cd /tmp/llama
-          TAG="b12255"
-          echo "[*] Downloading llama.cpp release ${TAG}..."
-          curl -sL "https://github.com/ggml-org/llama.cpp/releases/download/${TAG}/llama-${TAG}-bin-ubuntu-x64.tar.gz" -o llama.tar.gz
-          tar -xzf llama.tar.gz --strip-components=1
-          chmod +x ggml-rpc-server || true
-
-          echo "🚀 Starting ggml-rpc-server on 0.0.0.0:50052 (Listening via Tailscale)..."
-          # Run RPC server continuously
-          ./ggml-rpc-server -H 0.0.0.0 -p 50052
-
   coordinator:
-    if: github.event.inputs.role == 'coordinator'
     runs-on: ubuntu-latest
     steps:
-      - name: 🚀 Turbocharge Virtual RAM
+      - name: 🚀 Turbocharge Virtual RAM (16GB NVMe Swap = 23GB Total)
         run: |
           sudo swapoff -a || true
           sudo fallocate -l 16G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=16384
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
+          echo "✅ 23GB System Address Space Unlocked on Coordinator"
 
       - name: 🌐 Connect Tailscale Mesh
         env:
@@ -186,9 +116,10 @@ jobs:
           echo "🚀 Launching Distributed llama-server over RPC mesh with $WORKER_COUNT worker nodes:"
           echo "Endpoints: $RPC_WORKERS"
           
-          # Launch llama-server with layer-by-layer RPC distribution
+          # Launch llama-server with layer-by-layer RPC distribution and clean model alias
           ./llama-server \
             -m model.gguf \
+            --alias "$CHOSEN_MODEL" \
             --rpc "$RPC_WORKERS" \
             --split-mode layer \
             --host 0.0.0.0 \
@@ -234,23 +165,28 @@ jobs:
           echo "🚀 Starting Cloudflare Tunnel for Public Web Access..."
           /tmp/cloudflared tunnel --url http://127.0.0.1:8080 > /tmp/tunnel.log 2>&1 &
 
-          sleep 5
-          TUNNEL_URL=$(grep -o 'https://[a-zA-Z0-9-]*\.trycloudflare\.com' /tmp/tunnel.log | head -n 1)
+          echo "[*] Polling for Cloudflare Tunnel public URL..."
+          TUNNEL_URL=""
+          for t in $(seq 1 25); do
+            TUNNEL_URL=$(grep -o 'https://[a-zA-Z0-9-]*\.trycloudflare\.com' /tmp/tunnel.log 2>/dev/null | head -n 1)
+            if [ -n "$TUNNEL_URL" ]; then break; fi
+            sleep 1
+          done
 
           echo "=========================================================="
           echo "🎉 DISTRIBUTED LLM CLUSTER IS LIVE & PUBLIC!"
           echo "🔗 Public Web UI & API Link: $TUNNEL_URL"
           echo "🌐 Tailscale Direct IP     : http://${COORD_IP}:8080"
+          echo "🤖 Model Alias Loaded      : $CHOSEN_MODEL"
           echo "=========================================================="
 
           echo "[*] Running verification prompt via OpenAI-compatible endpoint..."
           curl -s http://127.0.0.1:8080/v1/chat/completions \
             -H "Content-Type: application/json" \
-            -d '{
-              "model": "model",
-              "messages": [{"role": "user", "content": "Hello! Confirm if distributed RPC inference is working and introduce yourself in 2 lines."}]
-            }' | python3 -m json.tool
+            -d "{
+              \"model\": \"$CHOSEN_MODEL\",
+              \"messages\": [{\"role\": \"user\", \"content\": \"Hello! Confirm if distributed RPC inference is working and introduce yourself in 2 lines.\"}]
+            }" | python3 -m json.tool
 
           # Keep alive for testing
           sleep 1800
-

@@ -139,9 +139,10 @@ jobs:
 
           # Setup llama-server: compile custom binary if nodes > 14 to lift 16-backend limit
           if [ "$ACTIVE_COUNT" -gt 14 ]; then
-            echo "[*] $ACTIVE_COUNT nodes requested (>14 limit): Compiling custom llama-server with -DGGML_SCHED_MAX_BACKENDS=128..."
+            echo "[*] $ACTIVE_COUNT nodes requested (>14 limit): Compiling custom llama-server with RPC & -DGGML_SCHED_MAX_BACKENDS=128..."
             git clone --depth 1 https://github.com/ggml-org/llama.cpp.git /tmp/llama-src
             cmake -B /tmp/llama-build -S /tmp/llama-src \
+              -DGGML_RPC=ON \
               -DGGML_SCHED_MAX_BACKENDS=128 \
               -DGGML_NATIVE=ON \
               -DGGML_BUILD_TESTS=OFF \
@@ -149,9 +150,9 @@ jobs:
               -DLLAMA_BUILD_EXAMPLES=OFF \
               -DLLAMA_BUILD_SERVER=ON
             cmake --build /tmp/llama-build --config Release --target llama-server -j $(nproc)
-            cp /tmp/llama-build/bin/llama-server /tmp/llama/llama-server
+            cp -r /tmp/llama-build/bin/* /tmp/llama/ 2>/dev/null || true
             chmod +x /tmp/llama/llama-server
-            echo "✅ Custom 128-backend llama-server compiled successfully!"
+            echo "✅ Custom 128-backend RPC llama-server compiled successfully!"
           else
             echo "[*] <= 14 nodes: Using fast precompiled llama.cpp binary..."
             TAG="b12255"
@@ -159,6 +160,7 @@ jobs:
             tar -xzf llama.tar.gz --strip-components=1
             chmod +x llama-server || true
           fi
+          export LD_LIBRARY_PATH=/tmp/llama:$LD_LIBRARY_PATH
 
           echo "[*] Waiting for model download to complete..."
           wait $DL_PID
